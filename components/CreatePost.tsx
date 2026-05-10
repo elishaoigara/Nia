@@ -1,12 +1,13 @@
 'use client'
 import { useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { ImagePlus, X, Loader2 } from 'lucide-react'
+import { ImagePlus, X, Loader2, Sparkles } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import VoiceRecorder from '@/components/VoiceRecorder'
 
 interface CreatePostProps {
   userId: string
-  circleId?: string | null   // ← Added this
+  circleId?: string | null
 }
 
 export default function CreatePost({ userId, circleId = null }: CreatePostProps) {
@@ -17,7 +18,9 @@ export default function CreatePost({ userId, circleId = null }: CreatePostProps)
   const [content, setContent] = useState('')
   const [image, setImage] = useState<File | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
+  const [voiceBlob, setVoiceBlob] = useState<Blob | null>(null)
   const [loading, setLoading] = useState(false)
+  const [captionLoading, setCaptionLoading] = useState(false)
   const [error, setError] = useState('')
 
   function handleImage(e: React.ChangeEvent<HTMLInputElement>) {
@@ -33,17 +36,51 @@ export default function CreatePost({ userId, circleId = null }: CreatePostProps)
     if (fileRef.current) fileRef.current.value = ''
   }
 
-  async function handlePost() {
+  async function generateCaption() {
     if (!content.trim() && !image) return
+    setCaptionLoading(true)
+    try {
+      const res = await fetch('/api/caption', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content }),
+      })
+      const data = await res.json()
+      if (data.caption) setContent(data.caption)
+    } catch {
+      setError('Caption generation failed.')
+    } finally {
+      setCaptionLoading(false)
+    }
+  }
+
+  async function handlePost() {
+    if (!content.trim() && !image && !voiceBlob) return
     setLoading(true)
     setError('')
 
     let media_url = null
+    let media_type = null
 
-    if (image) {
+    if (voiceBlob) {
+      const path = `${userId}/voice_${Date.now()}.webm`
+      const { error: uploadError } = await supabase.storage
+        .from('post-media')
+        .upload(path, voiceBlob, { contentType: 'audio/webm' })
+
+      if (uploadError) {
+        setError('Voice upload failed. Try again.')
+        setLoading(false)
+        return
+      }
+
+      const { data } = supabase.storage.from('post-media').getPublicUrl(path)
+      media_url = data.publicUrl
+      media_type = 'audio'
+    } else if (image) {
       const ext = image.name.split('.').pop()
       const path = `${userId}/${Date.now()}.${ext}`
-      
+
       const { error: uploadError } = await supabase.storage
         .from('post-media')
         .upload(path, image)
@@ -54,19 +91,17 @@ export default function CreatePost({ userId, circleId = null }: CreatePostProps)
         return
       }
 
-      const { data } = supabase.storage
-        .from('post-media')
-        .getPublicUrl(path)
-
+      const { data } = supabase.storage.from('post-media').getPublicUrl(path)
       media_url = data.publicUrl
+      media_type = 'image'
     }
 
     const { error: postError } = await supabase.from('posts').insert({
       user_id: userId,
-      circle_id: circleId,           // ← Now supports circle
+      circle_id: circleId,
       content: content.trim() || null,
       media_url,
-      media_type: image ? 'image' : null,
+      media_type,
     })
 
     if (postError) {
@@ -75,12 +110,11 @@ export default function CreatePost({ userId, circleId = null }: CreatePostProps)
       return
     }
 
-    // Reset form
     setContent('')
     setImage(null)
     setPreview(null)
+    setVoiceBlob(null)
     setLoading(false)
-    
     router.refresh()
   }
 
@@ -89,20 +123,14 @@ export default function CreatePost({ userId, circleId = null }: CreatePostProps)
       <textarea
         value={content}
         onChange={e => setContent(e.target.value)}
-        placeholder={circleId 
-          ? "What's happening in this circle?" 
-          : "What's happening on campus?"}
+        placeholder={circleId ? "What's happening in this circle?" : "What's happening on campus?"}
         rows={3}
         className="w-full bg-transparent text-sm resize-none focus:outline-none placeholder:text-zinc-400"
       />
 
       {preview && (
         <div className="relative w-full">
-          <img
-            src={preview}
-            alt="preview"
-            className="rounded-xl w-full max-h-72 object-cover"
-          />
+          <img src={preview} alt="preview" className="rounded-xl w-full max-h-72 object-cover" />
           <button
             onClick={removeImage}
             className="absolute top-2 right-2 bg-black/60 hover:bg-black/80 text-white rounded-full p-1 transition-colors"
@@ -114,25 +142,44 @@ export default function CreatePost({ userId, circleId = null }: CreatePostProps)
 
       {error && <p className="text-sm text-red-500">{error}</p>}
 
-      <div className="flex items-center justify-between pt-1 border-t border-zinc-100 dark:border-zinc-800">
-        <button
-          onClick={() => fileRef.current?.click()}
-          className="flex items-center gap-1.5 text-sm text-zinc-400 hover:text-purple-500 transition-colors"
-        >
-          <ImagePlus size={18} />
-          <span>Photo</span>
-        </button>
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={handleImage}
-        />
+      <div className="flex items-center justify-between pt-1 border-t border-zinc-100 dark:border-zinc-800 flex-wrap gap-2">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => fileRef.current?.click()}
+            className="flex items-center gap-1.5 text-sm text-zinc-400 hover:text-purple-500 transition-colors"
+          >
+            <ImagePlus size={18} />
+            <span>Photo</span>
+          </button>
+
+          <VoiceRecorder
+            onRecorded={(blob) => {
+              setVoiceBlob(blob)
+              setImage(null)
+              setPreview(null)
+            }}
+            onClear={() => setVoiceBlob(null)}
+          />
+
+          <button
+            onClick={generateCaption}
+            disabled={captionLoading || (!content.trim() && !image)}
+            className="flex items-center gap-1.5 text-sm text-zinc-400 hover:text-yellow-500 disabled:opacity-30 transition-colors"
+            title="AI caption suggestion"
+          >
+            {captionLoading
+              ? <Loader2 size={18} className="animate-spin" />
+              : <Sparkles size={18} />
+            }
+            <span>AI</span>
+          </button>
+        </div>
+
+        <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleImage} />
 
         <button
           onClick={handlePost}
-          disabled={(!content.trim() && !image) || loading}
+          disabled={(!content.trim() && !image && !voiceBlob) || loading}
           className="flex items-center gap-1.5 bg-purple-600 hover:bg-purple-700 disabled:opacity-40 text-white text-sm font-medium px-4 py-1.5 rounded-lg transition-colors"
         >
           {loading ? <Loader2 size={14} className="animate-spin" /> : null}

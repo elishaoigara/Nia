@@ -27,7 +27,9 @@ export default async function DiscoverPage() {
     .eq('id', user.id)
     .single()
 
-  const { data: suggestedCircles } = await supabase
+  const trendingIds = trendingCircles?.map((c) => c.id) ?? []
+
+  const suggestedQuery = supabase
     .from('circles')
     .select(`
       *,
@@ -35,6 +37,13 @@ export default async function DiscoverPage() {
     `)
     .eq('university', userProfile?.university)
     .limit(6)
+
+  // Exclude circles already shown in trending
+  if (trendingIds.length > 0) {
+    suggestedQuery.not('id', 'in', `(${trendingIds.join(',')})`)
+  }
+
+  const { data: suggestedCircles } = await suggestedQuery
 
   return (
     <main className="max-w-2xl mx-auto px-4 py-6 space-y-10">
