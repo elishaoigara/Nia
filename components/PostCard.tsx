@@ -1,7 +1,7 @@
 'use client'
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Heart, MessageCircle, Share2, Languages, Loader2, Play, Pause, Send, Banknote } from 'lucide-react'
+import { Heart, MessageCircle, Share2, Languages, Loader2, Play, Pause, Send } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import TipButton from '@/components/TipButton'
@@ -30,6 +30,7 @@ export default function PostCard({ post, currentUserId }: any) {
   const [translation, setTranslation] = useState<string | null>(null)
   const [translating, setTranslating] = useState(false)
   const [isPlaying, setIsPlaying] = useState(false)
+  const [copied, setCopied] = useState(false)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const commentRef = useRef<HTMLInputElement>(null)
 
@@ -89,6 +90,23 @@ export default function PostCard({ post, currentUserId }: any) {
     } finally { setTranslating(false) }
   }
 
+  async function handleShare() {
+    const url = `${window.location.origin}/posts/${post.id}`
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `@${post.profiles?.username} on Nia`,
+          text: post.content ?? '',
+          url,
+        })
+      } catch {}
+    } else {
+      await navigator.clipboard.writeText(url)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }
+  }
+
   function toggleAudio() {
     if (!audioRef.current) return
     if (isPlaying) { audioRef.current.pause() } else { audioRef.current.play() }
@@ -131,14 +149,13 @@ export default function PostCard({ post, currentUserId }: any) {
           </div>
           <div className="flex items-center gap-1.5 mt-0.5">
             <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-              {post.profiles?.university?.split(' ').slice(0,2).join(' ')}
+              {post.profiles?.university?.split(' ').slice(0, 2).join(' ')}
             </span>
             <span style={{ color: 'var(--text-tertiary)' }}>·</span>
             <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>{timeAgo(post.created_at)}</span>
           </div>
         </div>
 
-        {/* Tip button */}
         {!isOwn && post.profiles?.id && (
           <TipButton recipientUserId={post.profiles.id} recipientUsername={post.profiles.username} />
         )}
@@ -228,8 +245,13 @@ export default function PostCard({ post, currentUserId }: any) {
         </button>
 
         {/* Share */}
-        <button className="flex items-center gap-1.5 px-3 py-2 rounded-xl transition-all active:scale-90">
-          <Share2 size={18} style={{ color: 'var(--text-tertiary)' }} />
+        <button
+          onClick={handleShare}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-xl transition-all active:scale-90"
+          style={copied ? { background: 'rgba(107,203,119,0.1)' } : {}}
+        >
+          <Share2 size={18} style={{ color: copied ? 'var(--nia-mint)' : 'var(--text-tertiary)' }} />
+          {copied && <span className="text-xs font-semibold" style={{ color: 'var(--nia-mint)' }}>Copied!</span>}
         </button>
 
         {/* Translate */}
@@ -255,7 +277,10 @@ export default function PostCard({ post, currentUserId }: any) {
             {loadingComments && (
               <div className="flex gap-2">
                 <div className="skeleton w-8 h-8 rounded-full flex-shrink-0" />
-                <div className="flex-1 space-y-1.5"><div className="skeleton h-3 w-1/3 rounded" /><div className="skeleton h-3 w-3/4 rounded" /></div>
+                <div className="flex-1 space-y-1.5">
+                  <div className="skeleton h-3 w-1/3 rounded" />
+                  <div className="skeleton h-3 w-3/4 rounded" />
+                </div>
               </div>
             )}
             {comments.map(c => (

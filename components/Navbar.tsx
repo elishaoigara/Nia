@@ -25,12 +25,11 @@ export default function Navbar() {
 
   return (
     <>
-      {/* ── Top bar (mobile + desktop header) ─────────────── */}
+      {/* ── Top bar ─────────────────────────────────────────── */}
       <header
         style={{ background: 'var(--surface-0)', borderBottom: '1px solid var(--border)' }}
         className="fixed top-0 left-0 right-0 z-50 h-14 flex items-center justify-between px-4 sm:left-60"
       >
-        {/* Logo */}
         <Link href="/" className="flex items-center gap-2 select-none">
           <div
             className="w-8 h-8 rounded-xl flex items-center justify-center text-white font-black text-base"
@@ -41,11 +40,10 @@ export default function Navbar() {
           <span className="font-extrabold text-lg tracking-tight hidden sm:block">Nia</span>
         </Link>
 
-        {/* Right actions */}
         <div className="flex items-center gap-1">
           {userId && <NotificationBell userId={userId} />}
           <Link
-            href="/post/new"
+            href="/#compose"
             className="flex items-center gap-1.5 text-white text-sm font-semibold px-3.5 py-2 rounded-xl transition-all active:scale-95"
             style={{ background: 'var(--grad-brand)', boxShadow: '0 4px 14px rgba(168,85,247,0.35)' }}
           >
@@ -55,7 +53,7 @@ export default function Navbar() {
         </div>
       </header>
 
-      {/* ── Bottom nav (mobile only) ───────────────────────── */}
+      {/* ── Bottom nav (mobile) ──────────────────────────────── */}
       <nav
         style={{ background: 'var(--surface-0)', borderTop: '1px solid var(--border)' }}
         className="fixed bottom-0 left-0 right-0 z-50 h-[72px] flex items-center justify-around px-2 sm:hidden safe-bottom"
@@ -69,9 +67,7 @@ export default function Navbar() {
               className="flex flex-col items-center gap-0.5 min-w-[52px] py-1.5 rounded-2xl transition-all active:scale-90"
             >
               <div
-                className={`w-10 h-10 flex items-center justify-center rounded-2xl transition-all ${
-                  active ? 'scale-105' : ''
-                }`}
+                className={`w-10 h-10 flex items-center justify-center rounded-2xl transition-all ${active ? 'scale-105' : ''}`}
                 style={active ? { background: 'linear-gradient(135deg,rgba(255,107,107,0.15),rgba(168,85,247,0.15))' } : {}}
               >
                 <Icon
@@ -91,7 +87,7 @@ export default function Navbar() {
         })}
       </nav>
 
-      {/* ── Side nav (desktop) ─────────────────────────────── */}
+      {/* ── Side nav (desktop) ──────────────────────────────── */}
       <aside
         style={{
           background: 'var(--surface-0)',
@@ -100,7 +96,6 @@ export default function Navbar() {
         }}
         className="hidden sm:flex fixed left-0 top-0 h-full flex-col px-3 pt-16 pb-6"
       >
-        {/* Brand */}
         <div className="flex items-center gap-2.5 px-3 mb-6">
           <div
             className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-black text-lg"
@@ -111,7 +106,6 @@ export default function Navbar() {
           <span className="font-extrabold text-xl tracking-tight">Nia</span>
         </div>
 
-        {/* Links */}
         <div className="flex-1 space-y-1">
           {links.map(({ href, icon: Icon, label }) => {
             const active = pathname === href
@@ -129,16 +123,12 @@ export default function Navbar() {
                 <Icon size={20} strokeWidth={active ? 2.5 : 1.8} />
                 {label}
                 {active && (
-                  <div
-                    className="ml-auto w-1.5 h-1.5 rounded-full"
-                    style={{ background: 'var(--nia-violet)' }}
-                  />
+                  <div className="ml-auto w-1.5 h-1.5 rounded-full" style={{ background: 'var(--nia-violet)' }} />
                 )}
               </Link>
             )
           })}
 
-          {/* Notifications */}
           {userId && (
             <Link
               href="/notifications"
@@ -155,9 +145,9 @@ export default function Navbar() {
           )}
         </div>
 
-        {/* Post button */}
+        {/* Post button — goes to feed and scrolls to composer */}
         <Link
-          href="/post/new"
+          href="/#compose"
           className="btn-primary flex items-center justify-center gap-2 mt-4"
         >
           <Plus size={18} strokeWidth={2.5} />

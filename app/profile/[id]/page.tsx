@@ -1,103 +1,159 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import PostCard from '@/components/PostCard'
-import { Edit, MapPin, MessageSquare, Calendar } from 'lucide-react'
+import { Edit, Calendar, MapPin, MessageCircle } from 'lucide-react'
 import Link from 'next/link'
+import FollowButton from '@/components/FollowButton'
 
-interface ProfilePageProps { params: Promise<{ id: string }> }
+interface ProfilePageProps {
+  params: Promise<{ id: string }>
+}
 
 export default async function ProfilePage({ params }: ProfilePageProps) {
   const { id } = await params
   const supabase = await createClient()
+
   const { data: { user: currentUser } } = await supabase.auth.getUser()
   if (!currentUser) redirect('/login')
 
-  const { data: profile, error: profileError } = await supabase.from('profiles').select('*').eq('id', id).single()
-  if (profileError || !profile) return (
-    <div className="min-h-screen flex items-center justify-center px-4">
-      <div className="card p-10 text-center space-y-3 max-w-sm">
-        <div className="text-4xl">😕</div>
-        <h1 className="font-extrabold text-2xl">Not found</h1>
-        <p style={{ color: 'var(--text-tertiary)' }}>This profile doesn't exist.</p>
-        <Link href="/" className="btn-primary inline-flex">← Home</Link>
+  const { data: profile, error: profileError } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', id)
+    .single()
+
+  if (profileError || !profile) {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-4">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold">Profile not found</h1>
+          <Link href="/" className="text-purple-600 hover:underline mt-4 inline-block">← Back to Home</Link>
+        </div>
       </div>
-    </div>
-  )
+    )
+  }
 
-  const { data: posts } = await supabase.from('posts').select('*, profiles:user_id (id, username, avatar_url, university), likes (user_id), comments (id)').eq('user_id', id).order('created_at', { ascending: false })
+  const { data: posts } = await supabase
+    .from('posts')
+    .select(`*, profiles:user_id (id, username, avatar_url, university), likes (user_id), comments (id)`)
+    .eq('user_id', id)
+    .order('created_at', { ascending: false })
 
+  const { count: followersCount } = await supabase
+    .from('follows')
+    .select('*', { count: 'exact', head: true })
+    .eq('following_id', id)
+
+  const { count: followingCount } = await supabase
+    .from('follows')
+    .select('*', { count: 'exact', head: true })
+    .eq('follower_id', id)
+
+  const { data: followData } = await supabase
+    .from('follows')
+    .select('follower_id')
+    .eq('follower_id', currentUser.id)
+    .eq('following_id', id)
+    .single()
+
+  const isFollowing = !!followData
   const isOwnProfile = currentUser.id === id
 
   return (
-    <main className="max-w-xl mx-auto px-4 py-6 space-y-5">
-      {/* Profile card */}
-      <div className="card overflow-hidden">
-        {/* Cover gradient */}
-        <div className="h-24 w-full" style={{ background: 'var(--grad-brand)', opacity: 0.8 }} />
-
-        <div className="px-5 pb-5">
-          {/* Avatar + actions */}
-          <div className="flex items-end justify-between -mt-10 mb-4">
-            <div className="avatar-ring" style={{ padding: '3px' }}>
-              <div className="w-20 h-20 rounded-2xl overflow-hidden flex items-center justify-center text-white font-black text-2xl" style={{ background: 'var(--grad-brand)' }}>
-                {profile.avatar_url
-                  ? <img src={profile.avatar_url} className="w-full h-full object-cover" alt={profile.full_name} />
-                  : profile.username?.[0]?.toUpperCase() ?? '?'
-                }
-              </div>
-            </div>
-            <div className="flex gap-2 mt-2">
-              {isOwnProfile ? (
-                <Link href="/profile/edit" className="btn-ghost flex items-center gap-1.5 py-2 px-3 text-sm">
-                  <Edit size={14} /> Edit
-                </Link>
+    <main className="max-w-xl mx-auto px-4 py-6">
+      <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-zinc-100 dark:border-zinc-800 p-6 mb-6">
+        <div className="flex justify-between items-start gap-3">
+          <div className="flex gap-4 items-center">
+            <div className="w-16 h-16 rounded-2xl overflow-hidden flex-shrink-0 bg-gradient-to-br from-purple-500 to-pink-500">
+              {profile.avatar_url ? (
+                <img src={profile.avatar_url} className="w-16 h-16 object-cover" alt={profile.full_name} />
               ) : (
-                <Link href={`/messages/${id}`} className="btn-primary flex items-center gap-1.5 py-2 px-3 text-sm" style={{ borderRadius: '12px', padding: '8px 14px', fontSize: '13px' }}>
-                  <MessageSquare size={14} /> Message
-                </Link>
+                <div className="w-16 h-16 flex items-center justify-center text-2xl font-bold text-white">
+                  {profile.username?.[0]?.toUpperCase() ?? '?'}
+                </div>
+              )}
+            </div>
+            <div>
+              <h1 className="text-xl font-bold">{profile.full_name}</h1>
+              <p className="text-purple-600 font-medium text-sm">@{profile.username}</p>
+              {profile.university && (
+                <div className="flex items-center gap-1 text-xs text-zinc-500 mt-1">
+                  <MapPin size={12} />
+                  <span>{profile.university}</span>
+                </div>
               )}
             </div>
           </div>
 
-          {/* Info */}
-          <div className="space-y-1">
-            <h1 className="font-extrabold text-2xl">{profile.full_name}</h1>
-            <p className="font-semibold text-sm" style={{ color: 'var(--nia-violet)' }}>@{profile.username}</p>
-            {profile.university && (
-              <div className="flex items-center gap-1.5 text-sm" style={{ color: 'var(--text-tertiary)' }}>
-                <MapPin size={13} />
-                <span>{profile.university}</span>
-              </div>
-            )}
-            {profile.bio && (
-              <p className="text-sm leading-relaxed pt-2" style={{ color: 'var(--text-secondary)' }}>{profile.bio}</p>
+          {/* Action buttons */}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {isOwnProfile ? (
+              <Link
+                href="/profile/edit"
+                className="flex items-center gap-1.5 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 px-3 py-1.5 rounded-xl text-sm font-medium transition"
+              >
+                <Edit size={14} />
+                Edit
+              </Link>
+            ) : (
+              <>
+                <Link
+                  href={`/messages/${id}`}
+                  className="flex items-center gap-1.5 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 px-3 py-1.5 rounded-xl text-sm font-medium transition"
+                >
+                  <MessageCircle size={14} />
+                  Message
+                </Link>
+                <FollowButton
+                  currentUserId={currentUser.id}
+                  targetUserId={id}
+                  initialIsFollowing={isFollowing}
+                />
+              </>
             )}
           </div>
+        </div>
 
-          {/* Stats */}
-          <div className="flex gap-4 mt-4 pt-4" style={{ borderTop: '1px solid var(--border)' }}>
-            <div className="text-center">
-              <div className="font-extrabold text-lg">{posts?.length ?? 0}</div>
-              <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>Posts</div>
-            </div>
-            <div className="text-center flex items-center gap-1.5" style={{ color: 'var(--text-tertiary)', fontSize: '12px', marginLeft: 'auto' }}>
-              <Calendar size={12} />
-              Joined {new Date(profile.created_at || Date.now()).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-            </div>
+        {/* Stats */}
+        <div className="flex gap-6 mt-5 pt-4 border-t border-zinc-100 dark:border-zinc-800">
+          <div className="text-center">
+            <p className="font-bold text-lg">{posts?.length ?? 0}</p>
+            <p className="text-xs text-zinc-400">Posts</p>
           </div>
+          <div className="text-center">
+            <p className="font-bold text-lg">{followersCount ?? 0}</p>
+            <p className="text-xs text-zinc-400">Followers</p>
+          </div>
+          <div className="text-center">
+            <p className="font-bold text-lg">{followingCount ?? 0}</p>
+            <p className="text-xs text-zinc-400">Following</p>
+          </div>
+        </div>
+
+        {profile.bio && (
+          <p className="mt-4 text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed">{profile.bio}</p>
+        )}
+
+        <div className="mt-4 text-xs text-zinc-400 flex items-center gap-1.5">
+          <Calendar size={12} />
+          Joined {new Date(profile.created_at || Date.now()).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
         </div>
       </div>
 
-      {/* Posts */}
-      <div className="space-y-3">
-        <h2 className="font-extrabold text-lg px-1">Posts</h2>
+      <div className="space-y-4">
+        <h2 className="font-semibold px-1">
+          Posts <span className="text-zinc-400 font-normal">({posts?.length ?? 0})</span>
+        </h2>
+
         {posts && posts.length === 0 && (
-          <div className="card text-center py-12 space-y-2">
-            <div className="text-4xl">📭</div>
-            <p className="font-bold">No posts yet</p>
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-100 dark:border-zinc-800 p-12 text-center text-zinc-400">
+            No posts yet
           </div>
         )}
-        {posts?.map(post => <PostCard key={post.id} post={post} currentUserId={currentUser.id} />)}
+
+        {posts?.map(post => (
+          <PostCard key={post.id} post={post} currentUserId={currentUser.id} />
+        ))}
       </div>
     </main>
   )
