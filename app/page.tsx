@@ -4,7 +4,9 @@ import CreatePost from '@/components/CreatePost'
 import PostCard from '@/components/PostCard'
 import LoadMore from '@/components/LoadMore'
 import FeedTabs from '@/components/FeedTabs'
+import StoriesBar from '@/components/StoriesBar'
 import { Sparkles } from 'lucide-react'
+import { Suspense } from 'react'
 
 export default async function FeedPage({
   searchParams,
@@ -24,20 +26,14 @@ export default async function FeedPage({
   let posts
 
   if (currentTab === 'following') {
-    // Get IDs of people the user follows
-    const { data: follows } = await supabase
-      .from('follows')
-      .select('following_id')
-      .eq('follower_id', user.id)
-
+    const { data: follows } = await supabase.from('follows').select('following_id').eq('follower_id', user.id)
     const followingIds = follows?.map(f => f.following_id) ?? []
-
     if (followingIds.length === 0) {
       posts = []
     } else {
       const { data } = await supabase
         .from('posts')
-        .select(`*, profiles:user_id (id, username, avatar_url, university), circles:circle_id (id, name, slug), likes (user_id), comments (id)`)
+        .select(`*, profiles:user_id (id, username, avatar_url, university), circles:circle_id (id, name, slug), likes (user_id), comments (id), reactions (user_id, emoji), reposts (user_id), poll:polls (*)`)
         .in('user_id', followingIds)
         .order('created_at', { ascending: false })
         .range(offset, offset + pageSize - 1)
@@ -46,7 +42,7 @@ export default async function FeedPage({
   } else {
     const { data } = await supabase
       .from('posts')
-      .select(`*, profiles:user_id (id, username, avatar_url, university), circles:circle_id (id, name, slug), likes (user_id), comments (id)`)
+      .select(`*, profiles:user_id (id, username, avatar_url, university), circles:circle_id (id, name, slug), likes (user_id), comments (id), reactions (user_id, emoji), reposts (user_id), poll:polls (*)`)
       .order('created_at', { ascending: false })
       .range(offset, offset + pageSize - 1)
     posts = data
@@ -63,7 +59,13 @@ export default async function FeedPage({
         <h1 className="font-extrabold text-xl">Campus Feed</h1>
       </div>
 
-      <FeedTabs currentTab={currentTab} />
+      {/* Stories */}
+      <StoriesBar currentUserId={user.id} />
+
+      {/* Feed tabs */}
+      <Suspense fallback={null}>
+        <FeedTabs currentTab={currentTab} />
+      </Suspense>
 
       <div id="compose">
         <CreatePost userId={user.id} />
@@ -73,9 +75,7 @@ export default async function FeedPage({
         <div className="card text-center py-20 space-y-3">
           <div className="text-5xl">👀</div>
           <p className="font-bold text-lg">Nobody followed yet</p>
-          <p className="text-sm" style={{ color: 'var(--text-tertiary)' }}>
-            Follow people to see their posts here
-          </p>
+          <p className="text-sm" style={{ color: 'var(--text-tertiary)' }}>Follow people to see their posts here</p>
         </div>
       )}
 
