@@ -1,193 +1,107 @@
 'use client'
-
 import { useState, useTransition } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
 import { Search, Users, User, MapPin, Loader2 } from 'lucide-react'
 
-interface Profile {
-  id: string
-  username: string
-  full_name: string
-  avatar_url: string | null
-  university: string | null
-}
-
-interface Circle {
-  id: string
-  name: string
-  slug: string
-  description: string | null
-  university: string | null
-  category: string | null
-  circle_members: { user_id: string }[]
-}
-
 export default function SearchPage() {
   const supabase = createClient()
   const [query, setQuery] = useState('')
-  const [users, setUsers] = useState<Profile[]>([])
-  const [circles, setCircles] = useState<Circle[]>([])
+  const [users, setUsers] = useState<any[]>([])
+  const [circles, setCircles] = useState<any[]>([])
   const [hasSearched, setHasSearched] = useState(false)
   const [isPending, startTransition] = useTransition()
 
   async function handleSearch(q: string) {
     setQuery(q)
-    if (!q.trim()) {
-      setUsers([])
-      setCircles([])
-      setHasSearched(false)
-      return
-    }
-
+    if (!q.trim()) { setUsers([]); setCircles([]); setHasSearched(false); return }
     startTransition(async () => {
       const term = `%${q.trim()}%`
-
       const [{ data: foundUsers }, { data: foundCircles }] = await Promise.all([
-        supabase
-          .from('profiles')
-          .select('id, username, full_name, avatar_url, university')
-          .ilike('username', term)
-          .limit(10),
-
-        supabase
-          .from('circles')
-          .select('id, name, slug, description, university, category, circle_members(user_id)')
-          .ilike('name', term)
-          .limit(10),
+        supabase.from('profiles').select('id, username, full_name, avatar_url, university').ilike('username', term).limit(10),
+        supabase.from('circles').select('id, name, slug, description, university, category, circle_members(user_id)').ilike('name', term).limit(10),
       ])
-
-      setUsers(foundUsers ?? [])
-      setCircles(foundCircles ?? [])
-      setHasSearched(true)
+      setUsers(foundUsers ?? []); setCircles(foundCircles ?? []); setHasSearched(true)
     })
   }
-
-  const totalResults = users.length + circles.length
 
   return (
     <main className="max-w-2xl mx-auto px-4 py-6 space-y-6">
       <div>
-        <h1 className="text-3xl font-bold mb-1">Search</h1>
-        <p className="text-zinc-400">Find people and circles on Nia</p>
+        <h1 className="font-extrabold text-2xl mb-1">Search 🔍</h1>
+        <p className="text-sm" style={{ color: 'var(--text-tertiary)' }}>Find people and circles on Nia</p>
       </div>
 
-      {/* Search Input */}
+      {/* Search input */}
       <div className="relative">
-        <Search
-          size={18}
-          className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400"
-        />
+        <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-tertiary)' }} />
         <input
-          type="text"
           value={query}
-          onChange={(e) => handleSearch(e.target.value)}
+          onChange={e => handleSearch(e.target.value)}
           placeholder="Search users or circles…"
-          className="w-full pl-11 pr-4 py-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 transition-shadow"
+          className="input pl-11 pr-10"
           autoFocus
         />
-        {isPending && (
-          <Loader2
-            size={16}
-            className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-400 animate-spin"
-          />
-        )}
+        {isPending && <Loader2 size={16} className="absolute right-4 top-1/2 -translate-y-1/2 animate-spin" style={{ color: 'var(--text-tertiary)' }} />}
       </div>
 
-      {/* Results */}
       {hasSearched && !isPending && (
         <>
-          {totalResults === 0 ? (
-            <div className="text-center py-16 text-zinc-400">
-              <Search size={40} className="mx-auto mb-3 opacity-30" />
-              <p className="font-medium">No results for "{query}"</p>
-              <p className="text-sm mt-1">Try a different search term</p>
+          {users.length === 0 && circles.length === 0 ? (
+            <div className="card text-center py-16 space-y-2">
+              <div className="text-4xl">🤔</div>
+              <p className="font-bold">No results for "{query}"</p>
+              <p className="text-sm" style={{ color: 'var(--text-tertiary)' }}>Try a different search term</p>
             </div>
           ) : (
-            <div className="space-y-8">
-              {/* Users */}
+            <div className="space-y-6">
               {users.length > 0 && (
-                <section>
-                  <div className="flex items-center gap-2 mb-3">
-                    <User size={16} className="text-purple-500" />
-                    <h2 className="font-semibold text-sm uppercase tracking-wide text-zinc-500">
-                      People
-                    </h2>
-                    <span className="text-xs text-zinc-400">({users.length})</span>
+                <section className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <User size={16} style={{ color: 'var(--nia-violet)' }} />
+                    <h2 className="font-extrabold text-sm uppercase tracking-wider" style={{ color: 'var(--text-tertiary)' }}>People ({users.length})</h2>
                   </div>
-
-                  <div className="space-y-2">
-                    {users.map((profile) => (
-                      <Link
-                        key={profile.id}
-                        href={`/profile/${profile.id}`}
-                        className="flex items-center gap-3 bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-100 dark:border-zinc-800 p-4 hover:border-purple-200 dark:hover:border-purple-800 transition-all group"
-                      >
-                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white font-semibold text-sm flex-shrink-0 overflow-hidden">
-                          {profile.avatar_url ? (
-                            <img
-                              src={profile.avatar_url}
-                              alt={profile.username}
-                              className="w-10 h-10 object-cover"
-                            />
-                          ) : (
-                            profile.username?.[0]?.toUpperCase() ?? '?'
-                          )}
+                  {users.map(u => (
+                    <Link key={u.id} href={`/profile/${u.id}`} className="card card-hover flex items-center gap-3 p-4">
+                      <div className="avatar-ring flex-shrink-0">
+                        <div className="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center text-white font-bold text-sm" style={{ background: 'var(--grad-brand)' }}>
+                          {u.avatar_url ? <img src={u.avatar_url} className="w-full h-full object-cover" alt="" /> : u.username?.[0]?.toUpperCase()}
                         </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="font-semibold text-sm group-hover:text-purple-600 transition-colors">
-                            {profile.full_name}
-                          </p>
-                          <p className="text-xs text-zinc-400">@{profile.username}</p>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-bold text-sm">{u.full_name}</p>
+                        <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>@{u.username}</p>
+                      </div>
+                      {u.university && (
+                        <div className="flex items-center gap-1 text-xs flex-shrink-0" style={{ color: 'var(--text-tertiary)' }}>
+                          <MapPin size={12} />
+                          <span className="hidden sm:block">{u.university.split(' ').slice(0,2).join(' ')}</span>
                         </div>
-                        {profile.university && (
-                          <div className="flex items-center gap-1 text-xs text-zinc-400 flex-shrink-0">
-                            <MapPin size={12} />
-                            <span className="hidden sm:block">{profile.university}</span>
-                          </div>
-                        )}
-                      </Link>
-                    ))}
-                  </div>
+                      )}
+                    </Link>
+                  ))}
                 </section>
               )}
 
-              {/* Circles */}
               {circles.length > 0 && (
-                <section>
-                  <div className="flex items-center gap-2 mb-3">
-                    <Users size={16} className="text-orange-500" />
-                    <h2 className="font-semibold text-sm uppercase tracking-wide text-zinc-500">
-                      Circles
-                    </h2>
-                    <span className="text-xs text-zinc-400">({circles.length})</span>
+                <section className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Users size={16} style={{ color: 'var(--nia-coral)' }} />
+                    <h2 className="font-extrabold text-sm uppercase tracking-wider" style={{ color: 'var(--text-tertiary)' }}>Circles ({circles.length})</h2>
                   </div>
-
-                  <div className="space-y-2">
-                    {circles.map((circle) => (
-                      <Link
-                        key={circle.id}
-                        href={`/circles/${circle.slug}`}
-                        className="flex items-center gap-3 bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-100 dark:border-zinc-800 p-4 hover:border-orange-200 dark:hover:border-orange-900 transition-all group"
-                      >
-                        <div className="w-10 h-10 rounded-full bg-orange-100 dark:bg-orange-950 flex items-center justify-center flex-shrink-0">
-                          <Users size={18} className="text-orange-500" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="font-semibold text-sm group-hover:text-orange-500 transition-colors">
-                            {circle.name}
-                          </p>
-                          {circle.description && (
-                            <p className="text-xs text-zinc-400 truncate">{circle.description}</p>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-1 text-xs text-zinc-400 flex-shrink-0">
-                          <Users size={12} />
-                          <span>{circle.circle_members?.length ?? 0}</span>
-                        </div>
-                      </Link>
-                    ))}
-                  </div>
+                  {circles.map(c => (
+                    <Link key={c.id} href={`/circles/${c.slug}`} className="card card-hover flex items-center gap-3 p-4">
+                      <div className="w-10 h-10 rounded-2xl flex items-center justify-center text-xl flex-shrink-0" style={{ background: 'rgba(255,107,107,0.1)' }}>🌀</div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-bold text-sm">{c.name}</p>
+                        {c.description && <p className="text-xs truncate" style={{ color: 'var(--text-tertiary)' }}>{c.description}</p>}
+                      </div>
+                      <div className="flex items-center gap-1 text-xs flex-shrink-0" style={{ color: 'var(--text-tertiary)' }}>
+                        <Users size={12} />
+                        <span>{c.circle_members?.length ?? 0}</span>
+                      </div>
+                    </Link>
+                  ))}
                 </section>
               )}
             </div>
@@ -195,11 +109,10 @@ export default function SearchPage() {
         </>
       )}
 
-      {/* Empty state — not yet searched */}
       {!hasSearched && !isPending && (
-        <div className="text-center py-16 text-zinc-400">
-          <Search size={40} className="mx-auto mb-3 opacity-20" />
-          <p className="text-sm">Start typing to search</p>
+        <div className="text-center py-16 space-y-2">
+          <div className="text-5xl">✨</div>
+          <p className="text-sm" style={{ color: 'var(--text-tertiary)' }}>Start typing to search</p>
         </div>
       )}
     </main>

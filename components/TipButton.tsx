@@ -1,12 +1,8 @@
 'use client'
-
 import { useState } from 'react'
 import { Banknote, X, Loader2 } from 'lucide-react'
 
-interface TipButtonProps {
-  recipientUserId: string
-  recipientUsername: string
-}
+interface TipButtonProps { recipientUserId: string; recipientUsername: string }
 
 export default function TipButton({ recipientUserId, recipientUsername }: TipButtonProps) {
   const [open, setOpen] = useState(false)
@@ -17,108 +13,76 @@ export default function TipButton({ recipientUserId, recipientUsername }: TipBut
   const [error, setError] = useState<string | null>(null)
 
   async function handleTip() {
-    setLoading(true)
-    setError(null)
-    setMessage(null)
-
+    setLoading(true); setError(null); setMessage(null)
     try {
-      const res = await fetch('/api/mpesa', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ recipientUserId, amount: Number(amount), phone }),
-      })
+      const res = await fetch('/api/mpesa', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recipientUserId, amount: Number(amount), phone }) })
       const data = await res.json()
-
-      if (!res.ok) {
-        setError(data.error ?? 'Payment failed')
-      } else {
-        setMessage(data.message)
-      }
-    } catch {
-      setError('Network error. Try again.')
-    } finally {
-      setLoading(false)
-    }
+      if (!res.ok) { setError(data.error ?? 'Payment failed') } else { setMessage(data.message) }
+    } catch { setError('Network error. Try again.') } finally { setLoading(false) }
   }
-
-  const QUICK_AMOUNTS = ['10', '50', '100', '200']
 
   return (
     <>
       <button
-        onClick={() => setOpen(true)}
-        className="flex items-center gap-1 text-sm text-zinc-400 hover:text-green-500 transition-colors"
+        onClick={(e) => { e.preventDefault(); setOpen(true) }}
+        className="w-8 h-8 rounded-xl flex items-center justify-center transition-all active:scale-90"
+        style={{ background: 'rgba(107,203,119,0.12)', color: 'var(--nia-mint)' }}
         title={`Tip @${recipientUsername}`}
       >
         <Banknote size={15} />
       </button>
 
       {open && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50">
-          <div className="bg-white dark:bg-zinc-900 w-full max-w-sm rounded-t-3xl sm:rounded-2xl p-6 space-y-4 shadow-2xl">
+        <div
+          className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center"
+          style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}
+          onClick={(e) => { if (e.target === e.currentTarget) { setOpen(false); setMessage(null); setError(null) } }}
+        >
+          <div
+            className="w-full max-w-sm rounded-t-[28px] sm:rounded-[28px] p-6 space-y-5 anim-up"
+            style={{ background: 'var(--surface-0)', boxShadow: 'var(--shadow-lg)' }}
+          >
             <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-lg">Tip @{recipientUsername}</h3>
-              <button onClick={() => { setOpen(false); setMessage(null); setError(null) }} className="p-1 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors">
-                <X size={18} />
+              <div>
+                <h3 className="font-extrabold text-lg">Send a tip 💸</h3>
+                <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>to @{recipientUsername}</p>
+              </div>
+              <button onClick={() => { setOpen(false); setMessage(null); setError(null) }} className="w-8 h-8 rounded-xl flex items-center justify-center transition-all active:scale-90" style={{ background: 'var(--surface-2)', color: 'var(--text-secondary)' }}>
+                <X size={16} />
               </button>
             </div>
 
             {message ? (
-              <div className="text-center py-4">
-                <div className="text-4xl mb-2">🎉</div>
-                <p className="font-medium text-green-600">{message}</p>
-                <p className="text-sm text-zinc-400 mt-1">Check your Safaricom phone for the prompt.</p>
-                <button onClick={() => { setOpen(false); setMessage(null) }} className="mt-4 px-4 py-2 bg-purple-600 text-white rounded-xl text-sm font-medium">Done</button>
+              <div className="text-center py-4 anim-pop">
+                <div className="text-5xl mb-3">🎉</div>
+                <p className="font-bold text-lg" style={{ color: 'var(--nia-mint)' }}>Tip sent!</p>
+                <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>Check your Safaricom phone.</p>
+                <button onClick={() => { setOpen(false); setMessage(null) }} className="btn-primary mt-4 w-full">Done</button>
               </div>
             ) : (
               <>
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-zinc-500">M-Pesa Phone Number</label>
-                  <input
-                    type="tel"
-                    value={phone}
-                    onChange={e => setPhone(e.target.value)}
-                    placeholder="07XX XXX XXX"
-                    className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  />
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-tertiary)' }}>M-Pesa Number</label>
+                  <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="07XX XXX XXX" className="input" />
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-xs font-medium text-zinc-500">Amount (KES)</label>
+                  <label className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-tertiary)' }}>Amount (KES)</label>
                   <div className="grid grid-cols-4 gap-2">
-                    {QUICK_AMOUNTS.map(a => (
-                      <button
-                        key={a}
-                        onClick={() => setAmount(a)}
-                        className={`py-2 rounded-xl text-sm font-medium transition-colors ${
-                          amount === a
-                            ? 'bg-purple-600 text-white'
-                            : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-purple-50'
-                        }`}
-                      >
+                    {['10', '50', '100', '200'].map(a => (
+                      <button key={a} onClick={() => setAmount(a)} className="py-2.5 rounded-2xl text-sm font-bold transition-all active:scale-90" style={amount === a ? { background: 'var(--grad-brand)', color: '#fff' } : { background: 'var(--surface-2)', color: 'var(--text-secondary)' }}>
                         {a}
                       </button>
                     ))}
                   </div>
-                  <input
-                    type="number"
-                    value={amount}
-                    onChange={e => setAmount(e.target.value)}
-                    min="1"
-                    placeholder="Custom amount"
-                    className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  />
+                  <input type="number" value={amount} onChange={e => setAmount(e.target.value)} min="1" placeholder="Custom" className="input" />
                 </div>
 
-                {error && <p className="text-sm text-red-500">{error}</p>}
+                {error && <p className="text-sm font-semibold text-red-500 bg-red-50 dark:bg-red-950/30 px-3 py-2 rounded-xl">{error}</p>}
 
-                <button
-                  onClick={handleTip}
-                  disabled={!phone.trim() || !amount || loading}
-                  className="w-full py-3 bg-green-600 hover:bg-green-700 disabled:opacity-40 text-white font-semibold rounded-xl flex items-center justify-center gap-2 transition-colors"
-                >
+                <button onClick={handleTip} disabled={!phone.trim() || !amount || loading} className="btn-primary w-full flex items-center justify-center gap-2" style={{ background: 'linear-gradient(135deg,#6BCB77,#4ECDC4)' }}>
                   {loading ? <Loader2 size={16} className="animate-spin" /> : <Banknote size={16} />}
-                  {loading ? 'Sending…' : `Send KES ${amount}`}
+                  {loading ? 'Sending…' : `Send KES ${amount} via M-Pesa`}
                 </button>
               </>
             )}

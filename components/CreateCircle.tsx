@@ -1,168 +1,61 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Plus, X } from 'lucide-react'
+import { Plus, X, Loader2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
-import { createPortal } from 'react-dom'
 
-const CATEGORIES = ['tech', 'arts', 'business', 'sports', 'general']
-
-const KENYAN_UNIVERSITIES = [
-  'University of Nairobi', 'Kenyatta University', 'JKUAT',
-  'Strathmore University', 'Moi University', 'Maseno University',
-  'Egerton University', 'Daystar University', 'USIU-Africa',
-  'Mount Kenya University', 'KCA University', 'Multimedia University',
-  'Other'
-]
+const CATEGORIES = ['Tech','Art','Sports','Music','Science','Culture','Business','Health','Other']
 
 export default function CreateCircle({ userId }: { userId: string }) {
   const supabase = createClient()
   const router = useRouter()
   const [open, setOpen] = useState(false)
-  const [mounted, setMounted] = useState(false)
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
-  const [university, setUniversity] = useState('')
-  const [category, setCategory] = useState('general')
+  const [category, setCategory] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  useEffect(() => { setMounted(true) }, [])
-
   async function handleCreate() {
     if (!name.trim()) return
-    setLoading(true)
-    setError('')
-
-    const slug = name.toLowerCase()
-      .replace(/[^a-z0-9\s-]/g, '')
-      .replace(/\s+/g, '-')
-      + '-' + Date.now()
-
-    const { data: circle, error: insertError } = await supabase
-      .from('circles')
-      .insert({
-        name: name.trim(),
-        slug,
-        description: description.trim() || null,
-        university: university || null,
-        category,
-        created_by: userId,
-      })
-      .select()
-      .single()
-
-    if (insertError) {
-      setError(insertError.message)
-      setLoading(false)
-      return
-    }
-
-    await supabase.from('circle_members').insert({
-      circle_id: circle.id,
-      user_id: userId,
-      role: 'admin'
-    })
-
-    setName('')
-    setDescription('')
-    setUniversity('')
-    setCategory('general')
-    setOpen(false)
-    setLoading(false)
+    setLoading(true); setError('')
+    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') + '-' + Date.now().toString(36)
+    const { error: e } = await supabase.from('circles').insert({ name: name.trim(), slug, description: description.trim() || null, category: category || null, created_by: userId })
+    if (e) { setError(e.message); setLoading(false); return }
+    setOpen(false); setName(''); setDescription(''); setCategory(''); setLoading(false)
     router.refresh()
   }
 
-  const modal = (
-    <div
-      onClick={(e) => { if (e.target === e.currentTarget) setOpen(false) }}
-      style={{
-        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-        zIndex: 9999, display: 'flex', alignItems: 'center',
-        justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.45)'
-      }}
-    >
-      <div style={{ width: '320px' }} className="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl p-5 space-y-3">
-        
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <h2 className="font-bold text-sm">New Circle</h2>
-          <button onClick={() => setOpen(false)} className="text-zinc-400 hover:text-zinc-600">
-            <X size={16} />
-          </button>
-        </div>
-
-        {/* Name */}
-        <input
-          value={name}
-          onChange={e => setName(e.target.value)}
-          placeholder="Circle name"
-          className="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-transparent text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
-        />
-
-        {/* Description */}
-        <textarea
-          value={description}
-          onChange={e => setDescription(e.target.value)}
-          placeholder="What is this circle about?"
-          rows={2}
-          className="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-transparent text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
-        />
-
-        {/* University */}
-        <select
-          value={university}
-          onChange={e => setUniversity(e.target.value)}
-          className="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
-        >
-          <option value="">All universities</option>
-          {KENYAN_UNIVERSITIES.map(u => (
-            <option key={u} value={u}>{u}</option>
-          ))}
-        </select>
-
-        {/* Category */}
-        <div className="flex flex-wrap gap-1.5">
-          {CATEGORIES.map(cat => (
-            <button
-              key={cat}
-              onClick={() => setCategory(cat)}
-              className={`text-xs px-2.5 py-1 rounded-lg font-medium capitalize transition-colors ${
-                category === cat
-                  ? 'bg-purple-600 text-white'
-                  : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 hover:bg-zinc-200'
-              }`}
-            >
-              {cat}
-            </button>
-          ))}
-        </div>
-
-        {error && <p className="text-xs text-red-500">{error}</p>}
-
-        {/* Submit */}
-        <button
-          onClick={handleCreate}
-          disabled={!name.trim() || loading}
-          className="w-full py-2 rounded-lg bg-purple-600 hover:bg-purple-700 disabled:opacity-40 text-white text-sm font-medium transition-colors"
-        >
-          {loading ? 'Creating…' : 'Create circle'}
-        </button>
-      </div>
-    </div>
-  )
-
   return (
     <>
-      <button
-        onClick={() => setOpen(true)}
-        className="flex items-center gap-1.5 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium px-3 py-1.5 rounded-lg transition-colors"
-      >
-        <Plus size={15} />
-        New circle
+      <button onClick={() => setOpen(true)} className="btn-primary flex items-center gap-2" style={{ borderRadius: '14px', padding: '10px 16px', fontSize: '14px' }}>
+        <Plus size={16} strokeWidth={2.5} /> New Circle
       </button>
 
-      {mounted && open && createPortal(modal, document.body)}
+      {open && (
+        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center" style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }} onClick={e => { if (e.target === e.currentTarget) setOpen(false) }}>
+          <div className="w-full max-w-sm rounded-t-[28px] sm:rounded-[28px] p-6 space-y-5 anim-up" style={{ background: 'var(--surface-0)', boxShadow: 'var(--shadow-lg)' }}>
+            <div className="flex items-center justify-between">
+              <h3 className="font-extrabold text-lg">Create a circle 🌀</h3>
+              <button onClick={() => setOpen(false)} className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: 'var(--surface-2)', color: 'var(--text-secondary)' }}><X size={16} /></button>
+            </div>
+            <input value={name} onChange={e => setName(e.target.value)} placeholder="Circle name" className="input" />
+            <textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="What's this circle about?" rows={3} className="input resize-none" />
+            <div className="flex flex-wrap gap-2">
+              {CATEGORIES.map(c => (
+                <button key={c} onClick={() => setCategory(c === category ? '' : c)} className="px-3 py-1.5 rounded-xl text-sm font-semibold transition-all active:scale-90" style={category === c ? { background: 'var(--grad-brand)', color: '#fff' } : { background: 'var(--surface-2)', color: 'var(--text-secondary)' }}>
+                  {c}
+                </button>
+              ))}
+            </div>
+            {error && <p className="text-sm text-red-500">{error}</p>}
+            <button onClick={handleCreate} disabled={!name.trim() || loading} className="btn-primary w-full flex items-center justify-center gap-2">
+              {loading ? <Loader2 size={16} className="animate-spin" /> : null}
+              {loading ? 'Creating…' : 'Create Circle 🚀'}
+            </button>
+          </div>
+        </div>
+      )}
     </>
   )
 }

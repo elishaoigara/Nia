@@ -2,99 +2,69 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect, notFound } from 'next/navigation'
 import PostCard from '@/components/PostCard'
 import CreatePost from '@/components/CreatePost'
-import { Users } from 'lucide-react'
+import { Users, ArrowLeft } from 'lucide-react'
+import Link from 'next/link'
 
-export default async function CircleDetailPage({
-  params,
-}: {
-  params: Promise<{ slug: string }>
-}) {
+interface Props { params: Promise<{ slug: string }> }
+
+export default async function CirclePage({ params }: Props) {
   const { slug } = await params
-
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: circle } = await supabase
-    .from('circles')
-    .select('*, circle_members (user_id)')
-    .eq('slug', slug)
-    .single()
-
+  const { data: circle } = await supabase.from('circles').select('*, circle_members (user_id)').eq('slug', slug).single()
   if (!circle) notFound()
 
-  const { data: posts } = await supabase
-    .from('posts')
-    .select(`
-      *,
-      profiles:user_id (id, username, avatar_url, university),
-      circles:circle_id (id, name, slug),
-      likes (user_id),
-      comments (id)
-    `)
-    .eq('circle_id', circle.id)
-    .order('created_at', { ascending: false })
-    .limit(30)
+  const { data: posts } = await supabase.from('posts')
+    .select('*, profiles:user_id (id, username, avatar_url, university), likes (user_id), comments (id)')
+    .eq('circle_id', circle.id).order('created_at', { ascending: false })
 
-  const isMember = circle.circle_members?.some(
-    (m: any) => m.user_id === user.id
-  )
-  const memberCount = circle.circle_members?.length ?? 0
-
-  const CATEGORY_COLORS: Record<string, string> = {
-    tech: 'bg-blue-50 text-blue-600',
-    arts: 'bg-pink-50 text-pink-600',
-    business: 'bg-amber-50 text-amber-600',
-    sports: 'bg-green-50 text-green-600',
-    general: 'bg-purple-50 text-purple-600',
-  }
-  const colorClass = CATEGORY_COLORS[circle.category] ?? CATEGORY_COLORS.general
+  const isMember = circle.circle_members?.some((m: any) => m.user_id === user.id)
 
   return (
-    <main className="max-w-xl mx-auto px-4 py-6 space-y-4">
-      <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-100 dark:border-zinc-800 p-5 space-y-2">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h1 className="text-xl font-bold">{circle.name}</h1>
-            {circle.university && (
-              <p className="text-sm text-zinc-400 mt-0.5">{circle.university}</p>
-            )}
+    <main className="max-w-xl mx-auto px-4 py-6 space-y-5">
+      {/* Back */}
+      <Link href="/circles" className="inline-flex items-center gap-2 text-sm font-semibold transition-all active:scale-95" style={{ color: 'var(--text-secondary)' }}>
+        <ArrowLeft size={16} /> All Circles
+      </Link>
+
+      {/* Circle header */}
+      <div className="card overflow-hidden">
+        <div className="h-16 w-full" style={{ background: 'var(--grad-cool)' }} />
+        <div className="px-5 pb-5 pt-3 space-y-3">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h1 className="font-extrabold text-2xl">{circle.name}</h1>
+              {circle.category && (
+                <span className="text-xs font-bold px-2.5 py-1 rounded-full mt-1 inline-block" style={{ background: 'linear-gradient(135deg,rgba(255,107,107,0.12),rgba(168,85,247,0.12))', color: 'var(--nia-violet)' }}>
+                  {circle.category}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-1.5 flex-shrink-0 mt-1" style={{ color: 'var(--text-tertiary)' }}>
+              <Users size={15} />
+              <span className="text-sm font-semibold">{circle.circle_members?.length ?? 0}</span>
+            </div>
           </div>
-          {circle.category && (
-            <span className={`text-xs px-2.5 py-1 rounded-full font-medium flex-shrink-0 ${colorClass}`}>
-              {circle.category}
-            </span>
-          )}
-        </div>
-
-        {circle.description && (
-          <p className="text-sm text-zinc-500 leading-relaxed">{circle.description}</p>
-        )}
-
-        <div className="flex items-center gap-1.5 text-sm text-zinc-400 pt-1">
-          <Users size={14} />
-          <span>{memberCount} {memberCount === 1 ? 'member' : 'members'}</span>
+          {circle.description && <p className="text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>{circle.description}</p>}
         </div>
       </div>
 
-      {isMember ? (
-        <CreatePost userId={user.id} circleId={circle.id} />
-      ) : (
-        <div className="text-center py-5 text-sm text-zinc-400 bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-100 dark:border-zinc-800">
-          Join this circle to post here
-        </div>
-      )}
+      {/* Post creator — only for members */}
+      {isMember && <CreatePost userId={user.id} circleId={circle.id} />}
 
-      {posts && posts.length === 0 && (
-        <div className="text-center py-16 text-zinc-400">
-          <p className="font-medium">No posts yet</p>
-          <p className="text-sm mt-1">Be the first to post in this circle</p>
-        </div>
-      )}
-
-      {posts?.map(post => (
-        <PostCard key={post.id} post={post} currentUserId={user.id} />
-      ))}
+      {/* Posts */}
+      <div className="space-y-3">
+        {posts && posts.length === 0 && (
+          <div className="card text-center py-12 space-y-2">
+            <div className="text-4xl">📭</div>
+            <p className="font-bold">No posts yet</p>
+            {!isMember && <p className="text-sm" style={{ color: 'var(--text-tertiary)' }}>Join this circle to post!</p>}
+          </div>
+        )}
+        {posts?.map(post => <PostCard key={post.id} post={post} currentUserId={user.id} />)}
+      </div>
     </main>
   )
 }
