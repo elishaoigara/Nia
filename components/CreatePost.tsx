@@ -4,10 +4,16 @@ import { createClient } from '@/lib/supabase/client'
 import { ImagePlus, X, Loader2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 
-export default function CreatePost({ userId }: { userId: string }) {
+interface CreatePostProps {
+  userId: string
+  circleId?: string | null   // ← Added this
+}
+
+export default function CreatePost({ userId, circleId = null }: CreatePostProps) {
   const supabase = createClient()
   const router = useRouter()
   const fileRef = useRef<HTMLInputElement>(null)
+
   const [content, setContent] = useState('')
   const [image, setImage] = useState<File | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
@@ -37,6 +43,7 @@ export default function CreatePost({ userId }: { userId: string }) {
     if (image) {
       const ext = image.name.split('.').pop()
       const path = `${userId}/${Date.now()}.${ext}`
+      
       const { error: uploadError } = await supabase.storage
         .from('post-media')
         .upload(path, image)
@@ -56,6 +63,7 @@ export default function CreatePost({ userId }: { userId: string }) {
 
     const { error: postError } = await supabase.from('posts').insert({
       user_id: userId,
+      circle_id: circleId,           // ← Now supports circle
       content: content.trim() || null,
       media_url,
       media_type: image ? 'image' : null,
@@ -67,10 +75,12 @@ export default function CreatePost({ userId }: { userId: string }) {
       return
     }
 
+    // Reset form
     setContent('')
     setImage(null)
     setPreview(null)
     setLoading(false)
+    
     router.refresh()
   }
 
@@ -79,7 +89,9 @@ export default function CreatePost({ userId }: { userId: string }) {
       <textarea
         value={content}
         onChange={e => setContent(e.target.value)}
-        placeholder="What's happening on campus?"
+        placeholder={circleId 
+          ? "What's happening in this circle?" 
+          : "What's happening on campus?"}
         rows={3}
         className="w-full bg-transparent text-sm resize-none focus:outline-none placeholder:text-zinc-400"
       />

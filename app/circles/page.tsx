@@ -21,8 +21,8 @@ export default async function CirclesPage() {
     <main className="max-w-2xl mx-auto px-4 py-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold">Circles</h1>
-          <p className="text-sm text-zinc-400">Find your community</p>
+          <h1 className="text-2xl font-bold">Circles</h1>
+          <p className="text-sm text-zinc-400">Find or create your community</p>
         </div>
         <CreateCircle userId={user.id} />
       </div>
@@ -35,7 +35,7 @@ export default async function CirclesPage() {
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {circles?.map(circle => (
+        {circles?.map((circle) => (
           <CircleCard
             key={circle.id}
             circle={circle}
