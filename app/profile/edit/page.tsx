@@ -49,7 +49,7 @@ export default function EditProfilePage() {
     const file = e.target.files?.[0]
     if (!file) return
 
-    if (file.size > 5 * 1024 * 1024) { // 5MB limit
+    if (file.size > 5 * 1024 * 1024) {
       setError("Image size must be less than 5MB")
       return
     }
@@ -70,7 +70,6 @@ export default function EditProfilePage() {
 
     let avatar_url = profile?.avatar_url
 
-    // Upload new avatar if selected
     if (avatarFile) {
       const fileExt = avatarFile.name.split('.').pop()
       const filePath = `${profile.id}/avatar.${Date.now()}.${fileExt}`
@@ -89,14 +88,12 @@ export default function EditProfilePage() {
       avatar_url = data.publicUrl
     }
 
-    // Update profile
     const { error: updateError } = await supabase
       .from('profiles')
       .update({
         full_name: fullName.trim(),
         bio: bio.trim() || null,
         avatar_url,
-        updated_at: new Date().toISOString()
       })
       .eq('id', profile.id)
 
@@ -123,7 +120,7 @@ export default function EditProfilePage() {
       <div className="flex items-center gap-3 mb-6">
         <button 
           onClick={() => router.back()} 
-          className="text-zinc-400 hover:text-white transition"
+          className="text-zinc-400 hover:text-zinc-600 transition"
         >
           <ArrowLeft size={24} />
         </button>
@@ -188,7 +185,11 @@ export default function EditProfilePage() {
           </div>
         </div>
 
-        {error && <p className="text-red-500 text-sm bg-red-50 dark:bg-red-950 p-3 rounded-xl">{error}</p>}
+        {error && (
+          <p className="text-red-500 text-sm bg-red-50 dark:bg-red-950 p-3 rounded-xl">
+            {error}
+          </p>
+        )}
 
         <button
           onClick={handleSave}

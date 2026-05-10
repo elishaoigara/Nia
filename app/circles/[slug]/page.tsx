@@ -7,17 +7,18 @@ import { Users } from 'lucide-react'
 export default async function CircleDetailPage({
   params,
 }: {
-  params: { slug: string }
+  params: Promise<{ slug: string }>
 }) {
-  const supabase = await createClient()
+  const { slug } = await params
 
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
   const { data: circle } = await supabase
     .from('circles')
     .select('*, circle_members (user_id)')
-    .eq('slug', params.slug)
+    .eq('slug', slug)
     .single()
 
   if (!circle) notFound()
@@ -51,8 +52,6 @@ export default async function CircleDetailPage({
 
   return (
     <main className="max-w-xl mx-auto px-4 py-6 space-y-4">
-
-      {/* Circle header */}
       <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-100 dark:border-zinc-800 p-5 space-y-2">
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -78,7 +77,6 @@ export default async function CircleDetailPage({
         </div>
       </div>
 
-      {/* Post composer — members only */}
       {isMember ? (
         <CreatePost userId={user.id} circleId={circle.id} />
       ) : (
@@ -87,7 +85,6 @@ export default async function CircleDetailPage({
         </div>
       )}
 
-      {/* Posts */}
       {posts && posts.length === 0 && (
         <div className="text-center py-16 text-zinc-400">
           <p className="font-medium">No posts yet</p>
