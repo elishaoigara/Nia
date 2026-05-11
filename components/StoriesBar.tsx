@@ -1,7 +1,7 @@
 'use client'
 import { useState, useRef, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Plus, X, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Plus, X, Pencil, Trash2, Check, Loader2 } from 'lucide-react'
 
 interface Story {
   id: string
@@ -25,39 +25,34 @@ const BG_COLORS = [
 function timeLeft(created_at: string) {
   const diff = 24 * 60 * 60 * 1000 - (Date.now() - new Date(created_at).getTime())
   const h = Math.floor(diff / 3600000)
-  if (h > 0) return `${h}h`
-  const m = Math.floor(diff / 60000)
-  return `${m}m`
+  if (h > 0) return `${h}h left`
+  return `${Math.floor(diff / 60000)}m left`
 }
 
 export default function StoriesBar({ currentUserId }: { currentUserId: string }) {
   const supabase = createClient()
   const [stories, setStories] = useState<Story[]>([])
-  const [viewingStory, setViewingStory] = useState<Story | null>(null)
+  const [viewingGroup, setViewingGroup] = useState<Story[] | null>(null)
   const [viewIndex, setViewIndex] = useState(0)
   const [progress, setProgress] = useState(0)
   const [showCreate, setShowCreate] = useState(false)
+
+  // Create / Edit shared state
+  const [editingStory, setEditingStory] = useState<Story | null>(null)
   const [storyText, setStoryText] = useState('')
   const [selectedBg, setSelectedBg] = useState(BG_COLORS[0])
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [posting, setPosting] = useState(false)
+
+  // Delete confirm
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deletingStory, setDeletingStory] = useState<Story | null>(null)
+
   const fileRef = useRef<HTMLInputElement>(null)
   const progressRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const scrollRef = useRef<HTMLDivElement>(null)
 
-  // Group stories by user, keep only latest per user
-  const grouped = stories.reduce((acc: Record<string, Story[]>, s) => {
-    if (!acc[s.user_id]) acc[s.user_id] = []
-    acc[s.user_id].push(s)
-    return acc
-  }, {})
-  const userStories = Object.values(grouped)
-  const hasMyStory = !!grouped[currentUserId]
-
-  useEffect(() => {
-    loadStories()
-  }, [])
+  useEffect(() => { loadStories() }, [])
 
   async function loadStories() {
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
@@ -69,11 +64,25 @@ export default function StoriesBar({ currentUserId }: { currentUserId: string })
     setStories((data as any) ?? [])
   }
 
-  function openStory(userGroup: Story[], idx: number = 0) {
-    setViewingStory(userGroup[idx])
-    setViewIndex(idx)
-    setProgress(0)
-    startProgress(userGroup, idx)
+  const grouped = stories.reduce((acc: Record<string, Story[]>, s) => {
+    if (!acc[s.user_id]) acc[s.user_id] = []
+    acc[s.user_id].push(s)
+    return acc
+  }, {})
+
+  const hasMyStory = !!grouped[currentUserId]
+  const myStories = grouped[currentUserId] ?? []
+
+  const allGroups = Object.values(grouped).sort((a, b) => {
+    if (a[0].user_id === currentUserId) return -1
+    if (b[0].user_id === currentUserId) return 1
+    return 0
+  })
+
+  // ── Story viewer ───────────────────────────────────────────
+  function openStory(group: Story[], idx = 0) {
+    setViewingGroup(group); setViewIndex(idx); setProgress(0)
+    startProgress(group, idx)
   }
 
   function startProgress(group: Story[], idx: number) {
@@ -85,11 +94,9 @@ export default function StoriesBar({ currentUserId }: { currentUserId: string })
           clearInterval(progressRef.current!)
           if (idx + 1 < group.length) {
             const next = idx + 1
-            setViewIndex(next)
-            setViewingStory(group[next])
-            startProgress(group, next)
+            setViewIndex(next); startProgress(group, next)
           } else {
-            setViewingStory(null)
+            setViewingGroup(null)
           }
           return 0
         }
@@ -98,15 +105,31 @@ export default function StoriesBar({ currentUserId }: { currentUserId: string })
     }, 100)
   }
 
-  function closeStory() {
+  function closeViewer() {
     if (progressRef.current) clearInterval(progressRef.current)
-    setViewingStory(null)
-    setProgress(0)
+    setViewingGroup(null); setProgress(0)
   }
 
-  async function postStory() {
+  // ── Create / Edit ─────────────────────────────────────────
+  function openCreate() {
+    setEditingStory(null); setStoryText(''); setSelectedBg(BG_COLORS[0])
+    setImageFile(null); setImagePreview(null); setShowCreate(true)
+  }
+
+  function openEdit(story: Story) {
+    setEditingStory(story)
+    setStoryText(story.text_content ?? '')
+    setSelectedBg(story.bg_color ?? BG_COLORS[0])
+    setImagePreview(story.media_url)
+    setImageFile(null)
+    closeViewer()
+    setShowCreate(true)
+  }
+
+  async function saveStory() {
     setPosting(true)
-    let media_url = null
+    let media_url = editingStory?.media_url ?? null
+
     if (imageFile) {
       const path = `${currentUserId}/story_${Date.now()}.${imageFile.name.split('.').pop()}`
       const { error } = await supabase.storage.from('post-media').upload(path, imageFile)
@@ -114,55 +137,68 @@ export default function StoriesBar({ currentUserId }: { currentUserId: string })
         const { data } = supabase.storage.from('post-media').getPublicUrl(path)
         media_url = data.publicUrl
       }
+    } else if (!imagePreview) {
+      media_url = null // user removed the image
     }
-    await supabase.from('stories').insert({
-      user_id: currentUserId,
-      text_content: storyText.trim() || null,
-      media_url,
-      bg_color: imageFile ? null : selectedBg,
-    })
-    setStoryText(''); setImageFile(null); setImagePreview(null); setShowCreate(false); setPosting(false)
+
+    if (editingStory) {
+      await supabase.from('stories').update({
+        text_content: storyText.trim() || null,
+        media_url,
+        bg_color: media_url ? null : selectedBg,
+      }).eq('id', editingStory.id)
+    } else {
+      await supabase.from('stories').insert({
+        user_id: currentUserId,
+        text_content: storyText.trim() || null,
+        media_url,
+        bg_color: media_url ? null : selectedBg,
+      })
+    }
+
+    setShowCreate(false); setEditingStory(null); setPosting(false)
     loadStories()
   }
 
-  const allGroups = userStories.sort((a, b) => {
-    if (a[0].user_id === currentUserId) return -1
-    if (b[0].user_id === currentUserId) return 1
-    return 0
-  })
+  // ── Delete ────────────────────────────────────────────────
+  function promptDelete(story: Story) {
+    setDeletingStory(story)
+    setShowDeleteConfirm(true)
+    closeViewer()
+  }
+
+  async function confirmDelete() {
+    if (!deletingStory) return
+    await supabase.from('stories').delete().eq('id', deletingStory.id)
+    setShowDeleteConfirm(false); setDeletingStory(null)
+    loadStories()
+  }
+
+  const viewingStory = viewingGroup?.[viewIndex] ?? null
+  const viewingIsOwn = viewingStory?.user_id === currentUserId
 
   return (
     <>
-      {/* Stories row */}
+      {/* Stories bar */}
       <div className="card p-4 overflow-hidden">
-        <div ref={scrollRef} className="flex gap-3 overflow-x-auto pb-1 scrollbar-hide" style={{ scrollbarWidth: 'none' }}>
-          {/* Add story */}
-          <button
-            onClick={() => setShowCreate(true)}
-            className="flex flex-col items-center gap-1.5 flex-shrink-0"
-          >
+        <div className="flex gap-3 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
+
+          {/* Add / My story */}
+          <button onClick={openCreate} className="flex flex-col items-center gap-1.5 flex-shrink-0">
             <div className="relative">
-              <div
-                className="w-14 h-14 rounded-2xl flex items-center justify-center text-white"
-                style={{ background: hasMyStory ? 'var(--grad-brand)' : 'var(--surface-2)' }}
-              >
-                {hasMyStory
-                  ? <div className="w-full h-full rounded-2xl overflow-hidden">
-                      {grouped[currentUserId][0].media_url
-                        ? <img src={grouped[currentUserId][0].media_url} className="w-full h-full object-cover" alt="" />
-                        : <div className="w-full h-full flex items-center justify-center text-lg font-bold" style={{ background: grouped[currentUserId][0].bg_color ?? 'var(--grad-brand)' }}>
-                            {grouped[currentUserId][0].text_content?.[0] ?? '✨'}
-                          </div>
-                      }
-                    </div>
-                  : <Plus size={22} style={{ color: 'var(--text-tertiary)' }} />
-                }
+              <div className="w-14 h-14 rounded-2xl overflow-hidden flex items-center justify-center" style={{ background: hasMyStory ? 'var(--grad-brand)' : 'var(--surface-2)' }}>
+                {hasMyStory ? (
+                  myStories[0].media_url
+                    ? <img src={myStories[0].media_url} className="w-full h-full object-cover" alt="" />
+                    : <div className="w-full h-full flex items-center justify-center text-lg font-bold text-white" style={{ background: myStories[0].bg_color ?? 'var(--grad-brand)' }}>
+                        {myStories[0].text_content?.[0] ?? '✨'}
+                      </div>
+                ) : (
+                  <Plus size={22} style={{ color: 'var(--text-tertiary)' }} />
+                )}
               </div>
               {!hasMyStory && (
-                <div
-                  className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center text-white"
-                  style={{ background: 'var(--grad-brand)' }}
-                >
+                <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center text-white" style={{ background: 'var(--grad-brand)' }}>
                   <Plus size={12} strokeWidth={3} />
                 </div>
               )}
@@ -172,25 +208,19 @@ export default function StoriesBar({ currentUserId }: { currentUserId: string })
             </span>
           </button>
 
-          {/* Other users' stories */}
+          {/* Other users (tap to view, own group can also edit/delete) */}
           {allGroups
             .filter(g => g[0].user_id !== currentUserId)
             .map(group => (
-              <button
-                key={group[0].user_id}
-                onClick={() => openStory(group)}
-                className="flex flex-col items-center gap-1.5 flex-shrink-0"
-              >
+              <button key={group[0].user_id} onClick={() => openStory(group)} className="flex flex-col items-center gap-1.5 flex-shrink-0">
                 <div className="w-14 h-14 rounded-2xl p-0.5" style={{ background: 'var(--grad-brand)' }}>
-                  <div className="w-full h-full rounded-[10px] overflow-hidden" style={{ background: 'var(--surface-0)' }}>
-                    <div className="w-full h-full rounded-[10px] overflow-hidden">
-                      {group[0].media_url
-                        ? <img src={group[0].media_url} className="w-full h-full object-cover" alt="" />
-                        : <div className="w-full h-full flex items-center justify-center text-base font-bold text-white" style={{ background: group[0].bg_color ?? 'var(--grad-brand)' }}>
-                            {group[0].text_content?.[0] ?? '✨'}
-                          </div>
-                      }
-                    </div>
+                  <div className="w-full h-full rounded-[10px] overflow-hidden">
+                    {group[0].media_url
+                      ? <img src={group[0].media_url} className="w-full h-full object-cover" alt="" />
+                      : <div className="w-full h-full flex items-center justify-center text-base font-bold text-white" style={{ background: group[0].bg_color ?? 'var(--grad-brand)' }}>
+                          {group[0].text_content?.[0] ?? '✨'}
+                        </div>
+                    }
                   </div>
                 </div>
                 <span className="text-[10px] font-semibold w-14 text-center truncate" style={{ color: 'var(--text-secondary)' }}>
@@ -199,29 +229,45 @@ export default function StoriesBar({ currentUserId }: { currentUserId: string })
               </button>
             ))}
 
-          {allGroups.length === 0 && !hasMyStory && (
-            <p className="text-sm self-center ml-2" style={{ color: 'var(--text-tertiary)' }}>
-              Be the first to post a story! 👆
-            </p>
+          {hasMyStory && (
+            <button onClick={() => openStory(myStories)} className="flex flex-col items-center gap-1.5 flex-shrink-0">
+              <div className="w-14 h-14 rounded-2xl border-2 overflow-hidden" style={{ borderColor: 'var(--nia-violet)', background: myStories[0].bg_color ?? 'var(--grad-brand)' }}>
+                {myStories[0].media_url
+                  ? <img src={myStories[0].media_url} className="w-full h-full object-cover" alt="" />
+                  : <div className="w-full h-full flex items-center justify-center text-white font-bold text-lg" style={{ background: myStories[0].bg_color ?? 'var(--grad-brand)' }}>
+                      {myStories[0].text_content?.[0] ?? '✨'}
+                    </div>
+                }
+              </div>
+              <span className="text-[10px] font-semibold w-14 text-center truncate" style={{ color: 'var(--nia-violet)' }}>View mine</span>
+            </button>
+          )}
+
+          {allGroups.length === 0 && (
+            <p className="text-sm self-center ml-2" style={{ color: 'var(--text-tertiary)' }}>Be the first to share a story! 👆</p>
           )}
         </div>
       </div>
 
-      {/* Story viewer */}
-      {viewingStory && (
-        <div
-          className="fixed inset-0 z-[200] flex items-center justify-center"
-          style={{ background: 'rgba(0,0,0,0.95)' }}
-        >
-          <div className="relative w-full max-w-sm h-[75vh] rounded-3xl overflow-hidden" style={{ background: viewingStory.bg_color ?? '#111' }}>
-            {/* Progress bar */}
-            <div className="absolute top-3 left-3 right-3 z-10">
-              <div className="h-1 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.3)' }}>
-                <div
-                  className="h-full rounded-full transition-none"
-                  style={{ width: `${progress}%`, background: 'rgba(255,255,255,0.9)' }}
-                />
-              </div>
+      {/* ── Story viewer ─────────────────────────────────── */}
+      {viewingStory && viewingGroup && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.95)' }}>
+          <div className="relative w-full max-w-sm h-[75vh] rounded-3xl overflow-hidden">
+
+            {/* Progress bars — one per story in group */}
+            <div className="absolute top-3 left-3 right-3 z-10 flex gap-1">
+              {viewingGroup.map((_, i) => (
+                <div key={i} className="flex-1 h-1 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.3)' }}>
+                  <div
+                    className="h-full rounded-full"
+                    style={{
+                      width: i < viewIndex ? '100%' : i === viewIndex ? `${progress}%` : '0%',
+                      background: 'rgba(255,255,255,0.9)',
+                      transition: i === viewIndex ? 'none' : undefined,
+                    }}
+                  />
+                </div>
+              ))}
             </div>
 
             {/* Header */}
@@ -229,30 +275,44 @@ export default function StoriesBar({ currentUserId }: { currentUserId: string })
               <div className="w-8 h-8 rounded-full overflow-hidden" style={{ background: 'var(--grad-brand)' }}>
                 {viewingStory.profiles?.avatar_url
                   ? <img src={viewingStory.profiles.avatar_url} className="w-full h-full object-cover" alt="" />
-                  : <div className="w-full h-full flex items-center justify-center text-white text-xs font-bold">
-                      {viewingStory.profiles?.username?.[0]?.toUpperCase()}
-                    </div>
+                  : <div className="w-full h-full flex items-center justify-center text-white text-xs font-bold">{viewingStory.profiles?.username?.[0]?.toUpperCase()}</div>
                 }
               </div>
               <div className="flex-1">
                 <p className="text-white text-xs font-bold">@{viewingStory.profiles?.username}</p>
-                <p className="text-white/60 text-[10px]">{timeLeft(viewingStory.created_at)} left</p>
+                <p className="text-white/60 text-[10px]">{timeLeft(viewingStory.created_at)}</p>
               </div>
-              <button onClick={closeStory} className="text-white/80 p-1">
+
+              {/* Own story controls */}
+              {viewingIsOwn && (
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => openEdit(viewingStory)}
+                    className="w-8 h-8 flex items-center justify-center rounded-xl"
+                    style={{ background: 'rgba(255,255,255,0.2)' }}
+                  >
+                    <Pencil size={14} className="text-white" />
+                  </button>
+                  <button
+                    onClick={() => promptDelete(viewingStory)}
+                    className="w-8 h-8 flex items-center justify-center rounded-xl"
+                    style={{ background: 'rgba(239,68,68,0.3)' }}
+                  >
+                    <Trash2 size={14} className="text-white" />
+                  </button>
+                </div>
+              )}
+
+              <button onClick={closeViewer} className="w-8 h-8 flex items-center justify-center" style={{ color: 'rgba(255,255,255,0.8)' }}>
                 <X size={20} />
               </button>
             </div>
 
-            {/* Content */}
+            {/* Story content */}
             {viewingStory.media_url
               ? <img src={viewingStory.media_url} className="w-full h-full object-cover" alt="" />
-              : <div
-                  className="w-full h-full flex items-center justify-center p-8"
-                  style={{ background: viewingStory.bg_color ?? 'var(--grad-brand)' }}
-                >
-                  <p className="text-white text-2xl font-extrabold text-center leading-snug">
-                    {viewingStory.text_content}
-                  </p>
+              : <div className="w-full h-full flex items-center justify-center p-8" style={{ background: viewingStory.bg_color ?? 'var(--grad-brand)' }}>
+                  <p className="text-white text-2xl font-extrabold text-center leading-snug">{viewingStory.text_content}</p>
                 </div>
             }
             {viewingStory.media_url && viewingStory.text_content && (
@@ -261,14 +321,18 @@ export default function StoriesBar({ currentUserId }: { currentUserId: string })
               </div>
             )}
 
-            {/* Tap zones */}
-            <button className="absolute left-0 top-0 w-1/3 h-full" onClick={closeStory} />
-            <button className="absolute right-0 top-0 w-1/3 h-full" onClick={closeStory} />
+            {/* Tap zones for prev/next */}
+            <button className="absolute left-0 top-0 w-1/3 h-full opacity-0" onClick={() => {
+              if (viewIndex > 0) { const prev = viewIndex - 1; setViewIndex(prev); startProgress(viewingGroup, prev) } else closeViewer()
+            }} />
+            <button className="absolute right-0 top-0 w-1/3 h-full opacity-0" onClick={() => {
+              if (viewIndex + 1 < viewingGroup.length) { const next = viewIndex + 1; setViewIndex(next); startProgress(viewingGroup, next) } else closeViewer()
+            }} />
           </div>
         </div>
       )}
 
-      {/* Create story modal */}
+      {/* ── Create / Edit story modal ─────────────────── */}
       {showCreate && (
         <div
           className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center"
@@ -277,7 +341,7 @@ export default function StoriesBar({ currentUserId }: { currentUserId: string })
         >
           <div className="w-full max-w-sm rounded-t-[28px] sm:rounded-[28px] p-6 space-y-5 anim-up" style={{ background: 'var(--surface-0)' }}>
             <div className="flex items-center justify-between">
-              <h3 className="font-extrabold text-lg">New Story ✨</h3>
+              <h3 className="font-extrabold text-lg">{editingStory ? 'Edit Story ✏️' : 'New Story ✨'}</h3>
               <button onClick={() => setShowCreate(false)} className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: 'var(--surface-2)', color: 'var(--text-secondary)' }}>
                 <X size={16} />
               </button>
@@ -285,12 +349,13 @@ export default function StoriesBar({ currentUserId }: { currentUserId: string })
 
             {/* Preview */}
             <div
-              className="w-full h-36 rounded-2xl overflow-hidden flex items-center justify-center relative"
+              className="w-full h-36 rounded-2xl overflow-hidden flex items-center justify-center relative cursor-pointer"
               style={{ background: imagePreview ? undefined : selectedBg }}
+              onClick={() => !imagePreview && fileRef.current?.click()}
             >
               {imagePreview
                 ? <img src={imagePreview} className="w-full h-full object-cover" alt="" />
-                : <p className="text-white text-xl font-extrabold text-center px-4">{storyText || 'Your story preview'}</p>
+                : <p className="text-white text-xl font-extrabold text-center px-4">{storyText || 'Tap to preview'}</p>
               }
             </div>
 
@@ -302,9 +367,9 @@ export default function StoriesBar({ currentUserId }: { currentUserId: string })
               className="input resize-none text-sm"
             />
 
-            {/* BG colors */}
+            {/* BG colors (hide if image selected) */}
             {!imagePreview && (
-              <div className="flex gap-2">
+              <div className="flex gap-2 items-center">
                 {BG_COLORS.map(bg => (
                   <button
                     key={bg}
@@ -317,6 +382,7 @@ export default function StoriesBar({ currentUserId }: { currentUserId: string })
                   onClick={() => fileRef.current?.click()}
                   className="w-8 h-8 rounded-xl flex items-center justify-center ml-auto"
                   style={{ background: 'var(--surface-2)', color: 'var(--text-secondary)' }}
+                  title="Add photo"
                 >
                   <Plus size={16} />
                 </button>
@@ -324,23 +390,69 @@ export default function StoriesBar({ currentUserId }: { currentUserId: string })
             )}
 
             {imagePreview && (
-              <button onClick={() => { setImageFile(null); setImagePreview(null) }} className="text-sm font-semibold" style={{ color: 'var(--nia-coral)' }}>
-                Remove image
+              <button
+                onClick={() => { setImageFile(null); setImagePreview(null) }}
+                className="text-sm font-semibold flex items-center gap-1.5"
+                style={{ color: 'var(--nia-coral)' }}
+              >
+                <X size={14} /> Remove image
               </button>
             )}
 
-            <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={e => {
-              const f = e.target.files?.[0]
-              if (f) { setImageFile(f); setImagePreview(URL.createObjectURL(f)) }
-            }} />
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={e => {
+                const f = e.target.files?.[0]
+                if (f) { setImageFile(f); setImagePreview(URL.createObjectURL(f)) }
+              }}
+            />
 
             <button
-              onClick={postStory}
-              disabled={posting || (!storyText.trim() && !imageFile)}
+              onClick={saveStory}
+              disabled={posting || (!storyText.trim() && !imageFile && !imagePreview)}
               className="btn-primary w-full flex items-center justify-center gap-2"
             >
-              {posting ? 'Posting…' : 'Share Story 🚀'}
+              {posting ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
+              {posting ? 'Saving…' : editingStory ? 'Save changes' : 'Share Story 🚀'}
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete story confirmation ─────────────────── */}
+      {showDeleteConfirm && (
+        <div
+          className="fixed inset-0 z-[300] flex items-center justify-center px-4"
+          style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}
+          onClick={() => setShowDeleteConfirm(false)}
+        >
+          <div
+            className="w-full max-w-xs rounded-3xl p-6 space-y-4 anim-pop"
+            style={{ background: 'var(--surface-0)', boxShadow: 'var(--shadow-lg)' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="text-center space-y-2">
+              <div className="text-4xl">🗑️</div>
+              <h3 className="font-extrabold text-lg">Delete story?</h3>
+              <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                It'll disappear for everyone immediately.
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setShowDeleteConfirm(false)} className="btn-ghost flex-1 text-sm py-2.5">
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                className="flex-1 py-2.5 rounded-2xl text-sm font-bold text-white transition-all active:scale-95"
+                style={{ background: '#ef4444' }}
+              >
+                Delete
+              </button>
+            </div>
           </div>
         </div>
       )}

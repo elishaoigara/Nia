@@ -1,7 +1,7 @@
 'use client'
 import { useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { MessageCircle, Share2, Languages, Loader2, Play, Pause, Send, Repeat2 } from 'lucide-react'
+import { MessageCircle, Share2, Languages, Loader2, Play, Pause, Send, Repeat2, MoreHorizontal, Pencil, Trash2, X, Check } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import TipButton from '@/components/TipButton'
@@ -21,7 +21,6 @@ export default function PostCard({ post, currentUserId }: any) {
   const supabase = createClient()
   const router = useRouter()
 
-  // Reactions: group by emoji
   const reactionCounts: Record<string, number> = {}
   const myReaction: string | null = post.reactions?.find((r: any) => r.user_id === currentUserId)?.emoji ?? null
   post.reactions?.forEach((r: any) => { reactionCounts[r.emoji] = (reactionCounts[r.emoji] ?? 0) + 1 })
@@ -38,25 +37,59 @@ export default function PostCard({ post, currentUserId }: any) {
   const [translating, setTranslating] = useState(false)
   const [isPlaying, setIsPlaying] = useState(false)
   const [copied, setCopied] = useState(false)
-  const [reposted, setReposted] = useState(false)
+  const [reposted, setReposted] = useState(post.reposts?.some((r: any) => r.user_id === currentUserId) ?? false)
   const [repostCount, setRepostCount] = useState(post.reposts?.length ?? 0)
+
+  // Edit / Delete state
+  const [showMenu, setShowMenu] = useState(false)
+  const [isEditing, setIsEditing] = useState(false)
+  const [editContent, setEditContent] = useState(post.content ?? '')
+  const [editLoading, setEditLoading] = useState(false)
+  const [isDeleted, setIsDeleted] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const commentRef = useRef<HTMLInputElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
 
   const totalReactions = Object.values(localReactions).reduce((a, b) => a + b, 0)
+  const isOwn = post.profiles?.id === currentUserId
 
+  // ── Edit ──────────────────────────────────────────────────
+  async function saveEdit() {
+    if (!editContent.trim()) return
+    setEditLoading(true)
+    const { error } = await supabase
+      .from('posts')
+      .update({ content: editContent.trim(), updated_at: new Date().toISOString() })
+      .eq('id', post.id)
+    if (!error) {
+      setIsEditing(false)
+      router.refresh()
+    }
+    setEditLoading(false)
+  }
+
+  // ── Delete ────────────────────────────────────────────────
+  async function deletePost() {
+    const { error } = await supabase.from('posts').delete().eq('id', post.id)
+    if (!error) {
+      setIsDeleted(true)
+      router.refresh()
+    }
+    setShowDeleteConfirm(false)
+  }
+
+  // ── Reactions ─────────────────────────────────────────────
   async function handleReaction(emoji: string) {
     if (!currentUserId) return
     setShowReactionPicker(false)
     const newCounts = { ...localReactions }
-
     if (activeReaction === emoji) {
-      // remove
       await supabase.from('reactions').delete().match({ post_id: post.id, user_id: currentUserId })
       newCounts[emoji] = Math.max((newCounts[emoji] ?? 1) - 1, 0)
       setActiveReaction(null)
     } else {
-      // replace or add
       if (activeReaction) {
         await supabase.from('reactions').delete().match({ post_id: post.id, user_id: currentUserId })
         newCounts[activeReaction] = Math.max((newCounts[activeReaction] ?? 1) - 1, 0)
@@ -69,10 +102,9 @@ export default function PostCard({ post, currentUserId }: any) {
   }
 
   async function handleRepost() {
-    if (!currentUserId || reposted) return
+    if (!currentUserId || reposted || isOwn) return
     await supabase.from('reposts').insert({ post_id: post.id, user_id: currentUserId })
-    setReposted(true)
-    setRepostCount((c: number) => c + 1)
+    setReposted(true); setRepostCount((c: number) => c + 1)
   }
 
   async function loadComments() {
@@ -84,8 +116,7 @@ export default function PostCard({ post, currentUserId }: any) {
       .eq('post_id', post.id)
       .order('created_at', { ascending: true })
     setComments(data ?? [])
-    setLoadingComments(false)
-    setShowComments(true)
+    setLoadingComments(false); setShowComments(true)
     setTimeout(() => commentRef.current?.focus(), 100)
   }
 
@@ -98,8 +129,7 @@ export default function PostCard({ post, currentUserId }: any) {
       .select('*, profiles:user_id (id, username, avatar_url)')
       .single()
     if (!error && data) { setComments(prev => [...prev, data]); setNewComment('') }
-    setPosting(false)
-    router.refresh()
+    setPosting(false); router.refresh()
   }
 
   async function handleTranslate() {
@@ -129,25 +159,14 @@ export default function PostCard({ post, currentUserId }: any) {
     setIsPlaying(!isPlaying)
   }
 
-  const isOwn = post.profiles?.id === currentUserId
-  const displayName = post.is_anonymous ? 'Anonymous 🎭' : `@${post.profiles?.username}`
-  const displayHref = post.is_anonymous ? '#' : `/profile/${post.profiles?.id}`
+  // Hidden if deleted
+  if (isDeleted) return null
 
-  // Top 3 reactions to show inline
-  const topReactions = Object.entries(localReactions)
-    .filter(([, c]) => c > 0)
-    .sort(([, a], [, b]) => b - a)
-    .slice(0, 3)
+  const displayName = post.is_anonymous ? 'Anonymous 🎭' : `@${post.profiles?.username}`
+  const topReactions = Object.entries(localReactions).filter(([, c]) => c > 0).sort(([, a], [, b]) => b - a).slice(0, 3)
 
   return (
-    <article className="card card-hover overflow-hidden anim-up">
-      {/* Repost indicator */}
-      {post.repost_of && (
-        <div className="flex items-center gap-1.5 px-4 pt-3 pb-1" style={{ color: 'var(--text-tertiary)' }}>
-          <Repeat2 size={14} />
-          <span className="text-xs font-semibold">Reposted</span>
-        </div>
-      )}
+    <article className="card card-hover overflow-hidden anim-up" onClick={() => { if (showMenu) setShowMenu(false) }}>
 
       {/* Header */}
       <div className="flex items-start gap-3 p-4 pb-3">
@@ -166,7 +185,7 @@ export default function PostCard({ post, currentUserId }: any) {
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <Link href={displayHref} className="font-bold text-sm hover:underline">
+            <Link href={post.is_anonymous ? '#' : `/profile/${post.profiles?.id}`} className="font-bold text-sm hover:underline">
               {displayName}
             </Link>
             {post.circles && (
@@ -179,30 +198,104 @@ export default function PostCard({ post, currentUserId }: any) {
             {!post.is_anonymous && <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>{post.profiles?.university?.split(' ').slice(0, 2).join(' ')}</span>}
             {!post.is_anonymous && <span style={{ color: 'var(--text-tertiary)' }}>·</span>}
             <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>{timeAgo(post.created_at)}</span>
+            {post.updated_at && post.updated_at !== post.created_at && (
+              <span className="text-xs italic" style={{ color: 'var(--text-tertiary)' }}>· edited</span>
+            )}
           </div>
         </div>
 
-        {!isOwn && !post.is_anonymous && post.profiles?.id && (
-          <TipButton recipientUserId={post.profiles.id} recipientUsername={post.profiles.username} />
-        )}
-      </div>
+        {/* Right actions */}
+        <div className="flex items-center gap-1 flex-shrink-0">
+          {!isOwn && !post.is_anonymous && post.profiles?.id && (
+            <TipButton recipientUserId={post.profiles.id} recipientUsername={post.profiles.username} />
+          )}
 
-      {/* Content */}
-      {post.content && (
-        <div className="px-4 pb-3">
-          <p className="text-[15px] leading-relaxed" style={{ color: 'var(--text-primary)' }}>{post.content}</p>
-          {translation && (
-            <div className="mt-2 text-sm italic px-3 py-2.5 rounded-xl" style={{ background: 'var(--surface-2)', color: 'var(--text-secondary)', borderLeft: '3px solid var(--nia-violet)' }}>
-              {translation}
+          {/* ⋯ menu — only for own posts */}
+          {isOwn && (
+            <div className="relative" ref={menuRef}>
+              <button
+                onClick={e => { e.stopPropagation(); setShowMenu(!showMenu) }}
+                className="w-8 h-8 flex items-center justify-center rounded-xl transition-all active:scale-90"
+                style={{ color: 'var(--text-tertiary)', background: showMenu ? 'var(--surface-2)' : 'transparent' }}
+              >
+                <MoreHorizontal size={18} />
+              </button>
+
+              {showMenu && (
+                <div
+                  className="absolute right-0 top-10 z-30 w-40 rounded-2xl overflow-hidden anim-pop"
+                  style={{ background: 'var(--surface-0)', boxShadow: 'var(--shadow-lg)', border: '1px solid var(--border)' }}
+                  onClick={e => e.stopPropagation()}
+                >
+                  {post.content !== null && (
+                    <button
+                      onClick={() => { setIsEditing(true); setShowMenu(false) }}
+                      className="flex items-center gap-2.5 w-full px-4 py-3 text-sm font-semibold transition-colors text-left hover:bg-[var(--surface-2)]"
+                      style={{ color: 'var(--text-primary)' }}
+                    >
+                      <Pencil size={15} style={{ color: 'var(--nia-violet)' }} /> Edit post
+                    </button>
+                  )}
+                  <button
+                    onClick={() => { setShowDeleteConfirm(true); setShowMenu(false) }}
+                    className="flex items-center gap-2.5 w-full px-4 py-3 text-sm font-semibold transition-colors text-left hover:bg-[var(--surface-2)]"
+                    style={{ color: '#ef4444' }}
+                  >
+                    <Trash2 size={15} /> Delete post
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
+      </div>
+
+      {/* Edit mode */}
+      {isEditing ? (
+        <div className="px-4 pb-3 space-y-2">
+          <textarea
+            value={editContent}
+            onChange={e => setEditContent(e.target.value)}
+            rows={3}
+            className="input resize-none text-[15px] w-full"
+            autoFocus
+          />
+          <div className="flex gap-2">
+            <button
+              onClick={() => { setIsEditing(false); setEditContent(post.content ?? '') }}
+              className="btn-ghost flex items-center gap-1.5 px-3 py-2 text-sm flex-1 justify-center"
+            >
+              <X size={14} /> Cancel
+            </button>
+            <button
+              onClick={saveEdit}
+              disabled={!editContent.trim() || editLoading}
+              className="btn-primary flex items-center gap-1.5 px-3 py-2 text-sm flex-1 justify-center"
+              style={{ borderRadius: '12px' }}
+            >
+              {editLoading ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+              Save
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* Content */}
+          {post.content && (
+            <div className="px-4 pb-3">
+              <p className="text-[15px] leading-relaxed" style={{ color: 'var(--text-primary)' }}>{post.content}</p>
+              {translation && (
+                <div className="mt-2 text-sm italic px-3 py-2.5 rounded-xl" style={{ background: 'var(--surface-2)', color: 'var(--text-secondary)', borderLeft: '3px solid var(--nia-violet)' }}>
+                  {translation}
+                </div>
+              )}
+            </div>
+          )}
+        </>
       )}
 
       {/* Poll */}
-      {post.poll && (
-        <PollCard poll={post.poll} currentUserId={currentUserId} />
-      )}
+      {post.poll && <PollCard poll={post.poll} currentUserId={currentUserId} />}
 
       {/* Image */}
       {post.media_url && post.media_type === 'image' && (
@@ -239,7 +332,7 @@ export default function PostCard({ post, currentUserId }: any) {
 
       {/* Actions bar */}
       <div className="flex items-center gap-1 px-3 py-2 relative" style={{ borderTop: '1px solid var(--border)' }}>
-        {/* Reaction button */}
+        {/* Reaction */}
         <div className="relative">
           <button
             onClick={() => setShowReactionPicker(!showReactionPicker)}
@@ -249,19 +342,10 @@ export default function PostCard({ post, currentUserId }: any) {
             <span className="text-lg leading-none">{activeReaction ?? '🤍'}</span>
             {totalReactions > 0 && <span className="text-sm font-semibold" style={{ color: activeReaction ? '#ef4444' : 'var(--text-tertiary)' }}>{totalReactions}</span>}
           </button>
-
           {showReactionPicker && (
-            <div
-              className="absolute bottom-12 left-0 flex gap-1 p-2 rounded-2xl z-20 anim-pop"
-              style={{ background: 'var(--surface-0)', boxShadow: 'var(--shadow-lg)', border: '1px solid var(--border)' }}
-            >
+            <div className="absolute bottom-12 left-0 flex gap-1 p-2 rounded-2xl z-20 anim-pop" style={{ background: 'var(--surface-0)', boxShadow: 'var(--shadow-lg)', border: '1px solid var(--border)' }}>
               {REACTIONS.map(emoji => (
-                <button
-                  key={emoji}
-                  onClick={() => handleReaction(emoji)}
-                  className="text-xl w-9 h-9 flex items-center justify-center rounded-xl transition-all active:scale-75 hover:scale-125"
-                  style={activeReaction === emoji ? { background: 'rgba(168,85,247,0.12)' } : {}}
-                >
+                <button key={emoji} onClick={() => handleReaction(emoji)} className="text-xl w-9 h-9 flex items-center justify-center rounded-xl transition-all active:scale-75 hover:scale-125" style={activeReaction === emoji ? { background: 'rgba(168,85,247,0.12)' } : {}}>
                   {emoji}
                 </button>
               ))}
@@ -278,12 +362,7 @@ export default function PostCard({ post, currentUserId }: any) {
         </button>
 
         {/* Repost */}
-        <button
-          onClick={handleRepost}
-          disabled={isOwn}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-xl transition-all active:scale-90 disabled:opacity-30"
-          style={reposted ? { background: 'rgba(107,203,119,0.1)' } : {}}
-        >
+        <button onClick={handleRepost} disabled={isOwn} className="flex items-center gap-1.5 px-3 py-2 rounded-xl transition-all active:scale-90 disabled:opacity-30" style={reposted ? { background: 'rgba(107,203,119,0.1)' } : {}}>
           <Repeat2 size={18} style={{ color: reposted ? 'var(--nia-mint)' : 'var(--text-tertiary)' }} />
           {repostCount > 0 && <span className="text-sm font-semibold" style={{ color: reposted ? 'var(--nia-mint)' : 'var(--text-tertiary)' }}>{repostCount}</span>}
         </button>
@@ -337,6 +416,41 @@ export default function PostCard({ post, currentUserId }: any) {
               </button>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Delete confirmation overlay */}
+      {showDeleteConfirm && (
+        <div
+          className="fixed inset-0 z-[200] flex items-center justify-center px-4"
+          style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}
+          onClick={() => setShowDeleteConfirm(false)}
+        >
+          <div
+            className="w-full max-w-xs rounded-3xl p-6 space-y-4 anim-pop"
+            style={{ background: 'var(--surface-0)', boxShadow: 'var(--shadow-lg)' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="text-center space-y-2">
+              <div className="text-4xl">🗑️</div>
+              <h3 className="font-extrabold text-lg">Delete post?</h3>
+              <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                This can't be undone. The post will be gone for everyone.
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setShowDeleteConfirm(false)} className="btn-ghost flex-1 text-sm py-2.5">
+                Cancel
+              </button>
+              <button
+                onClick={deletePost}
+                className="flex-1 py-2.5 rounded-2xl text-sm font-bold text-white transition-all active:scale-95"
+                style={{ background: '#ef4444' }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </article>
