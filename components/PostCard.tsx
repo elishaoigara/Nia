@@ -1,4 +1,5 @@
 'use client'
+import { getFlag } from '@/lib/african-data'
 import { useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { MessageCircle, Share2, Languages, Loader2, Play, Pause, Send, Repeat2, MoreHorizontal, Pencil, Trash2, X, Check } from 'lucide-react'
@@ -195,7 +196,7 @@ export default function PostCard({ post, currentUserId }: any) {
             )}
           </div>
           <div className="flex items-center gap-1.5 mt-0.5">
-            {!post.is_anonymous && <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>{post.profiles?.university?.split(' ').slice(0, 2).join(' ')}</span>}
+            {!post.is_anonymous && post.profiles?.country && <span className="text-xs flex items-center gap-0.5" style={{ color: 'var(--text-tertiary)' }}><span>{getFlag(post.profiles.country)}</span><span>{post.profiles.city ? `${post.profiles.city}, ${post.profiles.country}` : post.profiles.country}</span></span>}
             {!post.is_anonymous && <span style={{ color: 'var(--text-tertiary)' }}>·</span>}
             <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>{timeAgo(post.created_at)}</span>
             {post.updated_at && post.updated_at !== post.created_at && (

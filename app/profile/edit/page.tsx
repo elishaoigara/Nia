@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Upload, Loader2, Check } from 'lucide-react'
+import { AFRICAN_COUNTRIES, COUNTRY_FLAGS } from '@/lib/african-data'
 
 export default function EditProfilePage() {
   const supabase = createClient()
@@ -10,6 +11,9 @@ export default function EditProfilePage() {
   const [profile, setProfile] = useState<any>(null)
   const [fullName, setFullName] = useState('')
   const [bio, setBio] = useState('')
+  const [country, setCountry] = useState('')
+  const [city, setCity] = useState('')
+  const [countrySearch, setCountrySearch] = useState('')
   const [avatarFile, setAvatarFile] = useState<File | null>(null)
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -23,17 +27,20 @@ export default function EditProfilePage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/login'); return }
       const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single()
-      if (data) { setProfile(data); setFullName(data.full_name || ''); setBio(data.bio || '') }
+      if (data) {
+        setProfile(data)
+        setFullName(data.full_name || '')
+        setBio(data.bio || '')
+        setCountry(data.country || '')
+        setCity(data.city || '')
+      }
       setLoading(false)
     })()
   }, [])
 
-  function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    if (file.size > 5 * 1024 * 1024) { setError('Image must be under 5MB'); return }
-    setAvatarFile(file); setAvatarPreview(URL.createObjectURL(file)); setError('')
-  }
+  const filteredCountries = AFRICAN_COUNTRIES.filter(c =>
+    c.toLowerCase().includes(countrySearch.toLowerCase())
+  )
 
   async function handleSave() {
     if (!fullName.trim()) { setError('Full name is required'); return }
@@ -46,8 +53,15 @@ export default function EditProfilePage() {
       const { data } = supabase.storage.from('avatars').getPublicUrl(filePath)
       avatar_url = data.publicUrl
     }
-    const { error: updateError } = await supabase.from('profiles').update({ full_name: fullName.trim(), bio: bio.trim() || null, avatar_url }).eq('id', profile.id)
-    if (updateError) { setError(updateError.message) } else { setSaved(true); setTimeout(() => { router.push(`/profile/${profile.id}`); router.refresh() }, 800) }
+    const { error: updateError } = await supabase.from('profiles').update({
+      full_name: fullName.trim(),
+      bio: bio.trim() || null,
+      country: country || null,
+      city: city.trim() || null,
+      avatar_url,
+    }).eq('id', profile.id)
+    if (updateError) { setError(updateError.message) }
+    else { setSaved(true); setTimeout(() => { router.push(`/profile/${profile.id}`); router.refresh() }, 800) }
     setSaving(false)
   }
 
@@ -66,7 +80,7 @@ export default function EditProfilePage() {
         <h1 className="font-extrabold text-xl">Edit Profile</h1>
       </div>
 
-      <div className="card p-6 space-y-6">
+      <div className="card p-6 space-y-5">
         {/* Avatar */}
         <div className="flex flex-col items-center gap-3">
           <div className="relative">
@@ -78,24 +92,53 @@ export default function EditProfilePage() {
                 }
               </div>
             </div>
-            <label className="absolute -bottom-1 -right-1 w-8 h-8 flex items-center justify-center rounded-full text-white cursor-pointer transition-all active:scale-90" style={{ background: 'var(--grad-brand)', boxShadow: '0 2px 8px rgba(168,85,247,0.4)' }}>
+            <label className="absolute -bottom-1 -right-1 w-8 h-8 flex items-center justify-center rounded-full text-white cursor-pointer" style={{ background: 'var(--grad-brand)', boxShadow: '0 2px 8px rgba(168,85,247,0.4)' }}>
               <Upload size={14} />
-              <input type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
+              <input type="file" accept="image/*" className="hidden" onChange={e => {
+                const f = e.target.files?.[0]
+                if (f) { setAvatarFile(f); setAvatarPreview(URL.createObjectURL(f)) }
+              }} />
             </label>
           </div>
-          <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>Tap to change photo (max 5MB)</p>
+          <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>Tap to change (max 5MB)</p>
         </div>
 
-        {/* Fields */}
-        <div className="space-y-4">
-          <div className="space-y-1.5">
-            <label className="text-sm font-bold">Full Name</label>
-            <input value={fullName} onChange={e => setFullName(e.target.value)} className="input" placeholder="Amara Osei" />
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-sm font-bold">Bio <span className="font-normal" style={{ color: 'var(--text-tertiary)' }}>(optional)</span></label>
-            <textarea value={bio} onChange={e => setBio(e.target.value)} rows={4} className="input resize-none" placeholder="CS student at UoN. Love building things ✨" />
-          </div>
+        {/* Full name */}
+        <div className="space-y-1.5">
+          <label className="text-sm font-bold">Full Name</label>
+          <input value={fullName} onChange={e => setFullName(e.target.value)} className="input" placeholder="Amara Osei" />
+        </div>
+
+        {/* Country */}
+        <div className="space-y-1.5">
+          <label className="text-sm font-bold">Country</label>
+          <input
+            value={countrySearch || (country ? `${COUNTRY_FLAGS[country] ?? '🌍'} ${country}` : '')}
+            onChange={e => { setCountrySearch(e.target.value); if (!e.target.value) setCountry('') }}
+            placeholder="Search country…"
+            className="input"
+          />
+          {countrySearch && (
+            <div className="space-y-1 max-h-48 overflow-y-auto border rounded-2xl p-2" style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}>
+              {filteredCountries.slice(0, 10).map(c => (
+                <button key={c} onClick={() => { setCountry(c); setCountrySearch('') }} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-semibold text-left transition-all hover:bg-[var(--surface-2)]">
+                  <span>{COUNTRY_FLAGS[c] ?? '🌍'}</span> {c}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* City */}
+        <div className="space-y-1.5">
+          <label className="text-sm font-bold">City <span className="font-normal" style={{ color: 'var(--text-tertiary)' }}>(optional)</span></label>
+          <input value={city} onChange={e => setCity(e.target.value)} className="input" placeholder="Nairobi, Lagos, Accra…" />
+        </div>
+
+        {/* Bio */}
+        <div className="space-y-1.5">
+          <label className="text-sm font-bold">Bio <span className="font-normal" style={{ color: 'var(--text-tertiary)' }}>(optional)</span></label>
+          <textarea value={bio} onChange={e => setBio(e.target.value)} rows={3} className="input resize-none" placeholder="Developer from Nairobi. Building Africa's future ✊" />
         </div>
 
         {error && <div className="px-3 py-2 rounded-xl text-sm font-semibold text-red-500" style={{ background: 'rgba(239,68,68,0.08)' }}>{error}</div>}

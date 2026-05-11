@@ -35,7 +35,7 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
 
   const { data: posts } = await supabase
     .from('posts')
-    .select(`*, profiles:user_id (id, username, avatar_url, university), likes (user_id), comments (id)`)
+    .select(`*, profiles:user_id (id, username, avatar_url, country, city), likes (user_id), comments (id)`)
     .eq('user_id', id)
     .order('created_at', { ascending: false })
 
@@ -76,10 +76,10 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
             <div>
               <h1 className="text-xl font-bold">{profile.full_name}</h1>
               <p className="text-purple-600 font-medium text-sm">@{profile.username}</p>
-              {profile.university && (
+              {(profile.country || profile.city) && (
                 <div className="flex items-center gap-1 text-xs text-zinc-500 mt-1">
                   <MapPin size={12} />
-                  <span>{profile.university}</span>
+                  <span>{profile.city ? `${profile.city}, ${profile.country}` : profile.country}</span>
                 </div>
               )}
             </div>
