@@ -41,3 +41,23 @@ export function getRegion(country: string): string {
   const region = AFRICAN_REGIONS.find(r => r.countries.includes(country))
   return region?.label ?? 'Africa'
 }
+export const AFRICAN_LANGUAGES = [
+  { code: 'english', label: 'English', emoji: '🇬🇧' },
+  { code: 'french', label: 'French', emoji: '🇫🇷' },
+  { code: 'swahili', label: 'Swahili', emoji: '🌊' },
+  { code: 'pidgin', label: 'Pidgin', emoji: '🇳🇬' },
+  { code: 'hausa', label: 'Hausa', emoji: '☀️' },
+  { code: 'yoruba', label: 'Yoruba', emoji: '🥁' },
+  { code: 'igbo', label: 'Igbo', emoji: '🦅' },
+  { code: 'amharic', label: 'Amharic', emoji: '🇪🇹' },
+  { code: 'zulu', label: 'Zulu', emoji: '🇿🇦' },
+  { code: 'sheng', label: 'Sheng', emoji: '🇰🇪' },
+  { code: 'twi', label: 'Twi', emoji: '🇬🇭' },
+  { code: 'arabic', label: 'Arabic', emoji: '🌙' },
+  { code: 'portuguese', label: 'Portuguese', emoji: '🇵🇹' },
+  { code: 'other', label: 'Other', emoji: '🌍' },
+]
+
+export function getLanguageEmoji(code: string): string {
+  return AFRICAN_LANGUAGES.find(l => l.code === code)?.emoji ?? '🌍'
+}
