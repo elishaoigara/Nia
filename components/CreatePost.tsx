@@ -310,30 +310,45 @@ export default function CreatePost({ userId, circleId = null }: CreatePostProps)
           </button>
 
           {showLangPicker && (
-            <div
-              className="absolute bottom-full mb-2 left-0 z-50 rounded-2xl p-2 shadow-xl grid grid-cols-2 gap-1 anim-pop"
-              style={{
-                background: 'var(--surface-0)',
-                border: '1px solid var(--border)',
-                width: '220px',
-                maxHeight: '260px',
-                overflowY: 'auto',
-              }}
-            >
-              {AFRICAN_LANGUAGES.map(lang => (
-                <button
-                  key={lang.code}
-                  onClick={() => { setLanguage(lang.code); setShowLangPicker(false) }}
-                  className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold text-left transition-all"
-                  style={language === lang.code
-                    ? { background: 'rgba(168,85,247,0.12)', color: 'var(--nia-violet)' }
-                    : { color: 'var(--text-secondary)' }
-                  }
-                >
-                  <span>{lang.emoji}</span> {lang.label}
-                </button>
-              ))}
-            </div>
+            <>
+              {/* Backdrop */}
+              <div
+                className="fixed inset-0 z-40"
+                onClick={() => setShowLangPicker(false)}
+              />
+              <div
+                className="absolute z-50 rounded-2xl p-2 shadow-xl anim-pop"
+                style={{
+                  background: 'var(--surface-0)',
+                  border: '1px solid var(--border)',
+                  width: '260px',
+                  maxHeight: '300px',
+                  overflowY: 'auto',
+                  bottom: 'calc(100% + 8px)',
+                  right: 0,
+                }}
+              >
+                <p className="text-xs font-bold px-2 pb-1.5 pt-0.5" style={{ color: 'var(--text-tertiary)' }}>
+                  Post language
+                </p>
+                <div className="grid grid-cols-2 gap-1">
+                {AFRICAN_LANGUAGES.map(lang => (
+                  <button
+                    key={lang.code}
+                    onClick={() => { setLanguage(lang.code); setShowLangPicker(false) }}
+                    className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold text-left transition-all w-full"
+                    style={language === lang.code
+                      ? { background: 'rgba(168,85,247,0.12)', color: 'var(--nia-violet)' }
+                      : { color: 'var(--text-secondary)' }
+                    }
+                  >
+                    <span className="text-base leading-none">{lang.emoji}</span>
+                    <span className="truncate">{lang.label}</span>
+                  </button>
+                ))}
+                </div>
+              </div>
+            </>
           )}
         </div>
 
