@@ -35,11 +35,20 @@ export default function FollowButton({
     <button
       onClick={toggleFollow}
       disabled={loading}
-      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium transition disabled:opacity-50 ${
+      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-semibold transition-all active:scale-95 disabled:opacity-50"
+      style={
         isFollowing
-          ? 'bg-zinc-100 dark:bg-zinc-800 hover:bg-red-50 hover:text-red-500 text-zinc-600'
-          : 'bg-purple-600 hover:bg-purple-700 text-white'
-      }`}
+          ? {
+              background: 'var(--surface-2)',
+              color: 'var(--text-secondary)',
+              border: '1px solid var(--border)',
+            }
+          : {
+              background: 'var(--grad-brand)',
+              color: '#fff',
+              border: 'none',
+            }
+      }
     >
       {isFollowing ? <UserMinus size={14} /> : <UserPlus size={14} />}
       {loading ? '…' : isFollowing ? 'Unfollow' : 'Follow'}

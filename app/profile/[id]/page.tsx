@@ -1,13 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import PostCard from '@/components/PostCard'
-import {
-  Edit,
-  Calendar,
-  MapPin,
-  MessageCircle,
-  BadgeCheck,
-} from 'lucide-react'
+import { Edit, Calendar, MapPin, MessageCircle, BadgeCheck } from 'lucide-react'
 import Link from 'next/link'
 import FollowButton from '@/components/FollowButton'
 
@@ -23,17 +17,15 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
   if (!currentUser) redirect('/login')
 
   const { data: profile, error: profileError } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', id)
-    .single()
+    .from('profiles').select('*').eq('id', id).single()
 
   if (profileError || !profile) {
     return (
       <div className="min-h-screen flex items-center justify-center px-4">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold">Profile not found</h1>
-          <Link href="/" className="text-purple-600 hover:underline mt-4 inline-block">
+        <div className="text-center space-y-4">
+          <div className="text-6xl">🤷</div>
+          <h1 className="text-2xl font-extrabold">Profile not found</h1>
+          <Link href="/" className="btn-primary inline-flex items-center gap-2 text-sm">
             ← Back to Home
           </Link>
         </div>
@@ -43,109 +35,70 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
 
   const { data: posts } = await supabase
     .from('posts')
-    .select(`*, profiles:user_id (id, username, avatar_url, country, city), likes (user_id), comments (id)`)
+    .select('*, profiles:user_id (id, username, avatar_url, country, city), likes (user_id), comments (id)')
     .eq('user_id', id)
     .order('created_at', { ascending: false })
 
   const { count: followersCount } = await supabase
-    .from('follows')
-    .select('*', { count: 'exact', head: true })
-    .eq('following_id', id)
+    .from('follows').select('*', { count: 'exact', head: true }).eq('following_id', id)
 
   const { count: followingCount } = await supabase
-    .from('follows')
-    .select('*', { count: 'exact', head: true })
-    .eq('follower_id', id)
+    .from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', id)
 
   const { data: followData } = await supabase
-    .from('follows')
-    .select('follower_id')
-    .eq('follower_id', currentUser.id)
-    .eq('following_id', id)
-    .single()
+    .from('follows').select('follower_id')
+    .eq('follower_id', currentUser.id).eq('following_id', id).single()
 
   const isFollowing = !!followData
   const isOwnProfile = currentUser.id === id
 
   return (
-    <main className="max-w-xl mx-auto px-4 py-6">
+    <main className="max-w-xl mx-auto px-4 py-6 space-y-4">
 
-      {/* PROFILE CARD */}
-      <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-zinc-100 dark:border-zinc-800 p-6 mb-6">
-        <div className="flex justify-between items-start gap-3">
+      {/* ── Profile card ─────────────────────────────────── */}
+      <div className="card p-5 space-y-4">
 
-          {/* LEFT — avatar + name */}
-          <div className="flex gap-4 items-center">
-            <div className="w-16 h-16 rounded-2xl overflow-hidden flex-shrink-0 bg-gradient-to-br from-purple-500 to-pink-500">
-              {profile.avatar_url ? (
-                <img src={profile.avatar_url} className="w-16 h-16 object-cover" alt={profile.full_name} />
-              ) : (
-                <div className="w-16 h-16 flex items-center justify-center text-2xl font-bold text-white">
-                  {profile.username?.[0]?.toUpperCase() ?? '?'}
-                </div>
-              )}
-            </div>
+        {/* Top row: avatar + actions */}
+        <div className="flex items-start justify-between gap-3">
 
-            <div>
-              {/* Full name + badge */}
-              <div className="flex items-center gap-1.5">
-                <h1 className="text-xl font-bold">{profile.full_name}</h1>
-                {profile.is_verified && (
-                  <BadgeCheck size={20} style={{ color: 'var(--nia-violet)' }} fill="rgba(168,85,247,0.2)" />
-                )}
-              </div>
-
-              {/* Username + badge */}
-              <div className="flex items-center gap-1 mt-0.5">
-                <p className="text-sm font-semibold" style={{ color: 'var(--nia-violet)' }}>
-                  @{profile.username}
-                </p>
-                {profile.is_verified && (
-                  <BadgeCheck size={14} style={{ color: 'var(--nia-violet)' }} fill="rgba(168,85,247,0.15)" />
-                )}
-              </div>
-
-              {/* Location */}
-              {(profile.country || profile.city) && (
-                <div className="flex items-center gap-1 text-xs text-zinc-500 mt-1">
-                  <MapPin size={12} />
-                  <span>
-                    {profile.city ? `${profile.city}, ${profile.country}` : profile.country}
-                  </span>
-                </div>
-              )}
+          {/* Avatar */}
+          <div className="avatar-ring flex-shrink-0" style={{ borderRadius: '20px', padding: '2px' }}>
+            <div
+              className="w-16 h-16 sm:w-20 sm:h-20 rounded-[16px] overflow-hidden flex items-center justify-center text-white font-black text-2xl"
+              style={{ background: 'var(--grad-brand)' }}
+            >
+              {profile.avatar_url
+                ? <img src={profile.avatar_url} className="w-full h-full object-cover" alt={profile.full_name} />
+                : profile.username?.[0]?.toUpperCase() ?? '?'
+              }
             </div>
           </div>
 
-          {/* RIGHT — action buttons */}
+          {/* Action buttons */}
           <div className="flex flex-col gap-2 flex-shrink-0">
             {isOwnProfile ? (
               <>
                 <Link
                   href="/profile/edit"
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium transition"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-semibold transition-all active:scale-95"
                   style={{ background: 'var(--surface-2)', color: 'var(--text-secondary)' }}
                 >
-                  <Edit size={14} />
-                  Edit
+                  <Edit size={14} /> Edit
                 </Link>
-
                 {!profile.is_verified ? (
                   <Link
                     href="/profile/verify"
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-semibold text-white transition"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-semibold text-white transition-all active:scale-95"
                     style={{ background: 'var(--grad-brand)' }}
                   >
-                    <BadgeCheck size={14} />
-                    Get Verified
+                    <BadgeCheck size={14} /> Verify
                   </Link>
                 ) : (
                   <div
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-semibold"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-semibold"
                     style={{ background: 'rgba(168,85,247,0.1)', color: 'var(--nia-violet)' }}
                   >
-                    <BadgeCheck size={14} />
-                    Verified ✓
+                    <BadgeCheck size={14} /> Verified ✓
                   </div>
                 )}
               </>
@@ -153,11 +106,10 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
               <>
                 <Link
                   href={`/messages/${id}`}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium transition"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-semibold transition-all active:scale-95"
                   style={{ background: 'var(--surface-2)', color: 'var(--text-secondary)' }}
                 >
-                  <MessageCircle size={14} />
-                  Message
+                  <MessageCircle size={14} /> Message
                 </Link>
                 <FollowButton
                   currentUserId={currentUser.id}
@@ -169,48 +121,78 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
           </div>
         </div>
 
-        {/* STATS */}
-        <div className="flex gap-6 mt-5 pt-4 border-t border-zinc-100 dark:border-zinc-800">
-          <div className="text-center">
-            <p className="font-bold text-lg">{posts?.length ?? 0}</p>
-            <p className="text-xs text-zinc-400">Posts</p>
+        {/* Name + username + location */}
+        <div className="space-y-0.5">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <h1 className="font-extrabold text-xl leading-tight" style={{ color: 'var(--text-primary)' }}>
+              {profile.full_name}
+            </h1>
+            {profile.is_verified && (
+              <BadgeCheck size={18} style={{ color: 'var(--nia-violet)' }} fill="rgba(168,85,247,0.2)" />
+            )}
           </div>
-          <div className="text-center">
-            <p className="font-bold text-lg">{followersCount ?? 0}</p>
-            <p className="text-xs text-zinc-400">Followers</p>
-          </div>
-          <div className="text-center">
-            <p className="font-bold text-lg">{followingCount ?? 0}</p>
-            <p className="text-xs text-zinc-400">Following</p>
-          </div>
+          <p className="text-sm font-semibold" style={{ color: 'var(--nia-violet)' }}>
+            @{profile.username}
+          </p>
+          {(profile.country || profile.city) && (
+            <div className="flex items-center gap-1 text-xs mt-1" style={{ color: 'var(--text-tertiary)' }}>
+              <MapPin size={11} />
+              <span>{profile.city ? `${profile.city}, ${profile.country}` : profile.country}</span>
+            </div>
+          )}
         </div>
 
-        {/* BIO */}
+        {/* Stats row */}
+        <div
+          className="grid grid-cols-3 gap-2 pt-3"
+          style={{ borderTop: '1px solid var(--border)' }}
+        >
+          {[
+            { label: 'Posts',     value: posts?.length ?? 0   },
+            { label: 'Followers', value: followersCount ?? 0  },
+            { label: 'Following', value: followingCount ?? 0  },
+          ].map(({ label, value }) => (
+            <div key={label} className="text-center">
+              <p className="font-extrabold text-lg leading-tight" style={{ color: 'var(--text-primary)' }}>
+                {value}
+              </p>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--text-tertiary)' }}>{label}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Bio */}
         {profile.bio && (
-          <p className="mt-4 text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+          <p className="text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
             {profile.bio}
           </p>
         )}
 
-        {/* JOIN DATE */}
-        <div className="mt-4 text-xs flex items-center gap-1.5" style={{ color: 'var(--text-tertiary)' }}>
+        {/* Join date */}
+        <div className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--text-tertiary)' }}>
           <Calendar size={12} />
-          Joined {new Date(profile.created_at || Date.now()).toLocaleDateString('en-US', {
-            month: 'long',
-            year: 'numeric',
-          })}
+          <span>
+            Joined{' '}
+            {new Date(profile.created_at || Date.now()).toLocaleDateString('en-US', {
+              month: 'long', year: 'numeric',
+            })}
+          </span>
         </div>
       </div>
 
-      {/* POSTS */}
-      <div className="space-y-4">
-        <h2 className="font-semibold px-1">
-          Posts <span className="font-normal" style={{ color: 'var(--text-tertiary)' }}>({posts?.length ?? 0})</span>
+      {/* ── Posts ─────────────────────────────────────────── */}
+      <div className="space-y-3">
+        <h2 className="font-bold px-1 text-sm" style={{ color: 'var(--text-secondary)' }}>
+          Posts
+          <span className="ml-1 font-normal" style={{ color: 'var(--text-tertiary)' }}>
+            ({posts?.length ?? 0})
+          </span>
         </h2>
 
         {posts && posts.length === 0 && (
-          <div className="card p-12 text-center" style={{ color: 'var(--text-tertiary)' }}>
-            No posts yet
+          <div className="card p-12 text-center space-y-2">
+            <div className="text-4xl">📭</div>
+            <p className="font-bold" style={{ color: 'var(--text-tertiary)' }}>No posts yet</p>
           </div>
         )}
 

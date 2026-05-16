@@ -1,49 +1,71 @@
 @import "tailwindcss";
 
-/* ── Nia Design System ─────────────────────────────────── */
-:root {
-  /* Warm coral-to-violet gradient palette — energetic, joyful */
-  --nia-coral:    #FF6B6B;
-  --nia-orange:   #FF8E53;
-  --nia-amber:    #FFD93D;
-  --nia-mint:     #6BCB77;
-  --nia-sky:      #4ECDC4;
-  --nia-violet:   #A855F7;
-  --nia-pink:     #EC4899;
+/* ── Custom breakpoints (Tailwind v4) ─────────────────── */
+@theme {
+  --breakpoint-xs: 480px;
+}
 
-  /* Brand gradient */
+/* ── Nia Design System ────────────────────────────────── */
+:root {
+  --nia-coral:  #FF6B6B;
+  --nia-orange: #FF8E53;
+  --nia-amber:  #FFD93D;
+  --nia-mint:   #6BCB77;
+  --nia-sky:    #4ECDC4;
+  --nia-violet: #A855F7;
+  --nia-pink:   #EC4899;
+
   --grad-brand: linear-gradient(135deg, #FF6B6B 0%, #A855F7 60%, #4ECDC4 100%);
   --grad-warm:  linear-gradient(135deg, #FF8E53 0%, #FF6B6B 100%);
   --grad-cool:  linear-gradient(135deg, #A855F7 0%, #4ECDC4 100%);
   --grad-gold:  linear-gradient(135deg, #FFD93D 0%, #FF8E53 100%);
 
-  /* Surface */
+  /* ── Light (default) ── */
   --surface-0: #ffffff;
   --surface-1: #fafafa;
   --surface-2: #f4f4f5;
   --surface-3: #e4e4e7;
 
-  /* Text */
   --text-primary:   #09090b;
   --text-secondary: #52525b;
   --text-tertiary:  #a1a1aa;
 
-  /* Border */
-  --border: rgba(0,0,0,0.07);
+  --border:        rgba(0,0,0,0.07);
   --border-strong: rgba(0,0,0,0.12);
 
-  /* Shadows */
   --shadow-sm: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
   --shadow-md: 0 4px 12px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.04);
   --shadow-lg: 0 12px 32px rgba(0,0,0,0.10), 0 4px 8px rgba(0,0,0,0.04);
 
-  /* Nav height */
   --nav-bottom: 72px;
-  --nav-top: 56px;
+  --nav-top:    56px;
 }
 
+/* ── Dark — manual toggle (.dark class on <html>) ──────── */
+:root.dark {
+  --surface-0: #0c0c0f;
+  --surface-1: #111115;
+  --surface-2: #18181d;
+  --surface-3: #27272e;
+
+  --text-primary:   #fafafa;
+  --text-secondary: #a1a1aa;
+  --text-tertiary:  #52525b;
+
+  --border:        rgba(255,255,255,0.07);
+  --border-strong: rgba(255,255,255,0.12);
+
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.30);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.40);
+  --shadow-lg: 0 12px 32px rgba(0,0,0,0.50);
+}
+
+/*
+ * Dark — system preference.
+ * :not(.light) prevents this from overriding a forced-light choice.
+ */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not(.light) {
     --surface-0: #0c0c0f;
     --surface-1: #111115;
     --surface-2: #18181d;
@@ -53,19 +75,26 @@
     --text-secondary: #a1a1aa;
     --text-tertiary:  #52525b;
 
-    --border: rgba(255,255,255,0.07);
+    --border:        rgba(255,255,255,0.07);
     --border-strong: rgba(255,255,255,0.12);
 
-    --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
-    --shadow-md: 0 4px 12px rgba(0,0,0,0.4);
-    --shadow-lg: 0 12px 32px rgba(0,0,0,0.5);
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.30);
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.40);
+    --shadow-lg: 0 12px 32px rgba(0,0,0,0.50);
   }
 }
 
-/* ── Base ────────────────────────────────────────────────── */
-* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+/* ── Base ─────────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
 
-html { scroll-behavior: smooth; }
+html {
+  scroll-behavior: smooth;
+  /* Smooth theme crossfade */
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
 
 body {
   background: var(--surface-0);
@@ -75,13 +104,16 @@ body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   overscroll-behavior-y: none;
+  /* Prevent iOS text-size adjustment on rotation */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
-/* ── Utility classes ─────────────────────────────────────── */
+/* ── Utility ──────────────────────────────────────────── */
 .grad-brand { background: var(--grad-brand); }
-.grad-warm  { background: var(--grad-warm); }
-.grad-cool  { background: var(--grad-cool); }
-.grad-gold  { background: var(--grad-gold); }
+.grad-warm  { background: var(--grad-warm);  }
+.grad-cool  { background: var(--grad-cool);  }
+.grad-gold  { background: var(--grad-gold);  }
 
 .text-grad {
   background: var(--grad-brand);
@@ -90,7 +122,7 @@ body {
   background-clip: text;
 }
 
-/* ── Card ────────────────────────────────────────────────── */
+/* ── Card ─────────────────────────────────────────────── */
 .card {
   background: var(--surface-1);
   border: 1px solid var(--border);
@@ -106,7 +138,7 @@ body {
   box-shadow: var(--shadow-md);
 }
 
-/* ── Buttons ─────────────────────────────────────────────── */
+/* ── Buttons ──────────────────────────────────────────── */
 .btn-primary {
   background: var(--grad-brand);
   color: #fff;
@@ -116,11 +148,16 @@ body {
   font-weight: 600;
   font-size: 15px;
   cursor: pointer;
+  /* Apple HIG minimum tap target */
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   transition: opacity 0.15s, transform 0.15s;
   box-shadow: 0 4px 14px rgba(168,85,247,0.3);
 }
-.btn-primary:hover  { opacity: 0.92; transform: translateY(-1px); }
-.btn-primary:active { transform: scale(0.97); }
+.btn-primary:hover   { opacity: 0.92; transform: translateY(-1px); }
+.btn-primary:active  { transform: scale(0.97); }
 .btn-primary:disabled { opacity: 0.4; transform: none; pointer-events: none; }
 
 .btn-ghost {
@@ -132,22 +169,32 @@ body {
   font-weight: 500;
   font-size: 14px;
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, transform 0.15s;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, transform 0.15s;
 }
 .btn-ghost:hover  { background: var(--surface-3); transform: translateY(-1px); }
 .btn-ghost:active { transform: scale(0.97); }
 
-/* ── Inputs ─────────────────────────────────────────────── */
+/* ── Inputs ───────────────────────────────────────────── */
 .input {
   background: var(--surface-2);
   border: 1.5px solid transparent;
   border-radius: 14px;
   padding: 12px 16px;
-  font-size: 15px;
+  /*
+   * 16px prevents iOS Safari from auto-zooming into the field on focus.
+   * This is the single most important mobile input fix.
+   */
+  font-size: 16px;
   color: var(--text-primary);
   width: 100%;
   outline: none;
   transition: border-color 0.2s, background 0.2s;
+  /* Inherit font so it matches body */
+  font-family: inherit;
 }
 .input::placeholder { color: var(--text-tertiary); }
 .input:focus {
@@ -155,7 +202,7 @@ body {
   background: var(--surface-1);
 }
 
-/* ── Avatar gradient ring ─────────────────────────────── */
+/* ── Avatar ring ──────────────────────────────────────── */
 .avatar-ring {
   padding: 2px;
   background: var(--grad-brand);
@@ -165,35 +212,37 @@ body {
 /* ── Bottom nav safe area ─────────────────────────────── */
 .pb-nav { padding-bottom: calc(var(--nav-bottom) + 8px); }
 
-/* ── Micro animations ─────────────────────────────────── */
+/* ── Animations ───────────────────────────────────────── */
 @keyframes pop-in {
   0%   { transform: scale(0.85); opacity: 0; }
   70%  { transform: scale(1.05); }
-  100% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(1);    opacity: 1; }
 }
 @keyframes slide-up {
   from { transform: translateY(12px); opacity: 0; }
-  to   { transform: translateY(0); opacity: 1; }
+  to   { transform: translateY(0);    opacity: 1; }
 }
 @keyframes fade-in {
   from { opacity: 0; }
   to   { opacity: 1; }
 }
-@keyframes pulse-ring {
-  0%   { box-shadow: 0 0 0 0 rgba(168,85,247,0.4); }
-  70%  { box-shadow: 0 0 0 8px rgba(168,85,247,0); }
-  100% { box-shadow: 0 0 0 0 rgba(168,85,247,0); }
-}
 @keyframes shimmer {
   0%   { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
+  100% { background-position:  200% 0; }
+}
+@keyframes heart-pop {
+  0%   { transform: scale(1);   }
+  25%  { transform: scale(0.8); }
+  60%  { transform: scale(1.3); }
+  100% { transform: scale(1);   }
 }
 
-.anim-pop    { animation: pop-in 0.3s cubic-bezier(0.34,1.56,0.64,1) forwards; }
-.anim-up     { animation: slide-up 0.35s ease forwards; }
-.anim-fade   { animation: fade-in 0.2s ease forwards; }
+.anim-pop  { animation: pop-in   0.3s cubic-bezier(0.34,1.56,0.64,1) forwards; }
+.anim-up   { animation: slide-up 0.35s ease forwards; }
+.anim-fade { animation: fade-in  0.2s  ease forwards; }
+.heart-pop { animation: heart-pop 0.4s cubic-bezier(0.34,1.56,0.64,1); }
 
-/* ── Skeleton loader ────────────────────────────────────── */
+/* ── Skeleton ─────────────────────────────────────────── */
 .skeleton {
   background: linear-gradient(90deg, var(--surface-2) 25%, var(--surface-3) 50%, var(--surface-2) 75%);
   background-size: 200% 100%;
@@ -201,21 +250,19 @@ body {
   border-radius: 8px;
 }
 
-/* ── Like button heart pop ──────────────────────────────── */
-@keyframes heart-pop {
-  0%   { transform: scale(1); }
-  25%  { transform: scale(0.8); }
-  60%  { transform: scale(1.3); }
-  100% { transform: scale(1); }
-}
-.heart-pop { animation: heart-pop 0.4s cubic-bezier(0.34,1.56,0.64,1); }
-
-/* ── Scrollbar ──────────────────────────────────────────── */
-::-webkit-scrollbar { width: 4px; height: 4px; }
+/* ── Scrollbar ────────────────────────────────────────── */
+::-webkit-scrollbar       { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: 4px; }
 
-/* ── Safe area on iOS notch devices ─────────────────────── */
+/* ── iOS safe-area ────────────────────────────────────── */
 @supports (padding-bottom: env(safe-area-inset-bottom)) {
   .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
 }
+
+/* ── Mobile: hide scrollbar on horizontal scroll rows ─── */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar { display: none; }

@@ -33,7 +33,8 @@ export default async function PostDetailPage({
     <main className="max-w-xl mx-auto px-4 py-6 space-y-4">
       <Link
         href="/"
-        className="flex items-center gap-2 text-sm font-medium text-zinc-400 hover:text-zinc-600 transition"
+        className="inline-flex items-center gap-2 text-sm font-semibold transition-all active:scale-95"
+        style={{ color: 'var(--text-secondary)' }}
       >
         <ArrowLeft size={16} />
         Back to feed
