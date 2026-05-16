@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { getFlag } from '@/lib/african-data'
 
-interface ReelPost {
+export interface ReelPost {
   id: string
   content: string | null
   media_url: string
