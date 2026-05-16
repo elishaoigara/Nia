@@ -62,9 +62,9 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
         <div className="flex items-start justify-between gap-3">
 
           {/* Avatar */}
-          <div className="avatar-ring flex-shrink-0" style={{ borderRadius: '20px', padding: '2px' }}>
+          <div className="avatar-ring shrink-0" style={{ borderRadius: '20px', padding: '2px' }}>
             <div
-              className="w-16 h-16 sm:w-20 sm:h-20 rounded-[16px] overflow-hidden flex items-center justify-center text-white font-black text-2xl"
+              className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl overflow-hidden flex items-center justify-center text-white font-black text-2xl"
               style={{ background: 'var(--grad-brand)' }}
             >
               {profile.avatar_url
@@ -75,7 +75,7 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
           </div>
 
           {/* Action buttons */}
-          <div className="flex flex-col gap-2 flex-shrink-0">
+          <div className="flex flex-col gap-2 shrink-0">
             {isOwnProfile ? (
               <>
                 <Link

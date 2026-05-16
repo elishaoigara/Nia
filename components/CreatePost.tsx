@@ -148,7 +148,7 @@ export default function CreatePost({ userId, circleId = null }: CreatePostProps)
       {/* ── Composer ───────────────────────────────────────── */}
       <div className="flex gap-3 p-4">
         <div
-          className="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center text-white font-bold text-sm"
+          className="w-10 h-10 rounded-full shrink-0 flex items-center justify-center text-white font-bold text-sm"
           style={{ background: 'var(--grad-brand)' }}
         >
           +

@@ -202,7 +202,7 @@ export default function DirectMessagePage() {
             {!isOwn && (
               <button
                 onClick={() => setReplyTo(msg)}
-                className="tap-sm opacity-0 group-hover:opacity-100 transition-opacity w-8 h-8 flex items-center justify-center rounded-xl flex-shrink-0"
+                className="tap-sm opacity-0 group-hover:opacity-100 transition-opacity w-8 h-8 flex items-center justify-center rounded-xl shrink-0"
                 style={{ background: 'var(--surface-2)', color: 'var(--text-tertiary)' }}
               >
                 <Reply size={13} />
@@ -216,16 +216,16 @@ export default function DirectMessagePage() {
               }
             >
               {msg.media_url && msg.media_type === 'image' && (
-                <img src={msg.media_url} alt="" className="max-w-[260px] max-h-[320px] object-cover" />
+                <img src={msg.media_url} alt="" className="max-w-65 max-h-80 object-cover" />
               )}
               {msg.media_url && msg.media_type === 'video' && (
-                <video src={msg.media_url} controls className="max-w-[260px] max-h-[320px]" />
+                <video src={msg.media_url} controls className="max-w-65 max-h-80" />
               )}
               {msg.media_url && msg.media_type === 'audio' && (
-                <div className="flex items-center gap-3 px-4 py-3 min-w-[180px]">
+                <div className="flex items-center gap-3 px-4 py-3 min-w-45">
                   <button
                     onClick={() => toggleAudio(msg.id, msg.media_url!)}
-                    className="tap-sm w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
+                    className="tap-sm w-9 h-9 rounded-full flex items-center justify-center shrink-0"
                     style={{ background: isOwn ? 'rgba(255,255,255,0.25)' : 'var(--grad-brand)' }}
                   >
                     {playingAudio === msg.id ? <Pause size={14} className="text-white" /> : <Play size={14} className="text-white" />}
@@ -234,12 +234,12 @@ export default function DirectMessagePage() {
                 </div>
               )}
               {msg.media_url && msg.media_type === 'file' && (
-                <a href={msg.media_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 px-4 py-3 min-w-[180px]">
+                <a href={msg.media_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 px-4 py-3 min-w-45">
                   <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: isOwn ? 'rgba(255,255,255,0.2)' : 'rgba(168,85,247,0.1)' }}>
                     <FileIcon size={18} style={{ color: isOwn ? '#fff' : 'var(--nia-violet)' }} />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold truncate max-w-[140px]">{msg.file_name}</p>
+                    <p className="text-sm font-semibold truncate max-w-35">{msg.file_name}</p>
                     <p className="text-xs opacity-60">Tap to open</p>
                   </div>
                 </a>
@@ -265,7 +265,7 @@ export default function DirectMessagePage() {
 
       {/* HEADER */}
       <header
-        className="flex items-center gap-3 px-4 py-3 sticky top-0 z-10 flex-shrink-0"
+        className="flex items-center gap-3 px-4 py-3 sticky top-0 z-10 shrink-0"
         style={{ background: 'var(--surface-0)', borderBottom: '1px solid var(--border)' }}
       >
         <button
@@ -278,7 +278,7 @@ export default function DirectMessagePage() {
         {recipient && (
           <Link href={`/profile/${recipient.id}`} className="flex items-center gap-2.5 flex-1 min-w-0">
             <div
-              className="w-9 h-9 rounded-full overflow-hidden flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
+              className="w-9 h-9 rounded-full overflow-hidden flex items-center justify-center text-white font-bold text-sm shrink-0"
               style={{ background: 'var(--grad-brand)' }}
             >
               {recipient.avatar_url
@@ -313,7 +313,7 @@ export default function DirectMessagePage() {
       {/* REPLY PREVIEW */}
       {replyTo && (
         <div
-          className="flex items-center gap-3 px-4 py-2 flex-shrink-0"
+          className="flex items-center gap-3 px-4 py-2 shrink-0"
           style={{ background: 'var(--surface-2)', borderTop: '1px solid var(--border)' }}
         >
           <div className="flex-1 min-w-0">
@@ -333,7 +333,7 @@ export default function DirectMessagePage() {
       )}
 
       {/* INPUT BAR */}
-      <div className="px-3 py-3 flex-shrink-0" style={{ borderTop: '1px solid var(--border)' }}>
+      <div className="px-3 py-3 shrink-0" style={{ borderTop: '1px solid var(--border)' }}>
         {isRecording ? (
           <div className="flex items-center gap-3 px-3 py-2 rounded-2xl" style={{ background: 'rgba(239,68,68,0.08)' }}>
             <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
@@ -388,7 +388,7 @@ export default function DirectMessagePage() {
               />
               <button
                 onClick={() => setViewOnce(v => !v)}
-                className="tap-sm flex-shrink-0"
+                className="tap-sm shrink-0"
                 style={{ color: viewOnce ? 'var(--nia-violet)' : 'var(--text-tertiary)' }}
                 title="View once"
               >

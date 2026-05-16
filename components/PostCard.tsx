@@ -211,7 +211,7 @@ export default function PostCard({ post, currentUserId }: any) {
     >
       {/* ── Header ─────────────────────────────────────────── */}
       <div className="flex items-start gap-3 p-4 pb-3">
-        <Link href={post.is_anonymous ? '#' : `/profile/${post.profiles?.id}`} className="flex-shrink-0">
+        <Link href={post.is_anonymous ? '#' : `/profile/${post.profiles?.id}`} className="shrink-0">
           <div className="avatar-ring">
             <div
               className="w-10 h-10 rounded-full overflow-hidden"
@@ -284,7 +284,7 @@ export default function PostCard({ post, currentUserId }: any) {
         </div>
 
         {/* Right actions */}
-        <div className="flex items-center gap-1 flex-shrink-0">
+        <div className="flex items-center gap-1 shrink-0">
           {!isOwn && !post.is_anonymous && post.profiles?.id && (
             <TipButton recipientUserId={post.profiles.id} recipientUsername={post.profiles.username} />
           )}
@@ -414,7 +414,7 @@ export default function PostCard({ post, currentUserId }: any) {
               >
                 <button
                   onClick={toggleAudio}
-                  className="w-10 h-10 rounded-full flex items-center justify-center text-white flex-shrink-0"
+                  className="w-10 h-10 rounded-full flex items-center justify-center text-white shrink-0"
                   style={{ background: 'var(--grad-brand)' }}
                 >
                   {isPlaying ? <Pause size={16} fill="currentColor" /> : <Play size={16} fill="currentColor" />}
@@ -570,7 +570,7 @@ export default function PostCard({ post, currentUserId }: any) {
       {/* ── Delete Confirm ─────────────────────────────────── */}
       {showDeleteConfirm && (
         <div
-          className="fixed inset-0 z-[200] flex items-center justify-center px-4"
+          className="fixed inset-0 z-200 flex items-center justify-center px-4"
           style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}
           onClick={() => setShowDeleteConfirm(false)}
         >
@@ -610,7 +610,7 @@ export default function PostCard({ post, currentUserId }: any) {
             <div className="px-4 pt-3 space-y-3 max-h-64 overflow-y-auto">
               {comments.map((comment) => (
                 <div key={comment.id} className="flex gap-2.5">
-                  <Link href={`/profile/${comment.profiles?.id}`} className="flex-shrink-0">
+                  <Link href={`/profile/${comment.profiles?.id}`} className="shrink-0">
                     <div
                       className="w-7 h-7 rounded-full overflow-hidden flex items-center justify-center text-white font-bold text-xs"
                       style={{ background: 'var(--grad-brand)' }}

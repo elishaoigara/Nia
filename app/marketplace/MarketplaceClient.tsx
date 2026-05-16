@@ -113,7 +113,7 @@ export default function MarketplaceClient({
           <button
             key={cat.id}
             onClick={() => setActiveCategory(cat.id)}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold flex-shrink-0 transition-all active:scale-95"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold shrink-0 transition-all active:scale-95"
             style={
               activeCategory === cat.id
                 ? { background: 'var(--grad-brand)', color: '#fff' }
@@ -140,7 +140,7 @@ export default function MarketplaceClient({
             <div key={item.id} className="card card-hover overflow-hidden flex flex-col">
               {/* Image / placeholder */}
               <div
-                className="w-full aspect-square flex items-center justify-center text-4xl flex-shrink-0"
+                className="w-full aspect-square flex items-center justify-center text-4xl shrink-0"
                 style={{
                   background: item.image_url ? undefined : 'var(--surface-2)',
                   maxHeight: '160px',
@@ -180,7 +180,7 @@ export default function MarketplaceClient({
                 {/* Seller */}
                 <div className="flex items-center gap-1.5 pt-0.5">
                   <div
-                    className="w-5 h-5 rounded-full overflow-hidden flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0"
+                    className="w-5 h-5 rounded-full overflow-hidden flex items-center justify-center text-white text-[10px] font-bold shrink-0"
                     style={{ background: 'var(--grad-brand)' }}
                   >
                     {item.profiles?.avatar_url ? (
@@ -224,7 +224,7 @@ export default function MarketplaceClient({
       {/* ── Create listing modal ─────────────────────────── */}
       {showCreate && (
         <div
-          className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center"
+          className="fixed inset-0 z-100 flex items-end sm:items-center justify-center"
           style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}
           onClick={e => { if (e.target === e.currentTarget) setShowCreate(false) }}
         >
