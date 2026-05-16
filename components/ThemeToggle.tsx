@@ -63,3 +63,25 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 }
 
 export const useTheme = () => useContext(ThemeContext)
+
+export default function ThemeToggle() {
+  const { resolvedTheme, setTheme, theme } = useTheme()
+
+  const cycles: Theme[] = ['system', 'light', 'dark']
+  const next = cycles[(cycles.indexOf(theme) + 1) % cycles.length]
+
+  const icon = resolvedTheme === 'dark' ? '🌙' : '☀️'
+  const label = theme === 'system' ? 'Auto' : theme === 'dark' ? 'Dark' : 'Light'
+
+  return (
+    <button
+      onClick={() => setTheme(next)}
+      aria-label={`Switch theme (current: ${label})`}
+      title={`Theme: ${label}`}
+      className="flex items-center gap-1 rounded-full px-2 py-1 text-sm transition hover:bg-black/10 dark:hover:bg-white/10"
+    >
+      <span>{icon}</span>
+      <span className="hidden sm:inline text-xs opacity-70">{label}</span>
+    </button>
+  )
+}
