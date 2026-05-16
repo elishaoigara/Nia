@@ -31,6 +31,7 @@ import { useRouter } from 'next/navigation'
 
 import TipButton from '@/components/TipButton'
 import PollCard from '@/components/PollCard'
+import VideoPlayer from '@/components/VideoPlayer'
 
 function timeAgo(date: string) {
   const s = Math.floor(
@@ -384,27 +385,41 @@ export default function PostCard({ post, currentUserId }: any) {
           )}
 
           {/* ── Media ────────────────────────────────────── */}
-          {post.media_url && post.media_type === 'image' && (
-            <div className="px-4 pb-3">
-              <img
-                src={post.media_url}
-                alt=""
-                className="w-full rounded-2xl object-cover max-h-80"
-                style={{ border: '1px solid var(--border)' }}
-              />
-            </div>
-          )}
-
-          {post.media_url && post.media_type === 'video' && (
-            <div className="px-4 pb-3">
-              <video
-                src={post.media_url}
-                controls
-                className="w-full rounded-2xl max-h-80"
-                style={{ border: '1px solid var(--border)' }}
-              />
-            </div>
-          )}
+          {post.media_url && (post.media_type === 'image' || post.media_type === 'video') && (() => {
+            // Build full media list: primary + any extras
+            const all: { url: string; type: string }[] = [
+              { url: post.media_url, type: post.media_type },
+              ...(Array.isArray(post.extra_media) ? post.extra_media : []),
+            ]
+            const isTwoUp = all.length === 2
+            return (
+              <div className="px-4 pb-3">
+                <div className={isTwoUp ? 'grid grid-cols-2 gap-2' : 'flex flex-col gap-2'}>
+                  {all.map((m, i) => (
+                    <div
+                      key={i}
+                      className="rounded-2xl overflow-hidden"
+                      style={{
+                        aspectRatio: isTwoUp ? '1/1' : undefined,
+                        border: '1px solid var(--border)',
+                      }}
+                    >
+                      {m.type === 'image' ? (
+                        <img
+                          src={m.url}
+                          alt=""
+                          className="w-full h-full object-cover"
+                          style={{ display: 'block', maxHeight: isTwoUp ? undefined : 320 }}
+                        />
+                      ) : (
+                        <VideoPlayer src={m.url} />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
+          })()}
 
           {post.media_url && post.media_type === 'audio' && (
             <div className="px-4 pb-3">
