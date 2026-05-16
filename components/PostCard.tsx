@@ -32,6 +32,7 @@ import { useRouter } from 'next/navigation'
 import TipButton from '@/components/TipButton'
 import PollCard from '@/components/PollCard'
 import VideoPlayer from '@/components/VideoPlayer'
+import MediaLightbox from '@/components/MediaLightbox'
 
 function timeAgo(date: string) {
   const s = Math.floor(
@@ -79,6 +80,7 @@ export default function PostCard({ post, currentUserId }: any) {
   const [editContent, setEditContent] = useState(post.content ?? '')
   const [editLoading, setEditLoading] = useState(false)
   const [isDeleted, setIsDeleted] = useState(false)
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
   const audioRef = useRef<HTMLAudioElement | null>(null)
@@ -386,38 +388,61 @@ export default function PostCard({ post, currentUserId }: any) {
 
           {/* ── Media ────────────────────────────────────── */}
           {post.media_url && (post.media_type === 'image' || post.media_type === 'video') && (() => {
-            // Build full media list: primary + any extras
-            const all: { url: string; type: string }[] = [
-              { url: post.media_url, type: post.media_type },
+            const all: { url: string; type: 'image' | 'video' }[] = [
+              { url: post.media_url, type: post.media_type as 'image' | 'video' },
               ...(Array.isArray(post.extra_media) ? post.extra_media : []),
             ]
             const isTwoUp = all.length === 2
             return (
-              <div className="px-4 pb-3">
-                <div className={isTwoUp ? 'grid grid-cols-2 gap-2' : 'flex flex-col gap-2'}>
-                  {all.map((m, i) => (
-                    <div
-                      key={i}
-                      className="rounded-2xl overflow-hidden"
-                      style={{
-                        aspectRatio: isTwoUp ? '1/1' : undefined,
-                        border: '1px solid var(--border)',
-                      }}
-                    >
-                      {m.type === 'image' ? (
-                        <img
-                          src={m.url}
-                          alt=""
-                          className="w-full h-full object-cover"
-                          style={{ display: 'block', maxHeight: isTwoUp ? undefined : 320 }}
-                        />
-                      ) : (
-                        <VideoPlayer src={m.url} />
-                      )}
-                    </div>
-                  ))}
+              <>
+                <div className="px-4 pb-3">
+                  <div className={isTwoUp ? 'grid grid-cols-2 gap-2' : 'flex flex-col gap-2'}>
+                    {all.map((m, i) => (
+                      <div
+                        key={i}
+                        className="relative rounded-2xl overflow-hidden"
+                        style={{
+                          aspectRatio: isTwoUp ? '1/1' : undefined,
+                          border: '1px solid var(--border)',
+                        }}
+                      >
+                        {m.type === 'image' ? (
+                          <>
+                            <img
+                              src={m.url}
+                              alt=""
+                              className="w-full h-full object-cover cursor-pointer"
+                              style={{ display: 'block', maxHeight: isTwoUp ? undefined : 320 }}
+                              onClick={() => setLightboxIndex(i)}
+                            />
+                            {/* Expand hint */}
+                            <button
+                              onClick={() => setLightboxIndex(i)}
+                              className="absolute top-2 right-2 w-7 h-7 flex items-center justify-center rounded-full transition-all active:scale-90"
+                              style={{ background: 'rgba(0,0,0,0.45)' }}
+                            >
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+                              </svg>
+                            </button>
+                          </>
+                        ) : (
+                          <VideoPlayer src={m.url} />
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
+
+                {/* Lightbox */}
+                {lightboxIndex !== null && (
+                  <MediaLightbox
+                    items={all}
+                    startIndex={lightboxIndex}
+                    onClose={() => setLightboxIndex(null)}
+                  />
+                )}
+              </>
             )
           })()}
 

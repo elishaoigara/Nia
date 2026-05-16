@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { Play, Volume2, VolumeX } from 'lucide-react'
+import { Play, Pause, Volume2, VolumeX, Maximize2 } from 'lucide-react'
+import MediaLightbox from '@/components/MediaLightbox'
 
 interface VideoPlayerProps {
   src: string
@@ -16,9 +17,10 @@ export default function VideoPlayer({ src, poster, className = '' }: VideoPlayer
   const [muted, setMuted] = useState(true)
   const [progress, setProgress] = useState(0)
   const [duration, setDuration] = useState(0)
-  const [tapped, setTapped] = useState(false) // user has tapped at least once
+  const [tapped, setTapped] = useState(false)
+  const [lightbox, setLightbox] = useState(false)
 
-  // Pause when scrolled off screen — saves data on slow connections
+  // Pause when scrolled off screen
   useEffect(() => {
     const el = containerRef.current
     if (!el) return
@@ -39,13 +41,8 @@ export default function VideoPlayer({ src, poster, className = '' }: VideoPlayer
     const v = videoRef.current
     if (!v) return
     setTapped(true)
-    if (v.paused) {
-      v.play()
-      setPlaying(true)
-    } else {
-      v.pause()
-      setPlaying(false)
-    }
+    if (v.paused) { v.play(); setPlaying(true) }
+    else { v.pause(); setPlaying(false) }
   }
 
   function toggleMute() {
@@ -55,30 +52,11 @@ export default function VideoPlayer({ src, poster, className = '' }: VideoPlayer
     setMuted(v.muted)
   }
 
-  function handleTimeUpdate() {
-    const v = videoRef.current
-    if (!v || !v.duration) return
-    setProgress((v.currentTime / v.duration) * 100)
-  }
-
-  function handleLoadedMetadata() {
-    const v = videoRef.current
-    if (!v) return
-    setDuration(v.duration)
-  }
-
-  function handleEnded() {
-    setPlaying(false)
-    setProgress(0)
-  }
-
   function handleScrub(e: React.MouseEvent<HTMLDivElement>) {
     const v = videoRef.current
     if (!v || !v.duration) return
     const rect = e.currentTarget.getBoundingClientRect()
-    const ratio = (e.clientX - rect.left) / rect.width
-    v.currentTime = ratio * v.duration
-    setProgress(ratio * 100)
+    v.currentTime = ((e.clientX - rect.left) / rect.width) * v.duration
   }
 
   function fmt(s: number) {
@@ -87,81 +65,108 @@ export default function VideoPlayer({ src, poster, className = '' }: VideoPlayer
   }
 
   return (
-    <div
-      ref={containerRef}
-      className={`relative overflow-hidden rounded-2xl ${className}`}
-      style={{ background: '#000', border: '1px solid var(--border)' }}
-    >
-      {/* Video element — preload=none means zero data until user taps */}
-      <video
-        ref={videoRef}
-        src={src}
-        poster={poster}
-        preload="none"
-        muted={muted}
-        playsInline
-        onTimeUpdate={handleTimeUpdate}
-        onLoadedMetadata={handleLoadedMetadata}
-        onEnded={handleEnded}
-        onClick={togglePlay}
-        className="w-full max-h-80 object-contain cursor-pointer"
-        style={{ display: 'block' }}
-      />
-
-      {/* Tap-to-play overlay — shown until first tap */}
-      {!playing && (
-        <div
+    <>
+      <div
+        ref={containerRef}
+        className={`relative overflow-hidden rounded-2xl ${className}`}
+        style={{ background: '#000', border: '1px solid var(--border)' }}
+      >
+        <video
+          ref={videoRef}
+          src={src}
+          poster={poster}
+          preload="none"
+          muted={muted}
+          playsInline
+          onTimeUpdate={() => {
+            const v = videoRef.current
+            if (v && v.duration) setProgress((v.currentTime / v.duration) * 100)
+          }}
+          onLoadedMetadata={() => {
+            if (videoRef.current) setDuration(videoRef.current.duration)
+          }}
+          onEnded={() => { setPlaying(false); setProgress(0) }}
           onClick={togglePlay}
-          className="absolute inset-0 flex items-center justify-center cursor-pointer"
-          style={{ background: tapped ? 'rgba(0,0,0,0.25)' : 'rgba(0,0,0,0.35)' }}
-        >
-          <div
-            className="w-14 h-14 rounded-full flex items-center justify-center transition-transform active:scale-95"
-            style={{ background: 'rgba(255,255,255,0.2)', backdropFilter: 'blur(6px)', border: '1.5px solid rgba(255,255,255,0.35)' }}
-          >
-            <Play size={22} fill="white" color="white" style={{ marginLeft: 3 }} />
-          </div>
-        </div>
-      )}
+          className="w-full max-h-80 object-contain cursor-pointer"
+          style={{ display: 'block' }}
+        />
 
-      {/* Controls bar — shown after first tap */}
-      {tapped && (
-        <div
-          className="absolute bottom-0 left-0 right-0 flex items-center gap-2 px-3 py-2"
-          style={{ background: 'linear-gradient(transparent, rgba(0,0,0,0.65))' }}
-        >
-          {/* Mute toggle */}
-          <button
-            onClick={toggleMute}
-            className="w-7 h-7 flex items-center justify-center rounded-full transition-all active:scale-90"
-            style={{ background: 'rgba(255,255,255,0.15)' }}
-          >
-            {muted
-              ? <VolumeX size={13} color="white" />
-              : <Volume2 size={13} color="white" />
-            }
-          </button>
-
-          {/* Scrub bar */}
+        {/* Tap-to-play overlay */}
+        {!playing && (
           <div
-            className="flex-1 h-1 rounded-full cursor-pointer"
-            style={{ background: 'rgba(255,255,255,0.25)' }}
-            onClick={handleScrub}
+            onClick={togglePlay}
+            className="absolute inset-0 flex items-center justify-center cursor-pointer"
+            style={{ background: tapped ? 'rgba(0,0,0,0.2)' : 'rgba(0,0,0,0.35)' }}
           >
             <div
-              className="h-full rounded-full transition-all"
-              style={{ width: `${progress}%`, background: 'rgba(255,255,255,0.9)' }}
-            />
+              className="w-14 h-14 rounded-full flex items-center justify-center transition-transform active:scale-95"
+              style={{ background: 'rgba(255,255,255,0.2)', backdropFilter: 'blur(6px)', border: '1.5px solid rgba(255,255,255,0.35)' }}
+            >
+              <Play size={22} fill="white" color="white" style={{ marginLeft: 3 }} />
+            </div>
           </div>
+        )}
 
-          {/* Duration */}
-          {duration > 0 && (
-            <span style={{ color: 'rgba(255,255,255,0.85)', fontSize: 11, fontVariantNumeric: 'tabular-nums', minWidth: 36, textAlign: 'right' }}>
-              {fmt(duration)}
-            </span>
-          )}
-        </div>
+        {/* Controls bar */}
+        {tapped && (
+          <div
+            className="absolute bottom-0 left-0 right-0 flex items-center gap-2 px-3 py-2"
+            style={{ background: 'linear-gradient(transparent, rgba(0,0,0,0.65))' }}
+          >
+            <button
+              onClick={toggleMute}
+              className="w-7 h-7 flex items-center justify-center rounded-full transition-all active:scale-90 shrink-0"
+              style={{ background: 'rgba(255,255,255,0.15)' }}
+            >
+              {muted ? <VolumeX size={13} color="white" /> : <Volume2 size={13} color="white" />}
+            </button>
+
+            <div
+              className="flex-1 h-1 rounded-full cursor-pointer"
+              style={{ background: 'rgba(255,255,255,0.25)' }}
+              onClick={handleScrub}
+            >
+              <div
+                className="h-full rounded-full"
+                style={{ width: `${progress}%`, background: 'rgba(255,255,255,0.9)' }}
+              />
+            </div>
+
+            {duration > 0 && (
+              <span style={{ color: 'rgba(255,255,255,0.85)', fontSize: 11, fontVariantNumeric: 'tabular-nums', minWidth: 36, textAlign: 'right' }}>
+                {fmt(duration)}
+              </span>
+            )}
+
+            {/* Fullscreen button */}
+            <button
+              onClick={e => { e.stopPropagation(); videoRef.current?.pause(); setPlaying(false); setLightbox(true) }}
+              className="w-7 h-7 flex items-center justify-center rounded-full transition-all active:scale-90 shrink-0"
+              style={{ background: 'rgba(255,255,255,0.15)' }}
+            >
+              <Maximize2 size={13} color="white" />
+            </button>
+          </div>
+        )}
+
+        {/* Fullscreen button before first tap */}
+        {!tapped && (
+          <button
+            onClick={e => { e.stopPropagation(); setLightbox(true) }}
+            className="absolute top-2 right-2 w-7 h-7 flex items-center justify-center rounded-full transition-all active:scale-90"
+            style={{ background: 'rgba(0,0,0,0.45)' }}
+          >
+            <Maximize2 size={13} color="white" />
+          </button>
+        )}
+      </div>
+
+      {lightbox && (
+        <MediaLightbox
+          items={[{ url: src, type: 'video' }]}
+          onClose={() => setLightbox(false)}
+        />
       )}
-    </div>
+    </>
   )
 }

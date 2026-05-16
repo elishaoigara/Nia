@@ -2,7 +2,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
-  Home, Compass, Users, User, Search, Bell, Plus, ShoppingBag,
+  Home, Compass, Users, User, Search, Bell, Plus, ShoppingBag, Clapperboard,
 } from 'lucide-react'
 import NotificationBell from '@/components/NotificationBell'
 import ThemeToggle from '@/components/ThemeToggle'
@@ -10,12 +10,13 @@ import { createClient } from '@/lib/supabase/client'
 import { useEffect, useState } from 'react'
 
 const links = [
-  { href: '/',            icon: Home,        label: 'Home'    },
-  { href: '/discover',    icon: Compass,     label: 'Discover'},
-  { href: '/search',      icon: Search,      label: 'Search'  },
-  { href: '/circles',     icon: Users,       label: 'Circles' },
-  { href: '/marketplace', icon: ShoppingBag, label: 'Market'  },
-  { href: '/profile',     icon: User,        label: 'Me'      },
+  { href: '/',            icon: Home,         label: 'Home',    mobileHide: false },
+  { href: '/discover',    icon: Compass,      label: 'Discover',mobileHide: false },
+  { href: '/reels',       icon: Clapperboard, label: 'Reels',   mobileHide: false },
+  { href: '/search',      icon: Search,       label: 'Search',  mobileHide: false },
+  { href: '/circles',     icon: Users,        label: 'Circles', mobileHide: true  },
+  { href: '/marketplace', icon: ShoppingBag,  label: 'Market',  mobileHide: true  },
+  { href: '/profile',     icon: User,         label: 'Me',      mobileHide: false },
 ]
 
 export default function Navbar() {
@@ -91,14 +92,14 @@ export default function Navbar() {
           paddingBottom: 'env(safe-area-inset-bottom, 0px)',
         }}
       >
-        {links.map(({ href, icon: Icon, label }) => {
+        {links.map(({ href, icon: Icon, label, mobileHide }) => {
           const active = pathname === href
           return (
             <Link
               key={href}
               href={href}
               aria-label={label}
-              className="flex flex-col items-center justify-center gap-0.5 flex-1 py-1 rounded-2xl transition-all active:scale-90"
+              className={`flex flex-col items-center justify-center gap-0.5 flex-1 py-1 rounded-2xl transition-all active:scale-90 ${mobileHide ? 'hidden' : ''}`}
               style={{ minHeight: '48px' }}
             >
               <div
