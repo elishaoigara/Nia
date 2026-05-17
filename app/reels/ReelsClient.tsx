@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Heart, MessageCircle, Share2, Volume2, VolumeX, Play } from 'lucide-react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
@@ -27,12 +27,12 @@ export default function ReelsClient({ videos, currentUserId }: ReelsClientProps)
   const [muted, setMuted] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
 
-  // Snap scroll — update active index based on scroll position
   useEffect(() => {
     const el = containerRef.current
     if (!el) return
     function onScroll() {
-      const idx = Math.round(el!.scrollTop / window.innerHeight)
+      const reelHeight = window.innerHeight - 56
+      const idx = Math.round(el!.scrollTop / reelHeight)
       setActiveIdx(idx)
     }
     el.addEventListener('scroll', onScroll, { passive: true })
@@ -63,12 +63,16 @@ export default function ReelsClient({ videos, currentUserId }: ReelsClientProps)
   return (
     <div
       ref={containerRef}
-      className="fixed inset-0 overflow-y-scroll"
+      className="fixed overflow-y-scroll"
       style={{
         background: '#000',
         scrollSnapType: 'y mandatory',
         scrollbarWidth: 'none',
         msOverflowStyle: 'none',
+        top: '56px',
+        left: 0,
+        right: 0,
+        bottom: 0,
       }}
     >
       {videos.map((video, i) => (
@@ -103,7 +107,6 @@ function ReelItem({
   const [progress, setProgress] = useState(0)
   const supabase = createClient()
 
-  // Play/pause based on whether this reel is in view
   useEffect(() => {
     const v = videoRef.current
     if (!v) return
@@ -116,7 +119,6 @@ function ReelItem({
     }
   }, [isActive])
 
-  // Sync mute
   useEffect(() => {
     if (videoRef.current) videoRef.current.muted = muted
   }, [muted])
@@ -154,7 +156,7 @@ function ReelItem({
     <div
       className="relative w-full flex items-center justify-center"
       style={{
-        height: '100dvh',
+        height: 'calc(100dvh - 56px)',
         scrollSnapAlign: 'start',
         scrollSnapStop: 'always',
         background: '#000',
@@ -176,7 +178,7 @@ function ReelItem({
         onClick={togglePlay}
       />
 
-      {/* Dark gradient overlays */}
+      {/* Gradient overlay */}
       <div
         className="absolute inset-0 pointer-events-none"
         style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.75) 0%, transparent 45%, rgba(0,0,0,0.2) 100%)' }}
@@ -195,9 +197,9 @@ function ReelItem({
       )}
 
       {/* ── Right action rail ─────────────────────────── */}
-      <div className="absolute right-3 bottom-28 flex flex-col items-center gap-5">
+      <div className="absolute right-4 sm:right-8 bottom-28 flex flex-col items-center gap-5">
         {/* Avatar */}
-        <Link href={`/profile/${profile?.id}`} className="relative">
+        <Link href={`/profile/${profile?.id}`}>
           <div
             className="w-11 h-11 rounded-full overflow-hidden"
             style={{ border: '2px solid white' }}
@@ -205,7 +207,10 @@ function ReelItem({
             {profile?.avatar_url ? (
               <img src={profile.avatar_url} alt="" className="w-full h-full object-cover" />
             ) : (
-              <div className="w-full h-full flex items-center justify-center text-white font-bold text-sm" style={{ background: 'var(--grad-brand)' }}>
+              <div
+                className="w-full h-full flex items-center justify-center text-white font-bold text-sm"
+                style={{ background: 'var(--grad-brand)' }}
+              >
                 {profile?.username?.[0]?.toUpperCase() ?? '?'}
               </div>
             )}
@@ -265,7 +270,7 @@ function ReelItem({
       </div>
 
       {/* ── Bottom info ──────────────────────────────── */}
-      <div className="absolute bottom-20 left-0 right-16 px-4">
+      <div className="absolute bottom-20 left-0 right-20 px-4">
         <Link href={`/profile/${profile?.id}`} className="flex items-center gap-2 mb-2">
           <span className="text-white font-bold text-sm">
             @{profile?.username ?? 'unknown'}
@@ -275,7 +280,10 @@ function ReelItem({
           )}
         </Link>
         {video.content && (
-          <p className="text-white text-sm leading-snug line-clamp-2" style={{ textShadow: '0 1px 4px rgba(0,0,0,0.6)' }}>
+          <p
+            className="text-white text-sm leading-snug line-clamp-2"
+            style={{ textShadow: '0 1px 4px rgba(0,0,0,0.6)' }}
+          >
             {video.content}
           </p>
         )}
@@ -283,7 +291,10 @@ function ReelItem({
 
       {/* Progress bar */}
       <div className="absolute bottom-16 left-0 right-0 h-0.5" style={{ background: 'rgba(255,255,255,0.2)' }}>
-        <div className="h-full" style={{ width: `${progress}%`, background: 'white', transition: 'width 0.1s linear' }} />
+        <div
+          className="h-full"
+          style={{ width: `${progress}%`, background: 'white', transition: 'width 0.1s linear' }}
+        />
       </div>
     </div>
   )
