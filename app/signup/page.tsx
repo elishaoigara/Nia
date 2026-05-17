@@ -14,26 +14,45 @@ export default function SignupPage() {
   const [sent, setSent] = useState(false)
 
   async function handleSignup() {
-    if (password.length < 8) { setError('Password must be at least 8 characters'); return }
-    if (password !== confirmPassword) { setError('Passwords do not match'); return }
-    setLoading(true); setError('')
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters')
+      return
+    }
+    if (password !== confirmPassword) {
+      setError('Passwords do not match')
+      return
+    }
+
+    setLoading(true)
+    setError('')
+
     const { error } = await supabase.auth.signUp({
       email: email.trim(),
       password,
-      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+      options: {
+        // ✅ Fixed: Use environment variable instead of window.location.origin
+        emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback`,
+      },
     })
-    if (error) { setError(error.message); setLoading(false) } else { setSent(true) }
+
+    if (error) {
+      setError(error.message)
+      setLoading(false)
+    } else {
+      setSent(true)
+    }
   }
 
   if (sent) return (
     <div className="min-h-screen flex items-center justify-center px-4" style={{ background: 'var(--surface-0)' }}>
       <div className="card p-8 text-center space-y-4 max-w-sm w-full anim-pop">
-        <div className="w-16 h-16 rounded-3xl mx-auto flex items-center justify-center" style={{ background: 'linear-gradient(135deg,rgba(107,203,119,0.2),rgba(78,205,196,0.2))' }}>
+        <div className="w-16 h-16 rounded-3xl mx-auto flex items-center justify-center" style={{ background: 'linear-gradient(135deg,rgba(107,203,77,0.2),rgba(78,205,196,0.2))' }}>
           <CheckCircle2 size={32} style={{ color: 'var(--nia-mint)' }} />
         </div>
         <h2 className="font-extrabold text-2xl">Check your inbox! 📬</h2>
         <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-          We sent a confirmation link to <strong>{email}</strong>. Click it to activate your Nia account and join the community.
+          We sent a confirmation link to <strong>{email}</strong>. 
+          Click it to activate your Nia account.
         </p>
         <Link href="/login" className="btn-ghost block text-center text-sm">Back to login</Link>
       </div>
@@ -61,20 +80,48 @@ export default function SignupPage() {
         <div className="card p-6 space-y-4">
           <div className="space-y-1.5">
             <label className="text-sm font-bold">Email</label>
-            <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@email.com" className="input" autoFocus />
+            <input 
+              type="email" 
+              value={email} 
+              onChange={e => setEmail(e.target.value)} 
+              placeholder="you@email.com" 
+              className="input" 
+              autoFocus 
+            />
           </div>
           <div className="space-y-1.5">
             <label className="text-sm font-bold">Password</label>
-            <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="at least 8 characters" className="input" />
+            <input 
+              type="password" 
+              value={password} 
+              onChange={e => setPassword(e.target.value)} 
+              placeholder="at least 8 characters" 
+              className="input" 
+            />
           </div>
           <div className="space-y-1.5">
             <label className="text-sm font-bold">Confirm password</label>
-            <input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} placeholder="repeat password" className="input" onKeyDown={e => e.key === 'Enter' && handleSignup()} />
+            <input 
+              type="password" 
+              value={confirmPassword} 
+              onChange={e => setConfirmPassword(e.target.value)} 
+              placeholder="repeat password" 
+              className="input" 
+              onKeyDown={e => e.key === 'Enter' && handleSignup()} 
+            />
           </div>
 
-          {error && <div className="px-3 py-2 rounded-xl text-sm font-semibold text-red-500" style={{ background: 'rgba(239,68,68,0.08)' }}>{error}</div>}
+          {error && (
+            <div className="px-3 py-2 rounded-xl text-sm font-semibold text-red-500" style={{ background: 'rgba(239,68,68,0.08)' }}>
+              {error}
+            </div>
+          )}
 
-          <button onClick={handleSignup} disabled={loading || !email || !password || !confirmPassword} className="btn-primary w-full flex items-center justify-center gap-2">
+          <button 
+            onClick={handleSignup} 
+            disabled={loading || !email || !password || !confirmPassword} 
+            className="btn-primary w-full flex items-center justify-center gap-2"
+          >
             {loading ? <Loader2 size={18} className="animate-spin" /> : <ArrowRight size={18} />}
             {loading ? 'Creating account…' : 'Create account'}
           </button>
