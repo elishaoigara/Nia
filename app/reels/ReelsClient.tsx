@@ -54,9 +54,72 @@ function CommentSheet({
   const [uploading, setUploading] = useState(false)
   const [count, setCount] = useState(initialCount)
   const [visible, setVisible] = useState(false)
+  const [showGifPicker, setShowGifPicker] = useState(false)
+  const [gifQuery, setGifQuery] = useState('')
+  const [gifResults, setGifResults] = useState<{ url: string; preview: string }[]>([])
+  const [gifLoading, setGifLoading] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+  const gifFileRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+
+  const TRENDING_GIFS = [
+    { url: 'https://media.giphy.com/media/l0MYt5jPR6QX5pnqM/giphy.gif', preview: 'https://media.giphy.com/media/l0MYt5jPR6QX5pnqM/giphy_s.gif' },
+    { url: 'https://media.giphy.com/media/3o7TKSjRrfIPjeiVyM/giphy.gif', preview: 'https://media.giphy.com/media/3o7TKSjRrfIPjeiVyM/giphy_s.gif' },
+    { url: 'https://media.giphy.com/media/26ufdipQqU2lhNA4g/giphy.gif', preview: 'https://media.giphy.com/media/26ufdipQqU2lhNA4g/giphy_s.gif' },
+    { url: 'https://media.giphy.com/media/l46CyJmS9KUbokzsI/giphy.gif', preview: 'https://media.giphy.com/media/l46CyJmS9KUbokzsI/giphy_s.gif' },
+    { url: 'https://media.giphy.com/media/xT9IgG50Lg7russbD6/giphy.gif', preview: 'https://media.giphy.com/media/xT9IgG50Lg7russbD6/giphy_s.gif' },
+    { url: 'https://media.giphy.com/media/l3q2K5jinAlChoCLS/giphy.gif', preview: 'https://media.giphy.com/media/l3q2K5jinAlChoCLS/giphy_s.gif' },
+    { url: 'https://media.giphy.com/media/26BRuo6sLetdllPAQ/giphy.gif', preview: 'https://media.giphy.com/media/26BRuo6sLetdllPAQ/giphy_s.gif' },
+    { url: 'https://media.giphy.com/media/3ohzdIuqJoo8QdKlnW/giphy.gif', preview: 'https://media.giphy.com/media/3ohzdIuqJoo8QdKlnW/giphy_s.gif' },
+  ]
+
+  async function searchGifs(q: string) {
+    setGifQuery(q)
+    if (!q.trim()) { setGifResults(TRENDING_GIFS); return }
+    setGifLoading(true)
+    try {
+      const res = await fetch(
+        `https://api.giphy.com/v1/gifs/search?api_key=dc6zaTOxFJmzC&q=${encodeURIComponent(q)}&limit=12&rating=g`
+      )
+      const data = await res.json()
+      setGifResults(
+        data.data?.map((g: any) => ({
+          url: g.images.original.url,
+          preview: g.images.fixed_height_small.url,
+        })) ?? TRENDING_GIFS
+      )
+    } catch {
+      setGifResults(TRENDING_GIFS)
+    } finally {
+      setGifLoading(false)
+    }
+  }
+
+  function openGifPicker() {
+    setShowGifPicker(true)
+    setGifResults(TRENDING_GIFS)
+    setGifQuery('')
+  }
+
+  function pickGif(url: string) {
+    setMediaPreview({ url, type: 'gif' })
+    setShowGifPicker(false)
+  }
+
+  async function handleGifUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploading(true)
+    const path = `comments/${Date.now()}.gif`
+    const { error } = await supabase.storage.from('media').upload(path, file, { upsert: true, contentType: 'image/gif' })
+    if (!error) {
+      const { data } = supabase.storage.from('media').getPublicUrl(path)
+      setMediaPreview({ url: data.publicUrl, type: 'gif' })
+    }
+    setUploading(false)
+    e.target.value = ''
+  }
 
   // Animate in
   useEffect(() => {
@@ -247,12 +310,68 @@ function CommentSheet({
 
         {/* Input area */}
         <div
-          className="shrink-0 px-3 py-3"
+          className="shrink-0 px-3 py-3 space-y-2"
           style={{ borderTop: '1px solid rgba(255,255,255,0.07)', paddingBottom: 'calc(12px + env(safe-area-inset-bottom, 0px))' }}
         >
+          {/* ── GIF Picker panel ────────────────────────────── */}
+          {showGifPicker && (
+            <div
+              className="rounded-2xl overflow-hidden"
+              style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}
+            >
+              {/* Search + upload row */}
+              <div className="flex gap-2 p-2">
+                <input
+                  value={gifQuery}
+                  onChange={(e) => searchGifs(e.target.value)}
+                  placeholder="Search GIFs…"
+                  autoFocus
+                  className="flex-1 px-3 py-1.5 rounded-xl text-sm outline-none"
+                  style={{ background: 'rgba(255,255,255,0.1)', color: 'white', caretColor: 'var(--nia-violet)' }}
+                />
+                {/* Upload own GIF */}
+                <input ref={gifFileRef} type="file" accept="image/gif" className="hidden" onChange={handleGifUpload} />
+                <button
+                  onClick={() => gifFileRef.current?.click()}
+                  disabled={uploading}
+                  className="px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 active:scale-95 transition-transform"
+                  style={{ background: 'rgba(168,85,247,0.25)', color: 'var(--nia-violet)', border: '1px solid rgba(168,85,247,0.3)' }}
+                >
+                  {uploading ? <Loader2 size={13} className="animate-spin" /> : '+ Upload'}
+                </button>
+              </div>
+
+              {/* Grid */}
+              {gifLoading ? (
+                <div className="flex justify-center py-4">
+                  <Loader2 size={20} className="animate-spin" style={{ color: 'rgba(255,255,255,0.4)' }} />
+                </div>
+              ) : (
+                <div className="grid grid-cols-3 gap-1 p-2 max-h-52 overflow-y-auto">
+                  {gifResults.map((g, i) => (
+                    <button
+                      key={i}
+                      onClick={() => pickGif(g.url)}
+                      className="relative rounded-xl overflow-hidden active:scale-95 transition-transform"
+                      style={{ aspectRatio: '1/1' }}
+                    >
+                      <img src={g.preview} alt="" className="w-full h-full object-cover" loading="lazy" />
+                      <div
+                        className="absolute bottom-1 right-1 text-[8px] font-black px-1 rounded"
+                        style={{ background: 'rgba(0,0,0,0.6)', color: 'white' }}
+                      >
+                        GIF
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Media preview */}
           {mediaPreview && (
-            <div className="relative inline-block mb-2 ml-1">
+            <div className="relative inline-block ml-1">
               {mediaPreview.type === 'video' ? (
                 <video src={mediaPreview.url} className="h-16 rounded-xl object-cover" muted />
               ) : (
@@ -268,14 +387,16 @@ function CommentSheet({
             </div>
           )}
 
+          {/* Input row */}
           <div className="flex items-end gap-2">
-            {/* Photo/Video button */}
+            {/* Photo/Video */}
             <input ref={fileRef} type="file" accept="image/*,video/*" className="hidden" onChange={handleFile} />
             <button
-              onClick={() => fileRef.current?.click()}
+              onClick={() => { setShowGifPicker(false); fileRef.current?.click() }}
               disabled={uploading}
               className="w-9 h-9 flex items-center justify-center rounded-full shrink-0 active:scale-90 transition-transform"
               style={{ background: 'rgba(255,255,255,0.1)' }}
+              title="Photo or video"
             >
               {uploading
                 ? <Loader2 size={15} className="animate-spin" color="white" />
@@ -283,14 +404,13 @@ function CommentSheet({
               }
             </button>
 
-            {/* GIF button */}
+            {/* GIF toggle */}
             <button
+              onClick={() => showGifPicker ? setShowGifPicker(false) : openGifPicker()}
               className="w-9 h-9 flex items-center justify-center rounded-full shrink-0 text-[10px] font-black active:scale-90 transition-transform"
-              style={{ background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.7)' }}
-              onClick={() => {
-                // Simple GIF url prompt as a lightweight fallback
-                const url = window.prompt('Paste a GIF URL:')
-                if (url) setMediaPreview({ url, type: 'gif' })
+              style={{
+                background: showGifPicker ? 'var(--nia-violet)' : 'rgba(255,255,255,0.1)',
+                color: showGifPicker ? 'white' : 'rgba(255,255,255,0.7)',
               }}
             >
               GIF
