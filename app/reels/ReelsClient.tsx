@@ -22,7 +22,7 @@ interface ReelsClientProps {
   currentUserId: string
 }
 
-export default function ReelsClient({ videos, currentUserId }: ReelsClientProps) {
+export default function NiaReelsClient({ videos, currentUserId }: ReelsClientProps) {
   const [activeIdx, setActiveIdx] = useState(0)
   const [muted, setMuted] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -31,7 +31,7 @@ export default function ReelsClient({ videos, currentUserId }: ReelsClientProps)
     const el = containerRef.current
     if (!el) return
     function onScroll() {
-      const reelHeight = window.innerHeight - 56
+      const reelHeight = window.innerHeight
       const idx = Math.round(el!.scrollTop / reelHeight)
       setActiveIdx(idx)
     }
@@ -41,50 +41,101 @@ export default function ReelsClient({ videos, currentUserId }: ReelsClientProps)
 
   if (videos.length === 0) {
     return (
-      <div className="fixed inset-0 flex items-center justify-center" style={{ background: '#000' }}>
-        <div className="text-center space-y-3 px-8">
-          <div className="text-5xl">🎬</div>
-          <p className="text-white font-bold text-lg">No videos yet</p>
-          <p className="text-sm" style={{ color: 'rgba(255,255,255,0.5)' }}>
-            Be the first to share a video on Nia!
-          </p>
-          <Link
-            href="/"
-            className="inline-block mt-4 px-6 py-2.5 rounded-2xl text-sm font-bold text-white"
-            style={{ background: 'var(--grad-brand)' }}
-          >
-            Go to feed
+      <div className="fixed inset-0 flex flex-col" style={{ background: '#000' }}>
+        <div
+          className="flex items-center justify-between px-4"
+          style={{ height: '56px', background: 'rgba(0,0,0,0.8)' }}
+        >
+          <Link href="/" className="flex items-center gap-2">
+            <div
+              className="w-8 h-8 rounded-xl flex items-center justify-center text-white font-black text-sm"
+              style={{ background: 'var(--grad-brand)' }}
+            >
+              N
+            </div>
+            <span className="text-white font-extrabold text-lg tracking-tight">Nia</span>
           </Link>
+          <span
+            className="text-xs font-bold px-3 py-1 rounded-full"
+            style={{ background: 'rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.8)' }}
+          >
+            🎬 Reels
+          </span>
+        </div>
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center space-y-3 px-8">
+            <div className="text-5xl">🎬</div>
+            <p className="text-white font-bold text-lg">No videos yet</p>
+            <p className="text-sm" style={{ color: 'rgba(255,255,255,0.5)' }}>
+              Be the first to share a video on Nia!
+            </p>
+            <Link
+              href="/"
+              className="inline-block mt-4 px-6 py-2.5 rounded-2xl text-sm font-bold text-white"
+              style={{ background: 'var(--grad-brand)' }}
+            >
+              Go to feed
+            </Link>
+          </div>
         </div>
       </div>
     )
   }
 
   return (
-    <div
-      ref={containerRef}
-      className="fixed overflow-y-scroll"
-      style={{
-        background: '#000',
-        scrollSnapType: 'y mandatory',
-        scrollbarWidth: 'none',
-        msOverflowStyle: 'none',
-        top: '56px',
-        left: 0,
-        right: 0,
-        bottom: 0,
-      }}
-    >
-      {videos.map((video, i) => (
-        <ReelItem
-          key={video.id}
-          video={video}
-          isActive={i === activeIdx}
-          muted={muted}
-          onToggleMute={() => setMuted(m => !m)}
-          currentUserId={currentUserId}
-        />
-      ))}
+    <div className="fixed inset-0" style={{ background: '#000' }}>
+      {/* ── Custom header ─────────────────────────────────── */}
+      <div
+        className="absolute top-0 left-0 right-0 z-50 flex items-center justify-between px-4"
+        style={{
+          height: '56px',
+          background: 'linear-gradient(to bottom, rgba(0,0,0,0.75), transparent)',
+          pointerEvents: 'none',
+        }}
+      >
+        <Link href="/" className="flex items-center gap-2" style={{ pointerEvents: 'auto' }}>
+          <div
+            className="w-8 h-8 rounded-xl flex items-center justify-center text-white font-black text-sm"
+            style={{ background: 'var(--grad-brand)' }}
+          >
+            N
+          </div>
+          <span className="text-white font-extrabold text-lg tracking-tight">Nia</span>
+        </Link>
+        <span
+          className="text-xs font-bold px-3 py-1 rounded-full"
+          style={{
+            background: 'rgba(255,255,255,0.15)',
+            color: 'rgba(255,255,255,0.9)',
+            backdropFilter: 'blur(4px)',
+            pointerEvents: 'none',
+          }}
+        >
+          🎬 Reels
+        </span>
+      </div>
+
+      {/* ── Scrollable reel stack ─────────────────────────── */}
+      <div
+        ref={containerRef}
+        className="absolute inset-0 overflow-y-scroll"
+        style={{
+          scrollSnapType: 'y mandatory',
+          scrollbarWidth: 'none',
+          msOverflowStyle: 'none',
+        }}
+      >
+        {videos.map((video, i) => (
+          <ReelItem
+            key={video.id}
+            video={video}
+            isActive={i === activeIdx}
+            muted={muted}
+            onToggleMute={() => setMuted(m => !m)}
+            currentUserId={currentUserId}
+          />
+        ))}
+      </div>
     </div>
   )
 }
@@ -156,13 +207,12 @@ function ReelItem({
     <div
       className="relative w-full flex items-center justify-center"
       style={{
-        height: 'calc(100dvh - 56px)',
+        height: '100dvh',
         scrollSnapAlign: 'start',
         scrollSnapStop: 'always',
         background: '#000',
       }}
     >
-      {/* Video */}
       <video
         ref={videoRef}
         src={video.media_url}
@@ -178,10 +228,10 @@ function ReelItem({
         onClick={togglePlay}
       />
 
-      {/* Gradient overlay */}
+      {/* Gradient */}
       <div
         className="absolute inset-0 pointer-events-none"
-        style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.75) 0%, transparent 45%, rgba(0,0,0,0.2) 100%)' }}
+        style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.8) 0%, transparent 50%, rgba(0,0,0,0.15) 100%)' }}
       />
 
       {/* Pause indicator */}
@@ -196,12 +246,11 @@ function ReelItem({
         </div>
       )}
 
-      {/* ── Right action rail ─────────────────────────── */}
-      <div className="absolute right-4 sm:right-8 bottom-28 flex flex-col items-center gap-5">
-        {/* Avatar */}
+      {/* ── Right action rail ─────────────────────────────── */}
+      <div className="absolute right-3 sm:right-8 bottom-24 sm:bottom-28 flex flex-col items-center gap-4 sm:gap-5">
         <Link href={`/profile/${profile?.id}`}>
           <div
-            className="w-11 h-11 rounded-full overflow-hidden"
+            className="w-10 h-10 sm:w-11 sm:h-11 rounded-full overflow-hidden"
             style={{ border: '2px solid white' }}
           >
             {profile?.avatar_url ? (
@@ -217,61 +266,52 @@ function ReelItem({
           </div>
         </Link>
 
-        {/* Like */}
         <button onClick={toggleLike} className="flex flex-col items-center gap-1 active:scale-90 transition-transform">
           <div
-            className="w-11 h-11 flex items-center justify-center rounded-full"
+            className="w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center rounded-full"
             style={{ background: 'rgba(255,255,255,0.12)' }}
           >
-            <Heart
-              size={22}
-              fill={liked ? '#ff4d6d' : 'none'}
-              color={liked ? '#ff4d6d' : 'white'}
-              strokeWidth={1.8}
-            />
+            <Heart size={20} fill={liked ? '#ff4d6d' : 'none'} color={liked ? '#ff4d6d' : 'white'} strokeWidth={1.8} />
           </div>
           <span className="text-white text-xs font-bold">{likeCount}</span>
         </button>
 
-        {/* Comments */}
         <Link href={`/posts/${video.id}`} className="flex flex-col items-center gap-1">
           <div
-            className="w-11 h-11 flex items-center justify-center rounded-full"
+            className="w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center rounded-full"
             style={{ background: 'rgba(255,255,255,0.12)' }}
           >
-            <MessageCircle size={22} color="white" strokeWidth={1.8} />
+            <MessageCircle size={20} color="white" strokeWidth={1.8} />
           </div>
           <span className="text-white text-xs font-bold">{video.comments?.length ?? 0}</span>
         </Link>
 
-        {/* Share */}
         <button onClick={share} className="flex flex-col items-center gap-1 active:scale-90 transition-transform">
           <div
-            className="w-11 h-11 flex items-center justify-center rounded-full"
+            className="w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center rounded-full"
             style={{ background: 'rgba(255,255,255,0.12)' }}
           >
-            <Share2 size={20} color="white" strokeWidth={1.8} />
+            <Share2 size={18} color="white" strokeWidth={1.8} />
           </div>
           <span className="text-white text-xs font-bold">Share</span>
         </button>
 
-        {/* Mute */}
         <button onClick={onToggleMute} className="active:scale-90 transition-transform">
           <div
-            className="w-11 h-11 flex items-center justify-center rounded-full"
+            className="w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center rounded-full"
             style={{ background: 'rgba(255,255,255,0.12)' }}
           >
             {muted
-              ? <VolumeX size={20} color="white" strokeWidth={1.8} />
-              : <Volume2 size={20} color="white" strokeWidth={1.8} />
+              ? <VolumeX size={18} color="white" strokeWidth={1.8} />
+              : <Volume2 size={18} color="white" strokeWidth={1.8} />
             }
           </div>
         </button>
       </div>
 
-      {/* ── Bottom info ──────────────────────────────── */}
-      <div className="absolute bottom-20 left-0 right-20 px-4">
-        <Link href={`/profile/${profile?.id}`} className="flex items-center gap-2 mb-2">
+      {/* ── Bottom info ────────────────────────────────────── */}
+      <div className="absolute bottom-16 sm:bottom-20 left-0 right-16 sm:right-24 px-4">
+        <Link href={`/profile/${profile?.id}`} className="flex items-center gap-2 mb-1.5">
           <span className="text-white font-bold text-sm">
             @{profile?.username ?? 'unknown'}
           </span>
@@ -290,7 +330,10 @@ function ReelItem({
       </div>
 
       {/* Progress bar */}
-      <div className="absolute bottom-16 left-0 right-0 h-0.5" style={{ background: 'rgba(255,255,255,0.2)' }}>
+      <div
+        className="absolute bottom-10 sm:bottom-12 left-0 right-0 h-0.5"
+        style={{ background: 'rgba(255,255,255,0.2)' }}
+      >
         <div
           className="h-full"
           style={{ width: `${progress}%`, background: 'white', transition: 'width 0.1s linear' }}
