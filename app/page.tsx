@@ -39,12 +39,12 @@ export default async function FeedPage({
   if (!user) redirect('/login')
 
   // ── 1. Query hydration (parallel) ───────────────────────────────────────
-  const [profileRes, followsRes, blocksRes, mutesRes] = await Promise.all([
+  const [profileRes, followsRes] = await Promise.all([
     supabase.from('profiles').select('country, language').eq('id', user.id).single(),
     supabase.from('follows').select('following_id').eq('follower_id', user.id),
-    supabase.from('blocks').select('blocked_id').eq('blocker_id', user.id).then(r => r).catch(() => ({ data: null })),
-    supabase.from('mutes').select('muted_id').eq('muter_id', user.id).then(r => r).catch(() => ({ data: null })),
   ])
+  const blocksRes = await supabase.from('blocks').select('blocked_id').eq('blocker_id', user.id)
+  const mutesRes  = await supabase.from('mutes').select('muted_id').eq('muter_id', user.id)
 
   const myProfile = profileRes.data
   const ctx: UserContext = {
