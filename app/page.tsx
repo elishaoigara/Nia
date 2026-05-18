@@ -39,12 +39,12 @@ export default async function FeedPage({
   if (!user) redirect('/login')
 
   // ── 1. Query hydration (parallel) ───────────────────────────────────────
-  const [profileRes, followsRes] = await Promise.all([
+  const [profileRes, followsRes, blocksRes, mutesRes] = await Promise.all([
     supabase.from('profiles').select('country, language').eq('id', user.id).single(),
     supabase.from('follows').select('following_id').eq('follower_id', user.id),
+    supabase.from('blocks').select('blocked_id').eq('blocker_id', user.id),
+    supabase.from('mutes').select('muted_id').eq('muter_id', user.id),
   ])
-  const blocksRes = await supabase.from('blocks').select('blocked_id').eq('blocker_id', user.id)
-  const mutesRes  = await supabase.from('mutes').select('muted_id').eq('muter_id', user.id)
 
   const myProfile = profileRes.data
   const ctx: UserContext = {
@@ -61,11 +61,12 @@ export default async function FeedPage({
 
   if (currentTab === 'following') {
     if (ctx.followingIds.size > 0) {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('posts').select(BASE_SELECT)
         .in('user_id', [...ctx.followingIds])
         .order('created_at', { ascending: false })
         .limit(CANDIDATE_POOL)
+      if (error) console.error('[feed] following query failed:', error.message)
       candidates = (data ?? []) as ScorerPost[]
     }
   } else if (currentTab === 'local' && myProfile?.country) {
@@ -73,18 +74,20 @@ export default async function FeedPage({
       .from('profiles').select('id').eq('country', myProfile.country)
     const countryIds = (countryUsers ?? []).map((p: any) => p.id)
     if (countryIds.length > 0) {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('posts').select(BASE_SELECT)
         .in('user_id', countryIds)
         .order('created_at', { ascending: false })
         .limit(CANDIDATE_POOL)
+      if (error) console.error('[feed] local query failed:', error.message)
       candidates = (data ?? []) as ScorerPost[]
     }
   } else {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('posts').select(BASE_SELECT)
       .order('created_at', { ascending: false })
       .limit(CANDIDATE_POOL)
+    if (error) console.error('[feed] africa query failed:', error.message)
     candidates = (data ?? []) as ScorerPost[]
   }
 
@@ -147,7 +150,7 @@ export default async function FeedPage({
         </div>
       ))}
 
-      {hasMore && <LoadMore currentPage={currentPage} currentTab={currentTab} />}
+      {hasMore && <LoadMore currentPage={currentPage} currentTab={currentTab} currentUserId={user.id} />}
     </main>
   )
 }

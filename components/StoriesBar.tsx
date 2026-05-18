@@ -52,6 +52,13 @@ export default function StoriesBar({ currentUserId }: { currentUserId: string })
   const fileRef = useRef<HTMLInputElement>(null)
   const progressRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
+  // Clean up the interval when the component unmounts
+  useEffect(() => {
+    return () => {
+      if (progressRef.current) clearInterval(progressRef.current)
+    }
+  }, [])
+
   useEffect(() => { loadStories() }, [])
 
   async function loadStories() {
@@ -184,7 +191,7 @@ export default function StoriesBar({ currentUserId }: { currentUserId: string })
         <div className="flex gap-3 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
 
           {/* Add / My story */}
-          <button onClick={openCreate} className="flex flex-col items-center gap-1.5 flex-shrink-0">
+          <button onClick={openCreate} className="flex flex-col items-center gap-1.5 shrink-0">
             <div className="relative">
               <div className="w-14 h-14 rounded-2xl overflow-hidden flex items-center justify-center" style={{ background: hasMyStory ? 'var(--grad-brand)' : 'var(--surface-2)' }}>
                 {hasMyStory ? (
@@ -212,7 +219,7 @@ export default function StoriesBar({ currentUserId }: { currentUserId: string })
           {allGroups
             .filter(g => g[0].user_id !== currentUserId)
             .map(group => (
-              <button key={group[0].user_id} onClick={() => openStory(group)} className="flex flex-col items-center gap-1.5 flex-shrink-0">
+              <button key={group[0].user_id} onClick={() => openStory(group)} className="flex flex-col items-center gap-1.5 shrink-0">
                 <div className="w-14 h-14 rounded-2xl p-0.5" style={{ background: 'var(--grad-brand)' }}>
                   <div className="w-full h-full rounded-[10px] overflow-hidden">
                     {group[0].media_url
@@ -230,7 +237,7 @@ export default function StoriesBar({ currentUserId }: { currentUserId: string })
             ))}
 
           {hasMyStory && (
-            <button onClick={() => openStory(myStories)} className="flex flex-col items-center gap-1.5 flex-shrink-0">
+            <button onClick={() => openStory(myStories)} className="flex flex-col items-center gap-1.5 shrink-0">
               <div className="w-14 h-14 rounded-2xl border-2 overflow-hidden" style={{ borderColor: 'var(--nia-violet)', background: myStories[0].bg_color ?? 'var(--grad-brand)' }}>
                 {myStories[0].media_url
                   ? <img src={myStories[0].media_url} className="w-full h-full object-cover" alt="" />
@@ -251,7 +258,7 @@ export default function StoriesBar({ currentUserId }: { currentUserId: string })
 
       {/* ── Story viewer ─────────────────────────────────── */}
       {viewingStory && viewingGroup && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.95)' }}>
+        <div className="fixed inset-0 z-200 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.95)' }}>
           <div className="relative w-full max-w-sm h-[75vh] rounded-3xl overflow-hidden">
 
             {/* Progress bars — one per story in group */}
@@ -335,7 +342,7 @@ export default function StoriesBar({ currentUserId }: { currentUserId: string })
       {/* ── Create / Edit story modal ─────────────────── */}
       {showCreate && (
         <div
-          className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center"
+          className="fixed inset-0 z-200 flex items-end sm:items-center justify-center"
           style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}
           onClick={e => { if (e.target === e.currentTarget) setShowCreate(false) }}
         >
@@ -425,7 +432,7 @@ export default function StoriesBar({ currentUserId }: { currentUserId: string })
       {/* ── Delete story confirmation ─────────────────── */}
       {showDeleteConfirm && (
         <div
-          className="fixed inset-0 z-[300] flex items-center justify-center px-4"
+          className="fixed inset-0 z-300 flex items-center justify-center px-4"
           style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}
           onClick={() => setShowDeleteConfirm(false)}
         >

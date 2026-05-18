@@ -35,7 +35,16 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
 
   const { data: posts } = await supabase
     .from('posts')
-    .select('*, profiles:user_id (id, username, avatar_url, country, city), likes (user_id), comments (id)')
+    .select(`
+      *,
+      profiles:user_id (id, username, avatar_url, country, city),
+      circles:circle_id (id, name, slug),
+      likes (user_id),
+      comments (id),
+      reactions (user_id, emoji),
+      reposts (user_id),
+      poll:polls (*)
+    `)
     .eq('user_id', id)
     .order('created_at', { ascending: false })
 

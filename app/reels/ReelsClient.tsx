@@ -594,7 +594,7 @@ function ReelItem({
   function togglePlay() {
     const v = videoRef.current
     if (!v) return
-    if (v.paused) { v.play(); setPlaying(true) }
+    if (v.paused) { v.play().then(() => setPlaying(true)).catch(() => {}); }
     else { v.pause(); setPlaying(false) }
   }
 
@@ -625,7 +625,7 @@ function ReelItem({
         ref={videoRef}
         src={video.media_url}
         className="absolute inset-0 w-full h-full object-cover"
-        loop playsInline muted={muted} preload="auto"
+        loop playsInline preload={isActive ? 'auto' : 'none'}
         onTimeUpdate={() => {
           const v = videoRef.current
           if (v && v.duration) setProgress((v.currentTime / v.duration) * 100)

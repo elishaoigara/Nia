@@ -20,6 +20,13 @@ export default function VideoPlayer({ src, poster, className = '' }: VideoPlayer
   const [tapped, setTapped] = useState(false)
   const [lightbox, setLightbox] = useState(false)
 
+  // Set muted on mount via ref — avoids the React controlled-prop bug where
+  // the `muted` attribute is only applied once and ignores subsequent re-renders.
+  // (defaultMuted is not in React's TS types; this is the correct workaround.)
+  useEffect(() => {
+    if (videoRef.current) videoRef.current.muted = true
+  }, [])
+
   // Pause when scrolled off screen
   useEffect(() => {
     const el = containerRef.current
@@ -41,13 +48,15 @@ export default function VideoPlayer({ src, poster, className = '' }: VideoPlayer
     const v = videoRef.current
     if (!v) return
     setTapped(true)
-    if (v.paused) { v.play(); setPlaying(true) }
+    // play() returns a Promise on mobile — must .catch() or the page can hang
+    if (v.paused) { v.play().then(() => setPlaying(true)).catch(() => {}) }
     else { v.pause(); setPlaying(false) }
   }
 
   function toggleMute() {
     const v = videoRef.current
     if (!v) return
+    // Mutate the property directly; don't rely on the controlled prop
     v.muted = !v.muted
     setMuted(v.muted)
   }
@@ -76,7 +85,6 @@ export default function VideoPlayer({ src, poster, className = '' }: VideoPlayer
           src={src}
           poster={poster}
           preload="none"
-          muted={muted}
           playsInline
           onTimeUpdate={() => {
             const v = videoRef.current
@@ -85,7 +93,8 @@ export default function VideoPlayer({ src, poster, className = '' }: VideoPlayer
           onLoadedMetadata={() => {
             if (videoRef.current) setDuration(videoRef.current.duration)
           }}
-          onEnded={() => { setPlaying(false); setProgress(0) }}
+          onEnded={() => { setPlaying(false); setProgress(0); setTapped(false) }}
+          onError={() => { setPlaying(false) }}
           onClick={togglePlay}
           className="w-full max-h-80 object-contain cursor-pointer"
           style={{ display: 'block' }}

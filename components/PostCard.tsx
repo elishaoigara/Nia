@@ -269,7 +269,7 @@ function CommentRow({ comment }: { comment: any }) {
                   src={comment.media_url}
                   alt=""
                   onClick={() => setLightbox(true)}
-                  className="rounded-xl max-h-48 max-w-55 object-cover cursor-pointer active:scale-98 transition-transform"
+                  className="rounded-xl max-h-48 max-w-55 object-cover cursor-pointer active:scale-[0.98] transition-transform"
                   style={{ border: '1px solid var(--border)' }}
                 />
                 {lightbox && (
