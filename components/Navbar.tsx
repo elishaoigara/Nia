@@ -13,7 +13,7 @@ import { useEffect, useState } from 'react'
 const links = [
   { href: '/',         icon: Home,         label: 'Home',    mobileHide: false },
   { href: '/discover', icon: Compass,      label: 'Discover',mobileHide: false },
-  { href: '/reels',    icon: Clapperboard, label: 'Reels',   mobileHide: false },
+  { href: '/flicks',   icon: Clapperboard, label: 'Flicks',  mobileHide: false },
   { href: '/search',   icon: Search,       label: 'Search',  mobileHide: false },
   { href: '/circles',  icon: Users,        label: 'Circles', mobileHide: true  },
   { href: '/profile',  icon: User,         label: 'Me',      mobileHide: false },
@@ -30,7 +30,7 @@ export default function Navbar() {
     )
   }, [])
 
-  if (pathname === '/reels') return null
+  if (pathname === '/flicks') return null
 
   return (
     <>

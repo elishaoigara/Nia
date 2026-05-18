@@ -9,7 +9,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { getFlag } from '@/lib/african-data'
 
-export interface ReelPost {
+export interface FlickPost {
   id: string
   content: string | null
   media_url: string
@@ -20,8 +20,8 @@ export interface ReelPost {
   comments: { id: string }[]
 }
 
-interface ReelsClientProps {
-  videos: ReelPost[]
+interface FlicksClientProps {
+  videos: FlickPost[]
   currentUserId: string
 }
 
@@ -454,7 +454,7 @@ function CommentSheet({
 }
 
 // ── Main Reels Component ──────────────────────────────────────────────────────
-export default function NiaReelsClient({ videos, currentUserId }: ReelsClientProps) {
+export default function NiaFlicksClient({ videos, currentUserId }: FlicksClientProps) {
   const [activeIdx, setActiveIdx] = useState(0)
   const [muted, setMuted] = useState(false)
   const [commentSheet, setCommentSheet] = useState<{ postId: string; count: number } | null>(null)
@@ -489,13 +489,13 @@ export default function NiaReelsClient({ videos, currentUserId }: ReelsClientPro
             <div className="w-8 h-8 rounded-xl flex items-center justify-center text-white font-black text-sm" style={{ background: 'var(--grad-brand)' }}>N</div>
             <span className="text-white font-extrabold text-lg tracking-tight">Nia</span>
           </Link>
-          <span className="text-xs font-bold px-3 py-1 rounded-full" style={{ background: 'rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.8)' }}>🎬 Reels</span>
+          <span className="text-xs font-bold px-3 py-1 rounded-full" style={{ background: 'rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.8)' }}>🎬 Flicks</span>
         </div>
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center space-y-3 px-8">
             <div className="text-5xl">🎬</div>
-            <p className="text-white font-bold text-lg">No videos yet</p>
-            <p className="text-sm" style={{ color: 'rgba(255,255,255,0.5)' }}>Be the first to share a video on Nia!</p>
+            <p className="text-white font-bold text-lg">No flicks yet</p>
+            <p className="text-sm" style={{ color: 'rgba(255,255,255,0.5)' }}>Be the first to share a flick on Nia!</p>
             <Link href="/" className="inline-block mt-4 px-6 py-2.5 rounded-2xl text-sm font-bold text-white" style={{ background: 'var(--grad-brand)' }}>
               Go to feed
             </Link>
@@ -520,7 +520,7 @@ export default function NiaReelsClient({ videos, currentUserId }: ReelsClientPro
           className="text-xs font-bold px-3 py-1 rounded-full"
           style={{ background: 'rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(4px)', pointerEvents: 'none' }}
         >
-          🎬 Reels
+          🎬 Flicks
         </span>
       </div>
 
@@ -531,7 +531,7 @@ export default function NiaReelsClient({ videos, currentUserId }: ReelsClientPro
         style={{ scrollSnapType: 'y mandatory', scrollbarWidth: 'none', msOverflowStyle: 'none' }}
       >
         {videos.map((video, i) => (
-          <ReelItem
+          <FlickItem
             key={video.id}
             video={video}
             isActive={i === activeIdx}
@@ -557,10 +557,10 @@ export default function NiaReelsClient({ videos, currentUserId }: ReelsClientPro
 }
 
 // ── Single Reel Item ──────────────────────────────────────────────────────────
-function ReelItem({
+function FlickItem({
   video, isActive, muted, onToggleMute, currentUserId, onOpenComments,
 }: {
-  video: ReelPost
+  video: FlickPost
   isActive: boolean
   muted: boolean
   onToggleMute: () => void

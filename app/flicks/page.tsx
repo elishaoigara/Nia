@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
-import ReelsClient from './ReelsClient'
-import type { ReelPost } from './ReelsClient'
+import FlicksClient from './FlicksClient'
+import type { FlickPost } from './FlicksClient'
 
 export default async function ReelsPage() {
   const supabase = await createClient()
@@ -21,5 +21,5 @@ export default async function ReelsPage() {
     .order('created_at', { ascending: false })
     .limit(30)
 
-  return <ReelsClient videos={(videos ?? []) as unknown as ReelPost[]} currentUserId={user.id} />
+  return <FlicksClient videos={(videos ?? []) as unknown as FlickPost[]} currentUserId={user.id} />
 }
