@@ -38,6 +38,14 @@ export default async function FeedPage({
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
+  // Guard: if the user has no profile row yet (skipped / didn't finish
+  // onboarding) their auth.uid won't satisfy posts_user_id_fkey and any
+  // insert into `posts` will throw a FK violation.  Send them to onboarding
+  // so the profile row is created before they can post.
+  const { data: profileCheck } = await supabase
+    .from('profiles').select('id').eq('id', user.id).single()
+  if (!profileCheck) redirect('/onboarding')
+
   // ── 1. Query hydration (parallel) ───────────────────────────────────────
   const [profileRes, followsRes, blocksRes, mutesRes] = await Promise.all([
     supabase.from('profiles').select('country, language').eq('id', user.id).single(),
