@@ -1,7 +1,7 @@
 'use client'
 import { useState, useRef, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Plus, X, Pencil, Trash2, Check, Loader2 } from 'lucide-react'
+import { Plus, X, Pencil, Trash2, Check, Loader2, Eye } from 'lucide-react'
 
 interface Story {
   id: string
@@ -49,6 +49,8 @@ export default function StoriesBar({ currentUserId }: { currentUserId: string })
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deletingStory, setDeletingStory] = useState<Story | null>(null)
 
+  const [storyViewers, setStoryViewers] = useState<any[]>([])
+  const [showViewers, setShowViewers] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const progressRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -87,6 +89,18 @@ export default function StoriesBar({ currentUserId }: { currentUserId: string })
   })
 
   // ── Story viewer ───────────────────────────────────────────
+  async function trackView(storyId: string) {
+    await supabase.from('story_views').insert({ story_id: storyId, viewer_id: currentUserId }).select().limit(1)
+  }
+
+  async function loadViewers(storyId: string) {
+    const { data } = await supabase
+      .from('story_views')
+      .select('profiles:viewer_id (id, username, avatar_url)')
+      .eq('story_id', storyId)
+    setStoryViewers(data ?? [])
+  }
+
   function openStory(group: Story[], idx = 0) {
     setViewingGroup(group); setViewIndex(idx); setProgress(0)
     startProgress(group, idx)
@@ -294,6 +308,14 @@ export default function StoriesBar({ currentUserId }: { currentUserId: string })
               {viewingIsOwn && (
                 <div className="flex items-center gap-1">
                   <button
+                    onClick={() => { loadViewers(viewingStory.id); setShowViewers(true) }}
+                    className="w-8 h-8 flex items-center justify-center rounded-xl"
+                    style={{ background: 'rgba(255,255,255,0.2)' }}
+                    title="Seen by"
+                  >
+                    <Eye size={14} className="text-white" />
+                  </button>
+                  <button
                     onClick={() => openEdit(viewingStory)}
                     className="w-8 h-8 flex items-center justify-center rounded-xl"
                     style={{ background: 'rgba(255,255,255,0.2)' }}
@@ -425,6 +447,50 @@ export default function StoriesBar({ currentUserId }: { currentUserId: string })
               {posting ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
               {posting ? 'Saving…' : editingStory ? 'Save changes' : 'Share Story 🚀'}
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Story viewers panel ──────────────────────── */}
+      {showViewers && (
+        <div
+          className="fixed inset-0 z-300 flex items-end sm:items-center justify-center px-4 pb-4 sm:pb-0"
+          style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}
+          onClick={() => setShowViewers(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-3xl overflow-hidden anim-pop"
+            style={{ background: 'var(--surface-0)', boxShadow: 'var(--shadow-lg)', maxHeight: '60vh', display: 'flex', flexDirection: 'column' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid var(--border)' }}>
+              <h3 className="font-extrabold text-base flex items-center gap-2">
+                <Eye size={16} style={{ color: 'var(--nia-violet)' }} />
+                Seen by {storyViewers.length > 0 ? `· ${storyViewers.length}` : ''}
+              </h3>
+              <button onClick={() => setShowViewers(false)} className="w-8 h-8 flex items-center justify-center rounded-xl" style={{ background: 'var(--surface-2)' }}>
+                <X size={15} />
+              </button>
+            </div>
+            <div className="overflow-y-auto flex-1 p-4 space-y-2">
+              {storyViewers.length === 0 ? (
+                <div className="text-center py-10 space-y-2">
+                  <div className="text-3xl">👁️</div>
+                  <p className="text-sm font-semibold">No views yet</p>
+                  <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>Share your story to get more eyes on it</p>
+                </div>
+              ) : storyViewers.map((v: any, i: number) => {
+                const p = v.profiles
+                return (
+                  <div key={i} className="flex items-center gap-3 px-2 py-2 rounded-2xl" style={{ background: 'var(--surface-1)' }}>
+                    <div className="w-9 h-9 rounded-full overflow-hidden flex items-center justify-center text-white font-bold text-sm" style={{ background: 'var(--grad-brand)' }}>
+                      {p?.avatar_url ? <img src={p.avatar_url} className="w-full h-full object-cover" alt="" /> : p?.username?.[0]?.toUpperCase()}
+                    </div>
+                    <span className="text-sm font-semibold">@{p?.username}</span>
+                  </div>
+                )
+              })}
+            </div>
           </div>
         </div>
       )}

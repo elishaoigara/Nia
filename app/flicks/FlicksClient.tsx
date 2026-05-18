@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import {
   Heart, MessageCircle, Share2, Volume2, VolumeX, Play,
-  X, Send, Loader2, ImagePlus,
+  X, Send, Loader2, ImagePlus, Eye,
 } from 'lucide-react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
@@ -63,34 +63,31 @@ function CommentSheet({
   const listRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
-  const TRENDING_GIFS = [
+  const TENOR_KEY = 'AIzaSyAyimkuYQYF_FXVALexPm_sspTcFcjHFS4'
+  const FALLBACK_GIFS = [
     { url: 'https://media.giphy.com/media/l0MYt5jPR6QX5pnqM/giphy.gif', preview: 'https://media.giphy.com/media/l0MYt5jPR6QX5pnqM/giphy_s.gif' },
     { url: 'https://media.giphy.com/media/3o7TKSjRrfIPjeiVyM/giphy.gif', preview: 'https://media.giphy.com/media/3o7TKSjRrfIPjeiVyM/giphy_s.gif' },
     { url: 'https://media.giphy.com/media/26ufdipQqU2lhNA4g/giphy.gif', preview: 'https://media.giphy.com/media/26ufdipQqU2lhNA4g/giphy_s.gif' },
     { url: 'https://media.giphy.com/media/l46CyJmS9KUbokzsI/giphy.gif', preview: 'https://media.giphy.com/media/l46CyJmS9KUbokzsI/giphy_s.gif' },
-    { url: 'https://media.giphy.com/media/xT9IgG50Lg7russbD6/giphy.gif', preview: 'https://media.giphy.com/media/xT9IgG50Lg7russbD6/giphy_s.gif' },
-    { url: 'https://media.giphy.com/media/l3q2K5jinAlChoCLS/giphy.gif', preview: 'https://media.giphy.com/media/l3q2K5jinAlChoCLS/giphy_s.gif' },
-    { url: 'https://media.giphy.com/media/26BRuo6sLetdllPAQ/giphy.gif', preview: 'https://media.giphy.com/media/26BRuo6sLetdllPAQ/giphy_s.gif' },
-    { url: 'https://media.giphy.com/media/3ohzdIuqJoo8QdKlnW/giphy.gif', preview: 'https://media.giphy.com/media/3ohzdIuqJoo8QdKlnW/giphy_s.gif' },
   ]
 
   async function searchGifs(q: string) {
     setGifQuery(q)
-    if (!q.trim()) { setGifResults(TRENDING_GIFS); return }
     setGifLoading(true)
     try {
-      const res = await fetch(
-        `https://api.giphy.com/v1/gifs/search?api_key=dc6zaTOxFJmzC&q=${encodeURIComponent(q)}&limit=12&rating=g`
-      )
+      const endpoint = q.trim()
+        ? `https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(q)}&key=${TENOR_KEY}&limit=12&media_filter=gif,tinygif`
+        : `https://tenor.googleapis.com/v2/featured?key=${TENOR_KEY}&limit=12&media_filter=gif,tinygif`
+      const res = await fetch(endpoint)
+      if (!res.ok) { setGifResults(FALLBACK_GIFS); return }
       const data = await res.json()
-      setGifResults(
-        data.data?.map((g: any) => ({
-          url: g.images.original.url,
-          preview: g.images.fixed_height_small.url,
-        })) ?? TRENDING_GIFS
-      )
+      const results = (data.results ?? []).map((r: any) => ({
+        url: r.media_formats?.gif?.url ?? r.media_formats?.tinygif?.url ?? '',
+        preview: r.media_formats?.tinygif?.url ?? r.media_formats?.gif?.url ?? '',
+      })).filter((g: any) => g.url)
+      setGifResults(results.length ? results : FALLBACK_GIFS)
     } catch {
-      setGifResults(TRENDING_GIFS)
+      setGifResults(FALLBACK_GIFS)
     } finally {
       setGifLoading(false)
     }
@@ -98,8 +95,8 @@ function CommentSheet({
 
   function openGifPicker() {
     setShowGifPicker(true)
-    setGifResults(TRENDING_GIFS)
     setGifQuery('')
+    searchGifs('')
   }
 
   function pickGif(url: string) {
@@ -568,12 +565,25 @@ function FlickItem({
   onOpenComments: (postId: string, count: number) => void
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
+  const viewTracked = useRef(false)
   const supabase = createClient()
   const [playing, setPlaying] = useState(false)
   const [liked, setLiked] = useState(video.likes?.some(l => l.user_id === currentUserId) ?? false)
   const [likeCount, setLikeCount] = useState(video.likes?.length ?? 0)
   const [progress, setProgress] = useState(0)
   const [commentCount, setCommentCount] = useState(video.comments?.length ?? 0)
+  const [viewCount, setViewCount] = useState(0)
+
+  // Track view once when this flick becomes the active card
+  useEffect(() => {
+    if (isActive && !viewTracked.current && currentUserId) {
+      viewTracked.current = true
+      supabase
+        .from('post_views')
+        .insert({ post_id: video.id, user_id: currentUserId })
+        .then(({ error }) => { if (!error) setViewCount(c => c + 1) })
+    }
+  }, [isActive])
 
   useEffect(() => {
     const v = videoRef.current
@@ -681,6 +691,14 @@ function FlickItem({
           </div>
           <span className="text-white text-xs font-bold">{commentCount}</span>
         </button>
+
+        {/* View count */}
+        <div className="flex flex-col items-center gap-1 opacity-80">
+          <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.1)' }}>
+            <Eye size={18} className="text-white" />
+          </div>
+          <span className="text-white text-xs font-bold">{viewCount > 0 ? viewCount.toLocaleString() : ''}</span>
+        </div>
 
         {/* Share */}
         <button onClick={share} className="flex flex-col items-center gap-1 active:scale-90 transition-transform">
