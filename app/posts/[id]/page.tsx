@@ -1,46 +1,164 @@
 import { createClient } from '@/lib/supabase/server'
-import { redirect, notFound } from 'next/navigation'
+import { redirect } from 'next/navigation'
+import CreatePost from '@/components/CreatePost'
 import PostCard from '@/components/PostCard'
-import Link from 'next/link'
-import { ArrowLeft } from 'lucide-react'
+import LoadMore from '@/components/LoadMore'
+import FeedTabs from '@/components/FeedTabs'
+import StoriesBar from '@/components/StoriesBar'
+import { Globe2 } from 'lucide-react'
+import { Suspense } from 'react'
+import { scorePosts } from '@/lib/feed-scorer'
+import type { UserContext, ScorerPost } from '@/lib/feed-scorer'
 
-export default async function PostDetailPage({
-  params,
+const PAGE_SIZE = 15
+const CANDIDATE_POOL = PAGE_SIZE * 6
+
+const BASE_SELECT = `
+  *,
+  profiles:user_id (id, username, avatar_url, country, city),
+  circles:circle_id (id, name, slug),
+  likes (user_id),
+  comments (id, profiles:user_id (id, username, avatar_url)),
+  reactions (user_id, emoji),
+  reposts (user_id),
+  poll:polls (*)
+`
+
+export default async function FeedPage({
+  searchParams,
 }: {
-  params: Promise<{ id: string }>
+  searchParams: Promise<{ page?: string; tab?: string }>
 }) {
-  const { id } = await params
-  const supabase = await createClient()
+  const { page, tab } = await searchParams
+  const currentPage = parseInt(page ?? '1')
+  const currentTab  = tab ?? 'africa'
+  const offset      = (currentPage - 1) * PAGE_SIZE
 
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: post } = await supabase
-    .from('posts')
-    .select(`
-      *,
-      profiles:user_id (id, username, avatar_url, university),
-      circles:circle_id (id, name, slug),
-      likes (user_id),
-      comments (id)
-    `)
-    .eq('id', id)
-    .single()
+  // Guard: if the user has no profile row yet (skipped / didn't finish
+  // onboarding) their auth.uid won't satisfy posts_user_id_fkey and any
+  // insert into `posts` will throw a FK violation.  Send them to onboarding
+  // so the profile row is created before they can post.
+  const { data: profileCheck } = await supabase
+    .from('profiles').select('id').eq('id', user.id).single()
+  if (!profileCheck) redirect('/onboarding')
 
-  if (!post) notFound()
+  // ── 1. Query hydration (parallel) ───────────────────────────────────────
+  const [profileRes, followsRes, blocksRes, mutesRes] = await Promise.all([
+    supabase.from('profiles').select('country, language').eq('id', user.id).single(),
+    supabase.from('follows').select('following_id').eq('follower_id', user.id),
+    supabase.from('blocks').select('blocked_id').eq('blocker_id', user.id),
+    supabase.from('mutes').select('muted_id').eq('muter_id', user.id),
+  ])
+
+  const myProfile = profileRes.data
+  const ctx: UserContext = {
+    userId:       user.id,
+    followingIds: new Set(((followsRes.data ?? []) as any[]).map((f: any) => f.following_id)),
+    blockedIds:   new Set(((blocksRes.data  ?? []) as any[]).map((b: any) => b.blocked_id)),
+    mutedIds:     new Set(((mutesRes.data   ?? []) as any[]).map((m: any) => m.muted_id)),
+    country:      myProfile?.country  ?? null,
+    language:     myProfile?.language ?? null,
+  }
+
+  // ── 2. Candidate fetch ───────────────────────────────────────────────────
+  let candidates: ScorerPost[] = []
+
+  if (currentTab === 'following') {
+    if (ctx.followingIds.size > 0) {
+      const { data, error } = await supabase
+        .from('posts').select(BASE_SELECT)
+        .in('user_id', [...ctx.followingIds])
+        .order('created_at', { ascending: false })
+        .limit(CANDIDATE_POOL)
+      if (error) console.error('[feed] following query failed:', error.message)
+      candidates = (data ?? []) as ScorerPost[]
+    }
+  } else if (currentTab === 'local' && myProfile?.country) {
+    const { data: countryUsers } = await supabase
+      .from('profiles').select('id').eq('country', myProfile.country)
+    const countryIds = (countryUsers ?? []).map((p: any) => p.id)
+    if (countryIds.length > 0) {
+      const { data, error } = await supabase
+        .from('posts').select(BASE_SELECT)
+        .in('user_id', countryIds)
+        .order('created_at', { ascending: false })
+        .limit(CANDIDATE_POOL)
+      if (error) console.error('[feed] local query failed:', error.message)
+      candidates = (data ?? []) as ScorerPost[]
+    }
+  } else {
+    const { data, error } = await supabase
+      .from('posts').select(BASE_SELECT)
+      .order('created_at', { ascending: false })
+      .limit(CANDIDATE_POOL)
+    if (error) console.error('[feed] africa query failed:', error.message)
+    candidates = (data ?? []) as ScorerPost[]
+  }
+
+  // ── 3. Score + rank ──────────────────────────────────────────────────────
+  const ranked = scorePosts(candidates, ctx)
+  const posts   = ranked.slice(offset, offset + PAGE_SIZE)
+  const hasMore = ranked.length > offset + PAGE_SIZE
+
+  // ── UI strings ───────────────────────────────────────────────────────────
+  const emptyMessages: Record<string, { emoji: string; title: string; body: string }> = {
+    africa:    { emoji: '🌍', title: 'Be the first to post!', body: 'Start the conversation for all of Africa.' },
+    local:     { emoji: '📍', title: 'Nothing local yet',     body: myProfile?.country ? `No posts from ${myProfile.country} yet. Be first!` : 'Set your country in your profile to see local posts.' },
+    following: { emoji: '👀', title: 'No posts yet',          body: 'Follow people to see their posts here.' },
+  }
+  const empty = emptyMessages[currentTab] ?? emptyMessages.africa
 
   return (
     <main className="max-w-xl mx-auto px-4 py-6 space-y-4">
-      <Link
-        href="/"
-        className="inline-flex items-center gap-2 text-sm font-semibold transition-all active:scale-95"
-        style={{ color: 'var(--text-secondary)' }}
-      >
-        <ArrowLeft size={16} />
-        Back to feed
-      </Link>
+      {/* Header */}
+      <div className="flex items-center gap-2 mb-1">
+        <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: 'var(--grad-brand)' }}>
+          <Globe2 size={16} className="text-white" />
+        </div>
+        <div>
+          <h1 className="font-extrabold text-xl leading-tight">Nia Feed</h1>
+          <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+            {currentTab === 'africa'    && 'Voices from across Africa 🌍'}
+            {currentTab === 'local'     && `From ${myProfile?.country ?? 'your country'} 📍`}
+            {currentTab === 'following' && 'People you follow 👥'}
+          </p>
+        </div>
+      </div>
 
-      <PostCard post={post} currentUserId={user.id} />
+      {/* Stories */}
+      <StoriesBar currentUserId={user.id} />
+
+      {/* Feed tabs */}
+      <Suspense fallback={null}>
+        <FeedTabs currentTab={currentTab} />
+      </Suspense>
+
+      {/* Compose */}
+      <div id="compose">
+        <CreatePost userId={user.id} />
+      </div>
+
+      {/* Empty state */}
+      {posts.length === 0 && (
+        <div className="card text-center py-20 space-y-3">
+          <div className="text-5xl">{empty.emoji}</div>
+          <p className="font-bold text-lg">{empty.title}</p>
+          <p className="text-sm" style={{ color: 'var(--text-tertiary)' }}>{empty.body}</p>
+        </div>
+      )}
+
+      {/* Posts */}
+      {(posts as ScorerPost[]).map((post: ScorerPost, i: number) => (
+        <div key={post.id} style={{ animationDelay: `${i * 0.04}s` }}>
+          <PostCard post={post as any} currentUserId={user.id} />
+        </div>
+      ))}
+
+      {hasMore && <LoadMore currentPage={currentPage} currentTab={currentTab} currentUserId={user.id} />}
     </main>
   )
 }

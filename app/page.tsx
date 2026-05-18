@@ -18,7 +18,7 @@ const BASE_SELECT = `
   profiles:user_id (id, username, avatar_url, country, city),
   circles:circle_id (id, name, slug),
   likes (user_id),
-  comments (id),
+  comments (id, profiles:user_id (id, username, avatar_url)),
   reactions (user_id, emoji),
   reposts (user_id),
   poll:polls (*)

@@ -1,5 +1,3 @@
-'use client'
-
 import {
   getFlag,
   getLanguageEmoji,
@@ -818,15 +816,21 @@ export default function PostCard({ post, currentUserId }: any) {
               </button>
             )}
 
-            {commentCount > 0 && commenterProfiles.length > 0 && (
+            {/* FIX: removed `&& commenterProfiles.length > 0` — comment count
+                now always shows when commentCount > 0. Commenter avatars are
+                shown only when profile data is available (populated by the
+                profiles join in the feed query). */}
+            {commentCount > 0 && (
               <button onClick={loadComments} className="flex items-center gap-1 active:scale-95 transition-transform">
-                <div className="flex -space-x-1.5">
-                  {commenterProfiles.map((p: any, i: number) => (
-                    <div key={i} className="w-5 h-5 rounded-full overflow-hidden border-2 flex items-center justify-center text-white text-[9px] font-bold" style={{ borderColor: 'var(--surface-0)', background: 'var(--grad-brand)' }}>
-                      {p?.avatar_url ? <img src={p.avatar_url} className="w-full h-full object-cover" alt="" /> : p?.username?.[0]?.toUpperCase()}
-                    </div>
-                  ))}
-                </div>
+                {commenterProfiles.length > 0 && (
+                  <div className="flex -space-x-1.5">
+                    {commenterProfiles.map((p: any, i: number) => (
+                      <div key={i} className="w-5 h-5 rounded-full overflow-hidden border-2 flex items-center justify-center text-white text-[9px] font-bold" style={{ borderColor: 'var(--surface-0)', background: 'var(--grad-brand)' }}>
+                        {p?.avatar_url ? <img src={p.avatar_url} className="w-full h-full object-cover" alt="" /> : p?.username?.[0]?.toUpperCase()}
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
                   {commentCount} comment{commentCount !== 1 ? 's' : ''}
                 </span>
