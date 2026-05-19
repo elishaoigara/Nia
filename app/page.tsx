@@ -5,7 +5,6 @@ import PostCard from '@/components/PostCard'
 import LoadMore from '@/components/LoadMore'
 import FeedTabs from '@/components/FeedTabs'
 import StoriesBar from '@/components/StoriesBar'
-import { Globe2 } from 'lucide-react'
 import { Suspense } from 'react'
 import { scorePosts } from '@/lib/feed-scorer'
 import type { UserContext, ScorerPost } from '@/lib/feed-scorer'
@@ -38,15 +37,10 @@ export default async function FeedPage({
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  // Guard: if the user has no profile row yet (skipped / didn't finish
-  // onboarding) their auth.uid won't satisfy posts_user_id_fkey and any
-  // insert into `posts` will throw a FK violation.  Send them to onboarding
-  // so the profile row is created before they can post.
   const { data: profileCheck } = await supabase
     .from('profiles').select('id').eq('id', user.id).single()
   if (!profileCheck) redirect('/onboarding')
 
-  // ── 1. Query hydration (parallel) ───────────────────────────────────────
   const [profileRes, followsRes, blocksRes, mutesRes] = await Promise.all([
     supabase.from('profiles').select('country, language').eq('id', user.id).single(),
     supabase.from('follows').select('following_id').eq('follower_id', user.id),
@@ -64,17 +58,15 @@ export default async function FeedPage({
     language:     myProfile?.language ?? null,
   }
 
-  // ── 2. Candidate fetch ───────────────────────────────────────────────────
   let candidates: ScorerPost[] = []
 
   if (currentTab === 'following') {
     if (ctx.followingIds.size > 0) {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('posts').select(BASE_SELECT)
         .in('user_id', [...ctx.followingIds])
         .order('created_at', { ascending: false })
         .limit(CANDIDATE_POOL)
-      if (error) console.error('[feed] following query failed:', error.message)
       candidates = (data ?? []) as ScorerPost[]
     }
   } else if (currentTab === 'local' && myProfile?.country) {
@@ -82,29 +74,25 @@ export default async function FeedPage({
       .from('profiles').select('id').eq('country', myProfile.country)
     const countryIds = (countryUsers ?? []).map((p: any) => p.id)
     if (countryIds.length > 0) {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('posts').select(BASE_SELECT)
         .in('user_id', countryIds)
         .order('created_at', { ascending: false })
         .limit(CANDIDATE_POOL)
-      if (error) console.error('[feed] local query failed:', error.message)
       candidates = (data ?? []) as ScorerPost[]
     }
   } else {
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('posts').select(BASE_SELECT)
       .order('created_at', { ascending: false })
       .limit(CANDIDATE_POOL)
-    if (error) console.error('[feed] africa query failed:', error.message)
     candidates = (data ?? []) as ScorerPost[]
   }
 
-  // ── 3. Score + rank ──────────────────────────────────────────────────────
   const ranked = scorePosts(candidates, ctx)
   const posts   = ranked.slice(offset, offset + PAGE_SIZE)
   const hasMore = ranked.length > offset + PAGE_SIZE
 
-  // ── UI strings ───────────────────────────────────────────────────────────
   const emptyMessages: Record<string, { emoji: string; title: string; body: string }> = {
     africa:    { emoji: '🌍', title: 'Be the first to post!', body: 'Start the conversation for all of Africa.' },
     local:     { emoji: '📍', title: 'Nothing local yet',     body: myProfile?.country ? `No posts from ${myProfile.country} yet. Be first!` : 'Set your country in your profile to see local posts.' },
@@ -113,50 +101,40 @@ export default async function FeedPage({
   const empty = emptyMessages[currentTab] ?? emptyMessages.africa
 
   return (
-    <main className="max-w-xl mx-auto px-4 py-6 space-y-4">
-      {/* Header */}
-      <div className="flex items-center gap-2 mb-1">
-        <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: 'var(--grad-brand)' }}>
-          <Globe2 size={16} className="text-white" />
-        </div>
-        <div>
-          <h1 className="font-extrabold text-xl leading-tight">Nia Feed</h1>
-          <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-            {currentTab === 'africa'    && 'Voices from across Africa 🌍'}
-            {currentTab === 'local'     && `From ${myProfile?.country ?? 'your country'} 📍`}
-            {currentTab === 'following' && 'People you follow 👥'}
-          </p>
-        </div>
-      </div>
-
-      {/* Stories */}
+    <main className="feed-container">
+      {/* Stories bar */}
       <StoriesBar currentUserId={user.id} />
 
-      {/* Feed tabs */}
+      {/* Feed tabs — sticky below top nav */}
       <Suspense fallback={null}>
         <FeedTabs currentTab={currentTab} />
       </Suspense>
 
-      {/* Compose */}
+      {/* Compose area */}
       <div id="compose">
         <CreatePost userId={user.id} />
       </div>
 
       {/* Empty state */}
       {posts.length === 0 && (
-        <div className="card text-center py-20 space-y-3">
-          <div className="text-5xl">{empty.emoji}</div>
-          <p className="font-bold text-lg">{empty.title}</p>
-          <p className="text-sm" style={{ color: 'var(--text-tertiary)' }}>{empty.body}</p>
+        <div style={{ textAlign: 'center', padding: '80px 24px' }}>
+          <div style={{ fontSize: 48, marginBottom: 12 }}>{empty.emoji}</div>
+          <p style={{ fontWeight: 700, fontSize: 17, marginBottom: 6 }}>{empty.title}</p>
+          <p style={{ fontSize: 14, color: 'var(--text-tertiary)' }}>{empty.body}</p>
         </div>
       )}
 
-      {/* Posts */}
-      {(posts as ScorerPost[]).map((post: ScorerPost, i: number) => (
-        <div key={post.id} style={{ animationDelay: `${i * 0.04}s` }}>
-          <PostCard post={post as any} currentUserId={user.id} />
-        </div>
-      ))}
+      {/* Posts — flush Threads-style list */}
+      <div>
+        {(posts as ScorerPost[]).map((post: ScorerPost, i: number) => (
+          <PostCard
+            key={post.id}
+            post={post as any}
+            currentUserId={user.id}
+            showThreadLine={i < posts.length - 1}
+          />
+        ))}
+      </div>
 
       {hasMore && <LoadMore currentPage={currentPage} currentTab={currentTab} currentUserId={user.id} />}
     </main>

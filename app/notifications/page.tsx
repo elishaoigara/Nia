@@ -1,23 +1,23 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
-import { Heart, MessageCircle, Users, Bell, UserPlus, Repeat2, Smile } from 'lucide-react'
+import { Heart, MessageCircle, Users, UserPlus, Repeat2, Smile } from 'lucide-react'
 import Link from 'next/link'
 
 function timeAgo(date: string) {
   const s = Math.floor((Date.now() - new Date(date).getTime()) / 1000)
-  if (s < 60) return `${s}s ago`
-  if (s < 3600) return `${Math.floor(s / 60)}m ago`
-  if (s < 86400) return `${Math.floor(s / 3600)}h ago`
-  return `${Math.floor(s / 86400)}d ago`
+  if (s < 60) return `${s}s`
+  if (s < 3600) return `${Math.floor(s / 60)}m`
+  if (s < 86400) return `${Math.floor(s / 3600)}h`
+  return `${Math.floor(s / 86400)}d`
 }
 
-const ICONS: Record<string, { icon: any; color: string; bg: string }> = {
-  like:        { icon: Heart,          color: '#ef4444',                    bg: 'rgba(239,68,68,0.1)' },
-  comment:     { icon: MessageCircle,  color: 'var(--nia-violet)',           bg: 'rgba(168,85,247,0.1)' },
-  circle_join: { icon: Users,          color: 'var(--nia-mint)',             bg: 'rgba(107,203,119,0.1)' },
-  follow:      { icon: UserPlus,       color: 'var(--nia-sky)',              bg: 'rgba(78,205,196,0.1)' },
-  repost:      { icon: Repeat2,        color: 'var(--nia-mint)',             bg: 'rgba(107,203,119,0.1)' },
-  reaction:    { icon: Smile,          color: '#f59e0b',                    bg: 'rgba(245,158,11,0.1)' },
+const ICONS: Record<string, { icon: any; color: string }> = {
+  like:        { icon: Heart,         color: '#e0245e'              },
+  comment:     { icon: MessageCircle, color: 'var(--nia-violet)'    },
+  circle_join: { icon: Users,         color: 'var(--nia-mint)'      },
+  follow:      { icon: UserPlus,      color: 'var(--nia-sky)'       },
+  repost:      { icon: Repeat2,       color: 'var(--nia-mint)'      },
+  reaction:    { icon: Smile,         color: '#f59e0b'              },
 }
 
 export default async function NotificationsPage() {
@@ -32,14 +32,12 @@ export default async function NotificationsPage() {
     .order('created_at', { ascending: false })
     .limit(60)
 
-  // Mark all as read
   await supabase
     .from('notifications')
     .update({ is_read: true })
     .eq('user_id', user.id)
     .eq('is_read', false)
 
-  // Group by date
   const today = new Date().toDateString()
   const yesterday = new Date(Date.now() - 86400000).toDateString()
 
@@ -58,74 +56,105 @@ export default async function NotificationsPage() {
   }
 
   return (
-    <main className="max-w-2xl mx-auto px-4 py-6 space-y-6">
-      <div className="flex items-center gap-3">
-        <div
-          className="w-10 h-10 rounded-2xl flex items-center justify-center"
-          style={{ background: 'linear-gradient(135deg,rgba(255,107,107,0.15),rgba(168,85,247,0.15))' }}
-        >
-          <Bell size={20} style={{ color: 'var(--nia-violet)' }} />
-        </div>
-        <div>
-          <h1 className="font-extrabold text-2xl">Notifications</h1>
-          <p className="text-sm" style={{ color: 'var(--text-tertiary)' }}>What's been happening</p>
-        </div>
+    <main className="feed-container">
+      {/* Header */}
+      <div style={{
+        padding: '16px 16px 12px',
+        borderBottom: '1px solid var(--divider)',
+      }}>
+        <h1 style={{ fontWeight: 800, fontSize: 22, letterSpacing: '-0.5px' }}>Activity</h1>
       </div>
 
       {!notifications || notifications.length === 0 ? (
-        <div className="card text-center py-20 space-y-3">
-          <div className="text-5xl">🔔</div>
-          <p className="font-bold text-lg">All quiet</p>
-          <p className="text-sm" style={{ color: 'var(--text-tertiary)' }}>We'll notify you when something happens</p>
+        <div style={{ textAlign: 'center', padding: '80px 24px' }}>
+          <div style={{ fontSize: 48, marginBottom: 12 }}>🔔</div>
+          <p style={{ fontWeight: 700, fontSize: 17 }}>All quiet</p>
+          <p style={{ fontSize: 14, color: 'var(--text-tertiary)', marginTop: 6 }}>
+            We'll notify you when something happens
+          </p>
         </div>
       ) : (
         Object.entries(grouped).map(([group, items]) => (
-          <div key={group} className="space-y-2">
-            <p className="text-xs font-bold px-1" style={{ color: 'var(--text-tertiary)' }}>{group}</p>
+          <div key={group}>
+            {/* Date group label */}
+            <div style={{
+              padding: '12px 16px 6px',
+              fontSize: 13, fontWeight: 700,
+              color: 'var(--text-tertiary)',
+              letterSpacing: '0.2px',
+            }}>
+              {group}
+            </div>
+
             {items.map((n: any) => {
-              const meta = ICONS[n.type] ?? { icon: Bell, color: 'var(--text-secondary)', bg: 'var(--surface-2)' }
+              const meta = ICONS[n.type] ?? { icon: null, color: 'var(--text-secondary)' }
               const Icon = meta.icon
               return (
                 <div
                   key={n.id}
-                  className="card flex items-start gap-3 p-4 transition-all"
-                  style={!n.is_read ? {
-                    borderLeft: '3px solid var(--nia-violet)',
-                    background: 'linear-gradient(135deg,rgba(168,85,247,0.04),transparent)',
-                  } : {}}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                    padding: '12px 16px',
+                    borderBottom: '1px solid var(--divider)',
+                    background: !n.is_read ? 'rgba(168,85,247,0.035)' : 'transparent',
+                    transition: 'background 0.15s',
+                  }}
                 >
-                  {/* Type icon */}
-                  <div className="w-9 h-9 rounded-2xl flex items-center justify-center shrink-0" style={{ background: meta.bg }}>
-                    <Icon
-                      size={16}
-                      style={{ color: meta.color }}
-                      fill={n.type === 'like' || n.type === 'reaction' ? meta.color : 'none'}
-                    />
+                  {/* Actor avatar with icon overlay */}
+                  <div style={{ position: 'relative', flexShrink: 0 }}>
+                    <Link href={`/profile/${n.actor?.id}`}>
+                      <div style={{
+                        width: 44, height: 44, borderRadius: '50%',
+                        overflow: 'hidden',
+                        background: 'var(--grad-brand)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        color: 'white', fontWeight: 700, fontSize: 15,
+                      }}>
+                        {n.actor?.avatar_url
+                          ? <img src={n.actor.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />
+                          : n.actor?.username?.[0]?.toUpperCase()
+                        }
+                      </div>
+                    </Link>
+                    {/* Type icon badge */}
+                    {Icon && (
+                      <div style={{
+                        position: 'absolute', bottom: -2, right: -2,
+                        width: 20, height: 20, borderRadius: '50%',
+                        background: meta.color,
+                        border: '2px solid var(--surface-0)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}>
+                        <Icon size={10} color="white" fill={n.type === 'like' ? 'white' : 'none'} />
+                      </div>
+                    )}
                   </div>
 
-                  {/* Actor avatar */}
-                  <Link href={`/profile/${n.actor?.id}`} className="shrink-0">
-                    <div className="w-9 h-9 rounded-full overflow-hidden flex items-center justify-center text-white font-bold text-xs" style={{ background: 'var(--grad-brand)' }}>
-                      {n.actor?.avatar_url
-                        ? <img src={n.actor.avatar_url} className="w-full h-full object-cover" alt="" />
-                        : n.actor?.username?.[0]?.toUpperCase()
-                      }
-                    </div>
-                  </Link>
-
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm">
-                      <Link href={`/profile/${n.actor?.id}`} className="font-bold hover:underline">
-                        @{n.actor?.username}
+                  {/* Text */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontSize: 14, lineHeight: 1.4 }}>
+                      <Link
+                        href={`/profile/${n.actor?.id}`}
+                        style={{ fontWeight: 700, textDecoration: 'none', color: 'var(--text-primary)' }}
+                      >
+                        {n.actor?.username}
                       </Link>
                       {' '}
                       <span style={{ color: 'var(--text-secondary)' }}>{n.message}</span>
                     </p>
-                    <p className="text-xs mt-0.5" style={{ color: 'var(--text-tertiary)' }}>{timeAgo(n.created_at)}</p>
+                    <p style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2 }}>
+                      {timeAgo(n.created_at)}
+                    </p>
                   </div>
 
+                  {/* Unread dot */}
                   {!n.is_read && (
-                    <div className="w-2 h-2 rounded-full mt-1.5 shrink-0" style={{ background: 'var(--nia-violet)' }} />
+                    <div style={{
+                      width: 8, height: 8, borderRadius: '50%',
+                      background: 'var(--nia-violet)', flexShrink: 0,
+                    }} />
                   )}
                 </div>
               )

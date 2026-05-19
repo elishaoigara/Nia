@@ -1,11 +1,11 @@
 @import "tailwindcss";
 
 /* ── Custom breakpoints (Tailwind v4) ─────────────────── */
-@theme {
-  --breakpoint-xs: 480px;
-}
+/* Move breakpoint variable into :root to avoid unknown at-rule errors */
+/* --breakpoint-xs is used by Tailwind config and CSS utilities */
+/* Declared here so it's available as a CSS custom property */
 
-/* ── Nia Design System ────────────────────────────────── */
+/* ── Nia Design System — Threads-inspired ────────────── */
 :root {
   --nia-coral:  #FF6B6B;
   --nia-orange: #FF8E53;
@@ -32,6 +32,7 @@
 
   --border:        rgba(0,0,0,0.07);
   --border-strong: rgba(0,0,0,0.12);
+  --divider:       rgba(0,0,0,0.06);
 
   --shadow-sm: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
   --shadow-md: 0 4px 12px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.04);
@@ -39,48 +40,54 @@
 
   --nav-bottom: 72px;
   --nav-top:    56px;
+
+  /* Threads-specific */
+  --thread-line: rgba(0,0,0,0.12);
+  --post-gap: 0px;
 }
 
 /* ── Dark — manual toggle (.dark class on <html>) ──────── */
 :root.dark {
-  --surface-0: #0c0c0f;
-  --surface-1: #111115;
-  --surface-2: #18181d;
-  --surface-3: #27272e;
+  --surface-0: #101010;
+  --surface-1: #181818;
+  --surface-2: #1e1e1e;
+  --surface-3: #2a2a2a;
 
-  --text-primary:   #fafafa;
-  --text-secondary: #a1a1aa;
-  --text-tertiary:  #52525b;
+  --text-primary:   #f5f5f5;
+  --text-secondary: #a0a0a0;
+  --text-tertiary:  #555;
 
-  --border:        rgba(255,255,255,0.07);
-  --border-strong: rgba(255,255,255,0.12);
+  --border:        rgba(255,255,255,0.06);
+  --border-strong: rgba(255,255,255,0.10);
+  --divider:       rgba(255,255,255,0.06);
 
   --shadow-sm: 0 1px 3px rgba(0,0,0,0.30);
   --shadow-md: 0 4px 12px rgba(0,0,0,0.40);
   --shadow-lg: 0 12px 32px rgba(0,0,0,0.50);
+
+  --thread-line: rgba(255,255,255,0.10);
 }
 
-/*
- * Dark — system preference.
- * :not(.light) prevents this from overriding a forced-light choice.
- */
 @media (prefers-color-scheme: dark) {
   :root:not(.light) {
-    --surface-0: #0c0c0f;
-    --surface-1: #111115;
-    --surface-2: #18181d;
-    --surface-3: #27272e;
+    --surface-0: #101010;
+    --surface-1: #181818;
+    --surface-2: #1e1e1e;
+    --surface-3: #2a2a2a;
 
-    --text-primary:   #fafafa;
-    --text-secondary: #a1a1aa;
-    --text-tertiary:  #52525b;
+    --text-primary:   #f5f5f5;
+    --text-secondary: #a0a0a0;
+    --text-tertiary:  #555;
 
-    --border:        rgba(255,255,255,0.07);
-    --border-strong: rgba(255,255,255,0.12);
+    --border:        rgba(255,255,255,0.06);
+    --border-strong: rgba(255,255,255,0.10);
+    --divider:       rgba(255,255,255,0.06);
 
     --shadow-sm: 0 1px 3px rgba(0,0,0,0.30);
     --shadow-md: 0 4px 12px rgba(0,0,0,0.40);
     --shadow-lg: 0 12px 32px rgba(0,0,0,0.50);
+
+    --thread-line: rgba(255,255,255,0.10);
   }
 }
 
@@ -92,7 +99,6 @@
 
 html {
   scroll-behavior: smooth;
-  /* Smooth theme crossfade */
   transition: background-color 0.2s ease, color 0.2s ease;
 }
 
@@ -104,7 +110,6 @@ body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   overscroll-behavior-y: none;
-  /* Prevent iOS text-size adjustment on rotation */
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
 }
@@ -122,14 +127,13 @@ body {
   background-clip: text;
 }
 
-/* ── Card ─────────────────────────────────────────────── */
+/* ── OLD card — kept for backward compat ─────────────────── */
 .card {
   background: var(--surface-1);
   border: 1px solid var(--border);
   border-radius: 20px;
   box-shadow: var(--shadow-sm);
 }
-
 .card-hover {
   transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
 }
@@ -137,6 +141,420 @@ body {
   transform: translateY(-1px);
   box-shadow: var(--shadow-md);
 }
+
+/* ── THREADS-STYLE POST ───────────────────────────────── */
+/* Posts are flush rows, separated by a subtle divider, no cards */
+.thread-post {
+  background: var(--surface-0);
+  padding: 16px 16px 0;
+  position: relative;
+}
+.thread-post + .thread-post {
+  border-top: 1px solid var(--divider);
+}
+
+/* Left column: avatar + vertical thread line */
+.thread-left {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 44px;
+  flex-shrink: 0;
+}
+.thread-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+  position: relative;
+}
+/* Gradient ring on avatar (Nia branding) */
+.thread-avatar::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: 50%;
+  background: var(--grad-brand);
+  z-index: -1;
+}
+.thread-avatar img,
+.thread-avatar .thread-avatar-fallback {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+  border: 2px solid var(--surface-0);
+}
+.thread-avatar-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--grad-brand);
+  color: white;
+  font-weight: 700;
+  font-size: 15px;
+  border: 2px solid var(--surface-0);
+}
+
+/* Vertical connecting line between posts (Threads signature) */
+.thread-line {
+  width: 2px;
+  flex: 1;
+  background: var(--thread-line);
+  margin-top: 8px;
+  border-radius: 2px;
+  min-height: 20px;
+}
+/* Small reply avatars at bottom of thread line */
+.thread-replies-preview {
+  display: flex;
+  margin-top: 8px;
+  position: relative;
+  height: 20px;
+  width: 36px;
+}
+.thread-replies-preview .reply-avatar {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1.5px solid var(--surface-0);
+  overflow: hidden;
+  position: absolute;
+  background: var(--grad-brand);
+  font-size: 7px;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+}
+.thread-replies-preview .reply-avatar:nth-child(1) { left: 0;  top: 0;  width: 14px; height: 14px; }
+.thread-replies-preview .reply-avatar:nth-child(2) { right: 0; bottom: 0; width: 12px; height: 12px; }
+
+/* Right column: content */
+.thread-right {
+  flex: 1;
+  min-width: 0;
+  padding-bottom: 14px;
+  padding-left: 12px;
+}
+
+/* Username row */
+.thread-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 2px;
+}
+.thread-username {
+  font-weight: 700;
+  font-size: 14.5px;
+  color: var(--text-primary);
+  text-decoration: none;
+}
+.thread-username:hover { text-decoration: underline; }
+.thread-time {
+  font-size: 12.5px;
+  color: var(--text-tertiary);
+  margin-left: 6px;
+  flex-shrink: 0;
+}
+
+/* Post body text */
+.thread-body {
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--text-primary);
+  margin-bottom: 10px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Media attachments */
+.thread-media {
+  border-radius: 14px;
+  overflow: hidden;
+  margin-bottom: 10px;
+  border: 1px solid var(--border);
+}
+.thread-media img,
+.thread-media video {
+  width: 100%;
+  display: block;
+  max-height: 480px;
+  object-fit: cover;
+}
+
+/* Action bar (like, comment, repost, share) */
+.thread-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-top: 6px;
+  margin-left: -8px;
+}
+.thread-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px;
+  border-radius: 50%;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 13px;
+  transition: color 0.15s, transform 0.15s;
+  min-width: 36px;
+  min-height: 36px;
+  justify-content: center;
+}
+.thread-action-btn:hover { color: var(--text-primary); transform: scale(1.1); }
+.thread-action-btn.liked { color: #e0245e; }
+.thread-action-btn.liked svg { fill: #e0245e; }
+.thread-action-btn.reposted { color: var(--nia-mint); }
+.thread-action-count {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  min-width: 16px;
+}
+
+/* ── COMMENTS (Threads-style inline thread) ───────────── */
+.comment-thread {
+  padding: 0;
+}
+.comment-row {
+  display: flex;
+  gap: 0;
+  padding: 12px 16px 0;
+  position: relative;
+}
+.comment-left {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 36px;
+  flex-shrink: 0;
+}
+.comment-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--grad-brand);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: 700;
+  font-size: 12px;
+}
+.comment-avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+.comment-line {
+  width: 2px;
+  flex: 1;
+  background: var(--thread-line);
+  margin-top: 6px;
+  border-radius: 2px;
+  min-height: 14px;
+}
+.comment-right {
+  flex: 1;
+  min-width: 0;
+  padding-left: 10px;
+  padding-bottom: 12px;
+}
+.comment-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 2px;
+}
+.comment-username {
+  font-weight: 700;
+  font-size: 13.5px;
+  color: var(--text-primary);
+}
+.comment-time {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+.comment-body {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-primary);
+  word-break: break-word;
+}
+.comment-actions {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  margin-top: 4px;
+  margin-left: -6px;
+}
+.comment-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 6px;
+  border-radius: 50%;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  transition: color 0.15s, transform 0.15s;
+}
+.comment-action-btn:hover { color: var(--text-primary); transform: scale(1.1); }
+.comment-action-btn.liked { color: #e0245e; }
+.comment-action-btn.liked svg { fill: #e0245e; }
+
+/* Reply input at bottom */
+.reply-input-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--divider);
+  background: var(--surface-0);
+  position: sticky;
+  bottom: 0;
+}
+.reply-input {
+  flex: 1;
+  background: var(--surface-2);
+  border: none;
+  border-radius: 24px;
+  padding: 10px 16px;
+  font-size: 14px;
+  color: var(--text-primary);
+  outline: none;
+  font-family: inherit;
+}
+.reply-input::placeholder { color: var(--text-tertiary); }
+.reply-input:focus {
+  background: var(--surface-3);
+}
+
+/* ── STAT BAR (likes, replies count below post) ─────── */
+.thread-stat-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-bottom: 14px;
+}
+.thread-stat-text {
+  font-size: 13px;
+  color: var(--text-tertiary);
+}
+
+/* ── Feed top: Nia wordmark header ───────────────────── */
+.feed-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px 0 8px;
+  border-bottom: 1px solid var(--divider);
+}
+.feed-wordmark {
+  font-size: 24px;
+  font-weight: 900;
+  letter-spacing: -1px;
+}
+
+/* ── Feed tabs (minimal pill style) ─────────────────── */
+.feed-tabs {
+  display: flex;
+  justify-content: center;
+  gap: 0;
+  border-bottom: 1px solid var(--divider);
+  background: var(--surface-0);
+  position: sticky;
+  top: var(--nav-top);
+  z-index: 10;
+}
+.feed-tab {
+  flex: 1;
+  max-width: 180px;
+  padding: 12px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  text-align: center;
+  cursor: pointer;
+  border: none;
+  background: none;
+  border-bottom: 2px solid transparent;
+  transition: color 0.15s, border-color 0.15s;
+  text-decoration: none;
+  display: block;
+}
+.feed-tab:hover { color: var(--text-primary); }
+.feed-tab.active {
+  color: var(--text-primary);
+  border-bottom-color: var(--text-primary);
+}
+
+/* ── Compose box (Threads-style) ─────────────────────── */
+.compose-row {
+  display: flex;
+  gap: 0;
+  padding: 16px 16px 12px;
+  border-bottom: 1px solid var(--divider);
+}
+.compose-left {
+  width: 44px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.compose-right {
+  flex: 1;
+  min-width: 0;
+  padding-left: 12px;
+}
+.compose-input {
+  width: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-size: 16px;
+  color: var(--text-primary);
+  font-family: inherit;
+  resize: none;
+  line-height: 1.5;
+  min-height: 44px;
+  padding: 0;
+}
+.compose-input::placeholder { color: var(--text-tertiary); }
+.compose-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 16px 12px;
+  border-bottom: 1px solid var(--divider);
+}
+.compose-attach-btns {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: -6px;
+}
+.compose-attach-btn {
+  padding: 8px;
+  border: none;
+  background: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  border-radius: 50%;
+  transition: color 0.15s;
+  display: flex;
+}
+.compose-attach-btn:hover { color: var(--text-primary); }
 
 /* ── Buttons ──────────────────────────────────────────── */
 .btn-primary {
@@ -148,7 +566,6 @@ body {
   font-weight: 600;
   font-size: 15px;
   cursor: pointer;
-  /* Apple HIG minimum tap target */
   min-height: 44px;
   display: inline-flex;
   align-items: center;
@@ -159,6 +576,25 @@ body {
 .btn-primary:hover   { opacity: 0.92; transform: translateY(-1px); }
 .btn-primary:active  { transform: scale(0.97); }
 .btn-primary:disabled { opacity: 0.4; transform: none; pointer-events: none; }
+
+/* Threads-style post button */
+.btn-post {
+  background: var(--text-primary);
+  color: var(--surface-0);
+  border: none;
+  border-radius: 10px;
+  padding: 8px 18px;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.15s;
+}
+.btn-post:hover { opacity: 0.80; }
+.btn-post:disabled { opacity: 0.3; pointer-events: none; }
 
 .btn-ghost {
   background: var(--surface-2);
@@ -178,22 +614,39 @@ body {
 .btn-ghost:hover  { background: var(--surface-3); transform: translateY(-1px); }
 .btn-ghost:active { transform: scale(0.97); }
 
+/* ── Follow button (Threads-style outline) ─────────── */
+.btn-follow {
+  border: 1px solid var(--border-strong);
+  background: none;
+  color: var(--text-primary);
+  border-radius: 10px;
+  padding: 6px 16px;
+  font-weight: 600;
+  font-size: 13.5px;
+  cursor: pointer;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  transition: background 0.15s;
+}
+.btn-follow:hover { background: var(--surface-2); }
+.btn-follow.following {
+  border-color: transparent;
+  background: var(--surface-2);
+  color: var(--text-secondary);
+}
+
 /* ── Inputs ───────────────────────────────────────────── */
 .input {
   background: var(--surface-2);
   border: 1.5px solid transparent;
   border-radius: 14px;
   padding: 12px 16px;
-  /*
-   * 16px prevents iOS Safari from auto-zooming into the field on focus.
-   * This is the single most important mobile input fix.
-   */
   font-size: 16px;
   color: var(--text-primary);
   width: 100%;
   outline: none;
   transition: border-color 0.2s, background 0.2s;
-  /* Inherit font so it matches body */
   font-family: inherit;
 }
 .input::placeholder { color: var(--text-tertiary); }
@@ -266,3 +719,47 @@ body {
   -ms-overflow-style: none;
 }
 .no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* ── Hashtag / mention highlights ──────────────────── */
+.tag-highlight {
+  color: var(--nia-violet);
+  font-weight: 500;
+}
+
+/* ── More menu dots ─────────────────────────────────── */
+.more-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+  transition: background 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+.more-btn:hover {
+  background: var(--surface-2);
+  color: var(--text-primary);
+}
+
+/* ── Feed max-width container ─────────────────────── */
+.feed-container {
+  max-width: 620px;
+  margin: 0 auto;
+}
+
+/* ── Verified badge ──────────────────────────────── */
+.verified-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--grad-brand);
+  flex-shrink: 0;
+}

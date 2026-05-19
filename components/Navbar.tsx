@@ -2,179 +2,146 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import {
-  Home, Compass, Users, User, Search, Bell, Plus, Clapperboard,
-} from 'lucide-react'
-import NotificationBell from '@/components/NotificationBell'
-import ThemeToggle from '@/components/ThemeToggle'
-import { createClient } from '@/lib/supabase/client'
-import { useEffect, useState } from 'react'
+import { Home, Search, PlusSquare, Heart, User, Edit3 } from 'lucide-react'
 
-const links = [
-  { href: '/',         icon: Home,         label: 'Home',    mobileHide: false },
-  { href: '/discover', icon: Compass,      label: 'Discover',mobileHide: false },
-  { href: '/flicks',   icon: Clapperboard, label: 'Flicks',  mobileHide: false },
-  { href: '/search',   icon: Search,       label: 'Search',  mobileHide: false },
-  { href: '/circles',  icon: Users,        label: 'Circles', mobileHide: true  },
-  { href: '/profile',  icon: User,         label: 'Me',      mobileHide: false },
+const NAV_ITEMS = [
+  { href: '/',              icon: Home,       label: 'Home'     },
+  { href: '/discover',      icon: Search,     label: 'Search'   },
+  { href: '/?compose=1',   icon: PlusSquare, label: 'New post' },
+  { href: '/notifications', icon: Heart,      label: 'Activity' },
+  { href: '/profile',       icon: User,       label: 'Profile'  },
 ]
 
 export default function Navbar() {
   const pathname = usePathname()
-  const supabase = createClient()
-  const [userId, setUserId] = useState<string | null>(null)
-
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) =>
-      setUserId(user?.id ?? null)
-    )
-  }, [])
-
-  if (pathname === '/flicks') return null
 
   return (
     <>
-      {/* ── Top bar ───────────────────────────────────────── */}
-      <header
-        className="fixed top-0 left-0 right-0 z-50 h-14 flex items-center justify-between px-4 sm:left-60"
-        style={{
-          background: 'var(--surface-0)',
-          borderBottom: '1px solid var(--border)',
-          backdropFilter: 'blur(12px)',
-          WebkitBackdropFilter: 'blur(12px)',
-        }}
-      >
-        <Link href="/" className="flex items-center gap-2 select-none" aria-label="Nia home">
-          <div
-            className="w-8 h-8 rounded-xl flex items-center justify-center text-white font-black text-base"
-            style={{ background: 'var(--grad-brand)' }}
-          >
-            N
-          </div>
-          <span className="font-extrabold text-lg tracking-tight hidden sm:block">Nia</span>
+      {/* Top bar — desktop sidebar, mobile top */}
+      <header style={{
+        position: 'fixed',
+        top: 0, left: 0, right: 0,
+        height: 'var(--nav-top)',
+        background: 'var(--surface-0)',
+        borderBottom: '1px solid var(--divider)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 50,
+        backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)',
+      }}>
+        {/* Nia wordmark */}
+        <Link href="/" style={{ textDecoration: 'none' }}>
+          <span className="feed-wordmark text-grad">Nia</span>
         </Link>
 
-        <div className="flex items-center gap-1.5">
-          <ThemeToggle />
-          {userId && <NotificationBell userId={userId} />}
-          <Link
-            href="/#compose"
-            className="flex items-center gap-1.5 text-white text-sm font-semibold px-3.5 py-2 rounded-xl transition-all active:scale-95"
-            style={{
-              background: 'var(--grad-brand)',
-              boxShadow: '0 4px 14px rgba(168,85,247,0.35)',
-              minHeight: '36px',
-            }}
-          >
-            <Plus size={16} strokeWidth={2.5} />
-            <span className="hidden xs:inline">Post</span>
-          </Link>
-        </div>
+        {/* Desktop compose shortcut */}
+        <button
+          style={{
+            position: 'absolute', right: 16,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            width: 36, height: 36, borderRadius: 10,
+            border: '1px solid var(--border)',
+            background: 'none', cursor: 'pointer',
+            color: 'var(--text-secondary)',
+          }}
+          aria-label="New post"
+        >
+          <Edit3 size={17} strokeWidth={2} />
+        </button>
       </header>
 
-      {/* ── Bottom nav (mobile) ───────────────────────────── */}
-      <nav
-        className="fixed bottom-0 left-0 right-0 z-50 flex items-center justify-around sm:hidden"
-        style={{
-          background: 'var(--surface-0)',
-          borderTop: '1px solid var(--border)',
-          height: 'var(--nav-bottom)',
-          paddingBottom: 'env(safe-area-inset-bottom, 0px)',
-        }}
-      >
-        {links.map(({ href, icon: Icon, label, mobileHide }) => {
-          const active = pathname === href
+      {/* Desktop left sidebar (sm+) */}
+      <nav style={{
+        position: 'fixed',
+        top: 'var(--nav-top)',
+        left: 0,
+        bottom: 0,
+        width: 240,
+        padding: '12px 8px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 2,
+        zIndex: 40,
+      }} className="hidden sm:flex">
+        {NAV_ITEMS.map(item => {
+          const Icon = item.icon
+          const active = item.href === '/'
+            ? pathname === '/'
+            : pathname.startsWith(item.href)
           return (
             <Link
-              key={href}
-              href={href}
-              aria-label={label}
-              className={`flex flex-col items-center justify-center gap-0.5 flex-1 py-1 rounded-2xl transition-all active:scale-90 ${mobileHide ? 'hidden' : ''}`}
-              style={{ minHeight: '48px' }}
+              key={item.href}
+              href={item.href}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 16,
+                padding: '10px 12px',
+                borderRadius: 12,
+                textDecoration: 'none',
+                color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
+                fontWeight: active ? 700 : 400,
+                fontSize: 16,
+                transition: 'background 0.15s, color 0.15s',
+                background: active ? 'var(--surface-2)' : 'transparent',
+              }}
             >
-              <div
-                className="w-9 h-9 flex items-center justify-center rounded-xl transition-all"
-                style={active ? { background: 'linear-gradient(135deg,rgba(255,107,107,0.15),rgba(168,85,247,0.15))' } : {}}
-              >
-                <Icon
-                  size={20}
-                  strokeWidth={active ? 2.5 : 1.8}
-                  style={{ color: active ? 'var(--nia-violet)' : 'var(--text-tertiary)' }}
-                />
-              </div>
-              <span
-                className="text-[9px] font-semibold"
-                style={{ color: active ? 'var(--nia-violet)' : 'var(--text-tertiary)' }}
-              >
-                {label}
-              </span>
+              <Icon
+                size={26}
+                strokeWidth={active ? 2.5 : 1.75}
+              />
+              <span style={{ letterSpacing: '-0.2px' }}>{item.label}</span>
             </Link>
           )
         })}
       </nav>
 
-      {/* ── Side nav (desktop) ────────────────────────────── */}
-      <aside
-        className="hidden sm:flex fixed left-0 top-0 h-full flex-col px-3 pt-16 pb-6"
-        style={{
-          background: 'var(--surface-0)',
-          borderRight: '1px solid var(--border)',
-          width: '240px',
-        }}
-      >
-        <div className="flex items-center gap-2.5 px-3 mb-6">
-          <div
-            className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-black text-lg"
-            style={{ background: 'var(--grad-brand)' }}
-          >
-            N
-          </div>
-          <span className="font-extrabold text-xl tracking-tight">Nia</span>
-        </div>
-
-        <div className="flex-1 space-y-1 overflow-y-auto">
-          {links.map(({ href, icon: Icon, label }) => {
-            const active = pathname === href
-            return (
-              <Link
-                key={href}
-                href={href}
-                className="flex items-center gap-3 px-3 py-2.5 rounded-2xl text-sm font-semibold transition-all"
-                style={
-                  active
-                    ? { background: 'linear-gradient(135deg,rgba(255,107,107,0.12),rgba(168,85,247,0.12))', color: 'var(--nia-violet)' }
-                    : { color: 'var(--text-secondary)' }
-                }
-              >
-                <Icon size={20} strokeWidth={active ? 2.5 : 1.8} />
-                {label}
-                {active && (
-                  <div className="ml-auto w-1.5 h-1.5 rounded-full" style={{ background: 'var(--nia-violet)' }} />
-                )}
-              </Link>
-            )
-          })}
-
-          {userId && (
+      {/* Mobile bottom tab bar */}
+      <nav style={{
+        position: 'fixed',
+        bottom: 0, left: 0, right: 0,
+        height: 'var(--nav-bottom)',
+        background: 'var(--surface-0)',
+        borderTop: '1px solid var(--divider)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-around',
+        padding: '0 8px',
+        zIndex: 50,
+        backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)',
+      }} className="flex sm:hidden">
+        {NAV_ITEMS.map(item => {
+          const Icon = item.icon
+          const active = item.href === '/'
+            ? pathname === '/'
+            : pathname.startsWith(item.href)
+          return (
             <Link
-              href="/notifications"
-              className="flex items-center gap-3 px-3 py-2.5 rounded-2xl text-sm font-semibold transition-all"
-              style={
-                pathname === '/notifications'
-                  ? { background: 'linear-gradient(135deg,rgba(255,107,107,0.12),rgba(168,85,247,0.12))', color: 'var(--nia-violet)' }
-                  : { color: 'var(--text-secondary)' }
-              }
+              key={item.href}
+              href={item.href}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '8px 12px',
+                borderRadius: 12,
+                color: active ? 'var(--text-primary)' : 'var(--text-tertiary)',
+                textDecoration: 'none',
+              }}
+              aria-label={item.label}
             >
-              <Bell size={20} strokeWidth={pathname === '/notifications' ? 2.5 : 1.8} />
-              Notifications
+              <Icon
+                size={26}
+                strokeWidth={active ? 2.5 : 1.75}
+              />
             </Link>
-          )}
-        </div>
-
-        <Link href="/#compose" className="btn-primary flex items-center justify-center gap-2 mt-4 w-full">
-          <Plus size={18} strokeWidth={2.5} /> New Post
-        </Link>
-      </aside>
+          )
+        })}
+      </nav>
     </>
   )
 }
