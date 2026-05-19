@@ -763,3 +763,73 @@ body {
   background: var(--grad-brand);
   flex-shrink: 0;
 }
+
+/* ── Responsive Layout: Desktop sidebar + Mobile bottom nav ── */
+
+/* Desktop sidebar: visible on sm+ (640px+) */
+.desktop-sidebar {
+  display: none;
+  position: fixed;
+  top: var(--nav-top);
+  left: 0;
+  bottom: 0;
+  width: 240px;
+  padding: 12px 8px;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 40;
+}
+
+/* Mobile bottom nav: visible below 640px */
+.mobile-bottom-nav {
+  display: flex;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: var(--nav-bottom);
+  background: var(--surface-0);
+  border-top: 1px solid var(--divider);
+  align-items: center;
+  justify-content: space-around;
+  padding: 0 8px;
+  z-index: 50;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+@media (min-width: 640px) {
+  .desktop-sidebar {
+    display: flex !important;
+  }
+  .mobile-bottom-nav {
+    display: none !important;
+  }
+  /* Shift main content right on desktop to make room for sidebar */
+  main {
+    padding-left: 240px !important;
+    padding-bottom: 0 !important;
+  }
+}
+
+@media (max-width: 639px) {
+  .desktop-sidebar {
+    display: none !important;
+  }
+  .mobile-bottom-nav {
+    display: flex !important;
+  }
+  main {
+    padding-left: 0 !important;
+    padding-bottom: calc(var(--nav-bottom) + 8px) !important;
+  }
+  /* Ensure feed fills full width on mobile */
+  .feed-container {
+    max-width: 100%;
+  }
+  /* Make thread media full-width on mobile */
+  .thread-media img,
+  .thread-media video {
+    max-height: 360px;
+  }
+}

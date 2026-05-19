@@ -52,19 +52,8 @@ export default function Navbar() {
         </button>
       </header>
 
-      {/* Desktop left sidebar (sm+) */}
-      <nav style={{
-        position: 'fixed',
-        top: 'var(--nav-top)',
-        left: 0,
-        bottom: 0,
-        width: 240,
-        padding: '12px 8px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 2,
-        zIndex: 40,
-      }} className="hidden sm:flex">
+      {/* Desktop left sidebar (sm+) — hidden on mobile via CSS */}
+      <nav className="desktop-sidebar">
         {NAV_ITEMS.map(item => {
           const Icon = item.icon
           const active = item.href === '/'
@@ -98,21 +87,8 @@ export default function Navbar() {
         })}
       </nav>
 
-      {/* Mobile bottom tab bar */}
-      <nav style={{
-        position: 'fixed',
-        bottom: 0, left: 0, right: 0,
-        height: 'var(--nav-bottom)',
-        background: 'var(--surface-0)',
-        borderTop: '1px solid var(--divider)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-around',
-        padding: '0 8px',
-        zIndex: 50,
-        backdropFilter: 'blur(12px)',
-        WebkitBackdropFilter: 'blur(12px)',
-      }} className="flex sm:hidden">
+      {/* Mobile bottom tab bar — hidden on desktop via CSS */}
+      <nav className="mobile-bottom-nav">
         {NAV_ITEMS.map(item => {
           const Icon = item.icon
           const active = item.href === '/'

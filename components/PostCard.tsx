@@ -134,12 +134,62 @@ export default function PostCard({ post, currentUserId, showThreadLine = false }
             />
           )}
 
-          {/* Media */}
-          {post.image_url && (
-            <div className="thread-media">
-              <img src={post.image_url} alt="Post media" loading="lazy" />
-            </div>
-          )}
+          {/* Media — supports media_url/media_type/extra_media (new) + legacy image_url */}
+          {(post.media_url || post.image_url) && (() => {
+            const primaryUrl  = post.media_url  || post.image_url
+            const primaryType = post.media_type || 'image'
+            const extraMedia: { url: string; type: string }[] = post.extra_media ?? []
+            const allMedia = [{ url: primaryUrl, type: primaryType }, ...extraMedia]
+
+            if (allMedia.length === 1) {
+              const m = allMedia[0]
+              return (
+                <div className="thread-media">
+                  {m.type === 'video' ? (
+                    <video
+                      src={m.url}
+                      controls
+                      playsInline
+                      preload="metadata"
+                      style={{ width: '100%', maxHeight: 480, objectFit: 'contain', background: '#000' }}
+                    />
+                  ) : m.type === 'audio' ? (
+                    <audio src={m.url} controls style={{ width: '100%', padding: '12px 0' }} />
+                  ) : (
+                    <img src={m.url} alt="Post media" loading="lazy" />
+                  )}
+                </div>
+              )
+            }
+
+            return (
+              <div style={{
+                display: 'grid', gridTemplateColumns: '1fr 1fr',
+                gap: 3, borderRadius: 14, overflow: 'hidden',
+                marginBottom: 10, border: '1px solid var(--border)',
+              }}>
+                {allMedia.map((m, i) => (
+                  <div key={i} style={{ position: 'relative', aspectRatio: '1/1', background: '#000', overflow: 'hidden' }}>
+                    {m.type === 'video' ? (
+                      <>
+                        <video src={m.url} preload="metadata" muted playsInline
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        <div style={{
+                          position: 'absolute', bottom: 6, left: 6,
+                          background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)',
+                          borderRadius: 20, padding: '2px 8px',
+                          fontSize: 11, fontWeight: 700, color: '#fff',
+                        }}>▶ Video</div>
+                      </>
+                    ) : (
+                      <img src={m.url} alt={`Media ${i + 1}`} loading="lazy"
+                        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                    )}
+                  </div>
+                ))}
+              </div>
+            )
+          })()}
 
           {/* Poll */}
           {post.poll && (
