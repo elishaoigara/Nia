@@ -7,39 +7,75 @@ import Link from 'next/link'
 
 interface Props { params: Promise<{ id: string }> }
 
+// Full query including comment likes (works if comment_likes table exists)
+const FULL_SELECT = `
+  *,
+  profiles:user_id (id, username, avatar_url, country),
+  circles:circle_id (id, name, slug),
+  likes (user_id),
+  reposts (user_id),
+  reactions (user_id, emoji),
+  comments (
+    id, content, created_at, user_id,
+    profiles:user_id (id, username, avatar_url),
+    likes:comment_likes (user_id)
+  )
+`
+
+// Fallback query without comment_likes (safe if that table is missing)
+const SAFE_SELECT = `
+  *,
+  profiles:user_id (id, username, avatar_url, country),
+  circles:circle_id (id, name, slug),
+  likes (user_id),
+  reposts (user_id),
+  reactions (user_id, emoji),
+  comments (
+    id, content, created_at, user_id,
+    profiles:user_id (id, username, avatar_url)
+  )
+`
+
 export default async function PostDetailPage({ params }: Props) {
   const { id } = await params
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: post } = await supabase
+  // Try full query; fall back to safe query if comment_likes table is missing
+  let post: any = null
+
+  const { data: fullData, error: fullError } = await supabase
     .from('posts')
-    .select(`
-      *,
-      profiles:user_id (id, username, avatar_url, country),
-      circles:circle_id (id, name, slug),
-      likes (user_id),
-      reposts (user_id),
-      reactions (user_id, emoji),
-      comments (
-        id, content, created_at, user_id,
-        profiles:user_id (id, username, avatar_url),
-        likes:comment_likes (user_id)
-      )
-    `)
+    .select(FULL_SELECT)
     .eq('id', id)
     .single()
 
+  if (!fullError) {
+    post = fullData
+  } else {
+    // PGRST116 = "no rows returned" → post genuinely doesn't exist
+    if (fullError.code === 'PGRST116') notFound()
+
+    // Any other error (e.g. missing relation) → retry without comment_likes
+    const { data: safeData, error: safeError } = await supabase
+      .from('posts')
+      .select(SAFE_SELECT)
+      .eq('id', id)
+      .single()
+
+    if (safeError || !safeData) notFound()
+    post = safeData
+  }
+
   if (!post) notFound()
 
-  // Sort comments oldest first
-  const comments = (post.comments ?? []).sort(
+  const comments = ((post.comments ?? []) as any[]).sort(
     (a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
   )
 
   return (
-    <main className="feed-container" style={{ minHeight: '100vh' }}>
+    <div style={{ minHeight: '100vh' }}>
       {/* Back nav */}
       <div style={{
         display: 'flex',
@@ -47,41 +83,60 @@ export default async function PostDetailPage({ params }: Props) {
         gap: 12,
         padding: '14px 16px',
         borderBottom: '1px solid var(--divider)',
+        maxWidth: 620,
+        margin: '0 auto',
       }}>
         <Link href="/" style={{
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          width: 34, height: 34, borderRadius: '50%',
+          width: 36, height: 36, borderRadius: '50%',
           color: 'var(--text-primary)',
           textDecoration: 'none',
-          transition: 'background 0.15s',
+          background: 'var(--surface-2)',
         }}>
           <ArrowLeft size={20} strokeWidth={2} />
         </Link>
         <span style={{ fontWeight: 700, fontSize: 16 }}>Thread</span>
       </div>
 
-      {/* Original post — no thread line, full display */}
-      <PostCard post={post} currentUserId={user.id} showThreadLine={comments.length > 0} />
+      <div className="feed-container">
+        {/* Original post */}
+        <PostCard post={post} currentUserId={user.id} showThreadLine={comments.length > 0} />
 
-      {/* Comments thread */}
-      {comments.length > 0 && (
-        <CommentThread comments={comments} currentUserId={user.id} postId={post.id} />
-      )}
+        {/* Comments thread */}
+        {comments.length > 0 && (
+          <CommentThread comments={comments} currentUserId={user.id} postId={post.id} />
+        )}
 
-      {/* Reply input pinned at bottom */}
-      <div style={{ height: 80 }} /> {/* spacer for sticky bar */}
-      <div className="reply-input-bar" style={{ position: 'fixed', bottom: 'var(--nav-bottom)', left: 0, right: 0, maxWidth: 620, margin: '0 auto' }}>
-        <div style={{
-          width: 28, height: 28, borderRadius: '50%',
-          background: 'var(--grad-brand)',
-          flexShrink: 0,
-        }} />
-        <input
-          className="reply-input"
-          placeholder="Reply to thread…"
-          readOnly
-        />
+        <div style={{ height: 100 }} />
       </div>
-    </main>
+
+      {/* Reply bar — above bottom nav on mobile, stays at bottom on desktop */}
+      <div
+        className="reply-input-bar"
+        style={{
+          position: 'fixed',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          paddingBottom: 'env(safe-area-inset-bottom)',
+        }}
+      >
+        <div style={{
+          maxWidth: 620,
+          margin: '0 auto',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          padding: '0 16px',
+          width: '100%',
+        }}>
+          <div style={{
+            width: 28, height: 28, borderRadius: '50%',
+            background: 'var(--grad-brand)', flexShrink: 0,
+          }} />
+          <input className="reply-input" placeholder="Reply to thread…" readOnly />
+        </div>
+      </div>
+    </div>
   )
 }

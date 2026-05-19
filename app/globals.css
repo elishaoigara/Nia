@@ -422,6 +422,14 @@ body {
   background: var(--surface-0);
   position: sticky;
   bottom: 0;
+  /* On mobile, lift above the bottom nav tab bar */
+  margin-bottom: 0;
+}
+
+@media (max-width: 639px) {
+  .reply-input-bar {
+    bottom: var(--nav-bottom) !important;
+  }
 }
 .reply-input {
   flex: 1;
