@@ -38,10 +38,7 @@ export default async function FeedPage({
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  // Guard: if the user has no profile row yet (skipped / didn't finish
-  // onboarding) their auth.uid won't satisfy posts_user_id_fkey and any
-  // insert into `posts` will throw a FK violation.  Send them to onboarding
-  // so the profile row is created before they can post.
+  // Guard: if the user has no profile row yet
   const { data: profileCheck } = await supabase
     .from('profiles').select('id').eq('id', user.id).single()
   if (!profileCheck) redirect('/onboarding')
@@ -113,7 +110,8 @@ export default async function FeedPage({
   const empty = emptyMessages[currentTab] ?? emptyMessages.africa
 
   return (
-    <main className="max-w-xl mx-auto px-4 py-6 space-y-4">
+    /* Changed from <main className="max-w-xl mx-auto..."> to a fluid max-w-2xl container */
+    <div className="w-full max-w-2xl space-y-4 py-2">
       {/* Header */}
       <div className="flex items-center gap-2 mb-1">
         <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: 'var(--grad-brand)' }}>
@@ -159,6 +157,6 @@ export default async function FeedPage({
       ))}
 
       {hasMore && <LoadMore currentPage={currentPage} currentTab={currentTab} currentUserId={user.id} />}
-    </main>
+    </div>
   )
 }
