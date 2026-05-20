@@ -62,7 +62,7 @@ export default async function MessagesIndexPage() {
   }
 
   return (
-    <main className="max-w-xl mx-auto py-2">
+    <main className="w-full max-w-xl px-0 py-2">
       {/* Header */}
       <div className="px-4 py-4 flex items-center gap-3" style={{ borderBottom: '1px solid var(--border)' }}>
         <div

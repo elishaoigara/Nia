@@ -70,7 +70,7 @@ export default function VerifyPage() {
   }
 
   return (
-    <main className="max-w-md mx-auto px-4 py-6 space-y-6">
+    <main className="w-full max-w-md px-4 py-6 space-y-6">
       {/* Header */}
       <div className="flex items-center gap-3">
         <Link

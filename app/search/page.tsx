@@ -26,7 +26,7 @@ export default function SearchPage() {
   }
 
   return (
-    <main className="max-w-2xl mx-auto px-4 py-6 space-y-6">
+    <main className="w-full max-w-2xl px-4 py-6 space-y-6">
       <div>
         <h1 className="font-extrabold text-2xl mb-1">Search 🔍</h1>
         <p className="text-sm" style={{ color: 'var(--text-tertiary)' }}>Find people and circles on Nia</p>
@@ -63,7 +63,7 @@ export default function SearchPage() {
                   </div>
                   {users.map(u => (
                     <Link key={u.id} href={`/profile/${u.id}`} className="card card-hover flex items-center gap-3 p-4">
-                      <div className="avatar-ring flex-shrink-0">
+                      <div className="avatar-ring shrink-0">
                         <div className="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center text-white font-bold text-sm" style={{ background: 'var(--grad-brand)' }}>
                           {u.avatar_url ? <img src={u.avatar_url} className="w-full h-full object-cover" alt="" /> : u.username?.[0]?.toUpperCase()}
                         </div>
@@ -73,7 +73,7 @@ export default function SearchPage() {
                         <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>@{u.username}</p>
                       </div>
                       {u.university && (
-                        <div className="flex items-center gap-1 text-xs flex-shrink-0" style={{ color: 'var(--text-tertiary)' }}>
+                        <div className="flex items-center gap-1 text-xs shrink-0" style={{ color: 'var(--text-tertiary)' }}>
                           <MapPin size={12} />
                           <span className="hidden sm:block">{u.university.split(' ').slice(0,2).join(' ')}</span>
                         </div>
@@ -91,12 +91,12 @@ export default function SearchPage() {
                   </div>
                   {circles.map(c => (
                     <Link key={c.id} href={`/circles/${c.slug}`} className="card card-hover flex items-center gap-3 p-4">
-                      <div className="w-10 h-10 rounded-2xl flex items-center justify-center text-xl flex-shrink-0" style={{ background: 'rgba(255,107,107,0.1)' }}>🌀</div>
+                      <div className="w-10 h-10 rounded-2xl flex items-center justify-center text-xl shrink-0" style={{ background: 'rgba(255,107,107,0.1)' }}>🌀</div>
                       <div className="flex-1 min-w-0">
                         <p className="font-bold text-sm">{c.name}</p>
                         {c.description && <p className="text-xs truncate" style={{ color: 'var(--text-tertiary)' }}>{c.description}</p>}
                       </div>
-                      <div className="flex items-center gap-1 text-xs flex-shrink-0" style={{ color: 'var(--text-tertiary)' }}>
+                      <div className="flex items-center gap-1 text-xs shrink-0" style={{ color: 'var(--text-tertiary)' }}>
                         <Users size={12} />
                         <span>{c.circle_members?.length ?? 0}</span>
                       </div>

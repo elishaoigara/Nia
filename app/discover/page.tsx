@@ -119,7 +119,7 @@ export default async function DiscoverPage() {
       .limit(8)
 
   return (
-    <main className="max-w-2xl mx-auto px-4 py-6 space-y-8">
+    <main className="w-full max-w-2xl px-4 py-6 space-y-8">
       {/* Header */}
       <div className="flex items-center gap-3">
         <div

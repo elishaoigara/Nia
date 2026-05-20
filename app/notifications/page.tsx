@@ -1,166 +1,145 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
-import { Heart, MessageCircle, Users, UserPlus, Repeat2, Smile } from 'lucide-react'
 import Link from 'next/link'
+import { MessageSquare, ArrowRight } from 'lucide-react'
 
-function timeAgo(date: string) {
-  const s = Math.floor((Date.now() - new Date(date).getTime()) / 1000)
-  if (s < 60) return `${s}s`
-  if (s < 3600) return `${Math.floor(s / 60)}m`
-  if (s < 86400) return `${Math.floor(s / 3600)}h`
-  return `${Math.floor(s / 86400)}d`
-}
-
-const ICONS: Record<string, { icon: any; color: string }> = {
-  like:        { icon: Heart,         color: '#e0245e'              },
-  comment:     { icon: MessageCircle, color: 'var(--nia-violet)'    },
-  circle_join: { icon: Users,         color: 'var(--nia-mint)'      },
-  follow:      { icon: UserPlus,      color: 'var(--nia-sky)'       },
-  repost:      { icon: Repeat2,       color: 'var(--nia-mint)'      },
-  reaction:    { icon: Smile,         color: '#f59e0b'              },
-}
-
-export default async function NotificationsPage() {
+export default async function MessagesIndexPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: notifications } = await supabase
-    .from('notifications')
-    .select('*, actor:actor_id (id, username, avatar_url)')
-    .eq('user_id', user.id)
+  // Fetch recent conversations: last message per unique partner
+  const { data: sent } = await supabase
+    .from('messages')
+    .select('recipient_id, created_at, content, profiles:recipient_id (id, username, avatar_url, full_name)')
+    .eq('sender_id', user.id)
     .order('created_at', { ascending: false })
-    .limit(60)
 
-  await supabase
-    .from('notifications')
-    .update({ is_read: true })
-    .eq('user_id', user.id)
-    .eq('is_read', false)
+  const { data: received } = await supabase
+    .from('messages')
+    .select('sender_id, created_at, content, is_read, profiles:sender_id (id, username, avatar_url, full_name)')
+    .eq('recipient_id', user.id)
+    .order('created_at', { ascending: false })
 
-  const today = new Date().toDateString()
-  const yesterday = new Date(Date.now() - 86400000).toDateString()
+  // Build a map of partner → most recent message
+  const convoMap = new Map<string, { profile: any; lastMsg: string; time: string; unread: boolean }>()
 
-  function dateGroup(created_at: string) {
-    const d = new Date(created_at).toDateString()
-    if (d === today) return 'Today'
-    if (d === yesterday) return 'Yesterday'
-    return new Date(created_at).toLocaleDateString('en', { month: 'long', day: 'numeric' })
+  for (const m of sent ?? []) {
+    const pid = m.recipient_id
+    if (!convoMap.has(pid)) {
+      convoMap.set(pid, {
+        profile: (m as any).profiles,
+        lastMsg: m.content ?? '📎 Media',
+        time: m.created_at,
+        unread: false,
+      })
+    }
   }
 
-  const grouped: Record<string, any[]> = {}
-  for (const n of notifications ?? []) {
-    const g = dateGroup(n.created_at)
-    if (!grouped[g]) grouped[g] = []
-    grouped[g].push(n)
+  for (const m of received ?? []) {
+    const pid = m.sender_id
+    const existing = convoMap.get(pid)
+    if (!existing || new Date(m.created_at) > new Date(existing.time)) {
+      convoMap.set(pid, {
+        profile: (m as any).profiles,
+        lastMsg: m.content ?? '📎 Media',
+        time: m.created_at,
+        unread: !(m as any).is_read,
+      })
+    }
+  }
+
+  const convos = Array.from(convoMap.values()).sort(
+    (a, b) => new Date(b.time).getTime() - new Date(a.time).getTime()
+  )
+
+  function timeAgo(date: string) {
+    const s = Math.floor((Date.now() - new Date(date).getTime()) / 1000)
+    if (s < 60) return `${s}s`
+    if (s < 3600) return `${Math.floor(s / 60)}m`
+    if (s < 86400) return `${Math.floor(s / 3600)}h`
+    return new Date(date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
   }
 
   return (
-    <main className="feed-container">
+    <main className="w-full max-w-xl px-0 py-2">
       {/* Header */}
-      <div style={{
-        padding: '16px 16px 12px',
-        borderBottom: '1px solid var(--divider)',
-      }}>
-        <h1 style={{ fontWeight: 800, fontSize: 22, letterSpacing: '-0.5px' }}>Activity</h1>
+      <div className="px-4 py-4 flex items-center gap-3" style={{ borderBottom: '1px solid var(--border)' }}>
+        <div
+          className="w-9 h-9 rounded-xl flex items-center justify-center"
+          style={{ background: 'var(--grad-brand)' }}
+        >
+          <MessageSquare size={17} className="text-white" />
+        </div>
+        <div>
+          <h1 className="font-extrabold text-xl leading-tight">Messages</h1>
+          <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>Your direct conversations</p>
+        </div>
       </div>
 
-      {!notifications || notifications.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '80px 24px' }}>
-          <div style={{ fontSize: 48, marginBottom: 12 }}>🔔</div>
-          <p style={{ fontWeight: 700, fontSize: 17 }}>All quiet</p>
-          <p style={{ fontSize: 14, color: 'var(--text-tertiary)', marginTop: 6 }}>
-            We'll notify you when something happens
+      {/* Conversation list */}
+      {convos.length === 0 ? (
+        <div className="text-center py-24 space-y-3 px-6">
+          <div className="text-5xl">💬</div>
+          <p className="font-bold text-lg">No messages yet</p>
+          <p className="text-sm" style={{ color: 'var(--text-tertiary)' }}>
+            Visit someone's profile and tap <strong>Message</strong> to start a conversation.
           </p>
+          <Link
+            href="/discover"
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl text-sm font-semibold text-white mt-2"
+            style={{ background: 'var(--grad-brand)' }}
+          >
+            Find people <ArrowRight size={15} />
+          </Link>
         </div>
       ) : (
-        Object.entries(grouped).map(([group, items]) => (
-          <div key={group}>
-            {/* Date group label */}
-            <div style={{
-              padding: '12px 16px 6px',
-              fontSize: 13, fontWeight: 700,
-              color: 'var(--text-tertiary)',
-              letterSpacing: '0.2px',
-            }}>
-              {group}
-            </div>
-
-            {items.map((n: any) => {
-              const meta = ICONS[n.type] ?? { icon: null, color: 'var(--text-secondary)' }
-              const Icon = meta.icon
-              return (
+        <div>
+          {convos.map(({ profile, lastMsg, time, unread }) => {
+            if (!profile) return null
+            return (
+              <Link
+                key={profile.id}
+                href={`/messages/${profile.id}`}
+                className="flex items-center gap-3 px-4 py-3.5 transition-colors"
+                style={{
+                  borderBottom: '1px solid var(--border)',
+                  background: unread ? 'rgba(168,85,247,0.03)' : 'transparent',
+                }}
+              >
+                {/* Avatar */}
                 <div
-                  key={n.id}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 12,
-                    padding: '12px 16px',
-                    borderBottom: '1px solid var(--divider)',
-                    background: !n.is_read ? 'rgba(168,85,247,0.035)' : 'transparent',
-                    transition: 'background 0.15s',
-                  }}
+                  className="w-12 h-12 rounded-full overflow-hidden flex items-center justify-center text-white font-bold text-base shrink-0"
+                  style={{ background: 'var(--grad-brand)' }}
                 >
-                  {/* Actor avatar with icon overlay */}
-                  <div style={{ position: 'relative', flexShrink: 0 }}>
-                    <Link href={`/profile/${n.actor?.id}`}>
-                      <div style={{
-                        width: 44, height: 44, borderRadius: '50%',
-                        overflow: 'hidden',
-                        background: 'var(--grad-brand)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        color: 'white', fontWeight: 700, fontSize: 15,
-                      }}>
-                        {n.actor?.avatar_url
-                          ? <img src={n.actor.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />
-                          : n.actor?.username?.[0]?.toUpperCase()
-                        }
-                      </div>
-                    </Link>
-                    {/* Type icon badge */}
-                    {Icon && (
-                      <div style={{
-                        position: 'absolute', bottom: -2, right: -2,
-                        width: 20, height: 20, borderRadius: '50%',
-                        background: meta.color,
-                        border: '2px solid var(--surface-0)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      }}>
-                        <Icon size={10} color="white" fill={n.type === 'like' ? 'white' : 'none'} />
-                      </div>
+                  {profile.avatar_url
+                    ? <img src={profile.avatar_url} alt="" className="w-full h-full object-cover" />
+                    : profile.username?.[0]?.toUpperCase()}
+                </div>
+
+                {/* Content */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="font-bold text-sm truncate" style={{ color: 'var(--text-primary)' }}>
+                      {profile.full_name || `@${profile.username}`}
+                    </p>
+                    <span className="text-xs shrink-0" style={{ color: 'var(--text-tertiary)' }}>
+                      {timeAgo(time)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2 mt-0.5">
+                    <p className="text-sm truncate" style={{ color: unread ? 'var(--text-primary)' : 'var(--text-tertiary)', fontWeight: unread ? 600 : 400 }}>
+                      {lastMsg}
+                    </p>
+                    {unread && (
+                      <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: 'var(--nia-violet)' }} />
                     )}
                   </div>
-
-                  {/* Text */}
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontSize: 14, lineHeight: 1.4 }}>
-                      <Link
-                        href={`/profile/${n.actor?.id}`}
-                        style={{ fontWeight: 700, textDecoration: 'none', color: 'var(--text-primary)' }}
-                      >
-                        {n.actor?.username}
-                      </Link>
-                      {' '}
-                      <span style={{ color: 'var(--text-secondary)' }}>{n.message}</span>
-                    </p>
-                    <p style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2 }}>
-                      {timeAgo(n.created_at)}
-                    </p>
-                  </div>
-
-                  {/* Unread dot */}
-                  {!n.is_read && (
-                    <div style={{
-                      width: 8, height: 8, borderRadius: '50%',
-                      background: 'var(--nia-violet)', flexShrink: 0,
-                    }} />
-                  )}
                 </div>
-              )
-            })}
-          </div>
-        ))
+              </Link>
+            )
+          })}
+        </div>
       )}
     </main>
   )

@@ -23,7 +23,7 @@ export default async function CirclePage({ params }: Props) {
   const isMember = circle.circle_members?.some((m: any) => m.user_id === user.id)
 
   return (
-    <main className="max-w-xl mx-auto px-4 py-6 space-y-5">
+    <main className="w-full max-w-xl px-4 py-6 space-y-5">
       {/* Back */}
       <Link href="/circles" className="inline-flex items-center gap-2 text-sm font-semibold transition-all active:scale-95" style={{ color: 'var(--text-secondary)' }}>
         <ArrowLeft size={16} /> All Circles
@@ -42,7 +42,7 @@ export default async function CirclePage({ params }: Props) {
                 </span>
               )}
             </div>
-            <div className="flex items-center gap-1.5 flex-shrink-0 mt-1" style={{ color: 'var(--text-tertiary)' }}>
+            <div className="flex items-center gap-1.5 shrink-0 mt-1" style={{ color: 'var(--text-tertiary)' }}>
               <Users size={15} />
               <span className="text-sm font-semibold">{circle.circle_members?.length ?? 0}</span>
             </div>

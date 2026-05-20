@@ -72,7 +72,7 @@ export default function EditProfilePage() {
   )
 
   return (
-    <main className="max-w-xl mx-auto px-4 py-6">
+    <main className="w-full max-w-xl px-4 py-6">
       <div className="flex items-center gap-3 mb-6">
         <button onClick={() => router.back()} className="w-10 h-10 flex items-center justify-center rounded-2xl transition-all active:scale-90" style={{ background: 'var(--surface-2)', color: 'var(--text-secondary)' }}>
           <ArrowLeft size={20} />

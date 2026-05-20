@@ -261,7 +261,7 @@ export default function DirectMessagePage() {
   }
 
   return (
-    <div className="dm-page flex flex-col" style={{ height: 'calc(100dvh - var(--nav-top))', maxWidth: '42rem', margin: '0 auto', marginTop: 'var(--nav-top)' }}>
+    <div className="dm-page flex flex-col" style={{ height: 'calc(100dvh - var(--nav-top))', maxWidth: '42rem', marginTop: 'var(--nav-top)' }}>
 
       {/* HEADER */}
       <header
