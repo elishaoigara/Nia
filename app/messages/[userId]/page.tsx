@@ -108,7 +108,12 @@ export default function DirectMessagePage() {
     const ext = file.name.split('.').pop()
     const path = `${currentUserId}/${Date.now()}.${ext}`
     const { error } = await supabase.storage.from('message-media').upload(path, file)
-    if (error) { setUploading(false); return null }
+    if (error) {
+      console.error('[uploadFile] Storage error:', error.message)
+      setUploading(false)
+      alert(`Upload failed: ${error.message}\n\nMake sure the "message-media" storage bucket exists in Supabase with public access enabled.`)
+      return null
+    }
     const { data } = supabase.storage.from('message-media').getPublicUrl(path)
     setUploading(false)
     return { url: data.publicUrl, name: file.name }
@@ -117,8 +122,10 @@ export default function DirectMessagePage() {
   async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>, type: string) {
     const file = e.target.files?.[0]
     if (!file || !currentUserId) return
+    // Detect GIFs so they render without object-cover (preserves animation)
+    const detectedType = file.type === 'image/gif' ? 'gif' : type
     const result = await uploadFile(file)
-    if (result) await sendMessage(null, result.url, type, result.name)
+    if (result) await sendMessage(null, result.url, detectedType, result.name)
     e.target.value = ''
   }
 
@@ -216,10 +223,13 @@ export default function DirectMessagePage() {
               }
             >
               {msg.media_url && msg.media_type === 'image' && (
-                <img src={msg.media_url} alt="" className="max-w-65 max-h-80 object-cover" />
+                <img src={msg.media_url} alt="" className="block w-full max-h-80 object-cover" style={{ maxWidth: '16.25rem' }} />
+              )}
+              {msg.media_url && msg.media_type === 'gif' && (
+                <img src={msg.media_url} alt="GIF" className="block w-full max-h-80" style={{ maxWidth: '16.25rem', objectFit: 'contain' }} />
               )}
               {msg.media_url && msg.media_type === 'video' && (
-                <video src={msg.media_url} controls className="max-w-65 max-h-80" />
+                <video src={msg.media_url} controls className="block w-full max-h-80" style={{ maxWidth: '16.25rem' }} />
               )}
               {msg.media_url && msg.media_type === 'audio' && (
                 <div className="flex items-center gap-3 px-4 py-3 min-w-45">
