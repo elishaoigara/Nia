@@ -385,7 +385,7 @@ function CommentRow({ comment, currentUserId, onDelete }: { comment: any; curren
 }
 
 // ── Main PostCard ─────────────────────────────────────────
-export default function PostCard({ post, currentUserId }: any) {
+export default function PostCard({ post, currentUserId, defaultShowComments }: any) {
   const supabase = createClient()
   const router = useRouter()
 
@@ -397,9 +397,9 @@ export default function PostCard({ post, currentUserId }: any) {
   const [localReactions, setLocalReactions] = useState<Record<string, number>>(reactionCounts)
   const [showReactionPicker, setShowReactionPicker] = useState(false)
   const [showReactorModal, setShowReactorModal] = useState(false)
-  const [showComments, setShowComments] = useState(false)
+  const [showComments, setShowComments] = useState(!!defaultShowComments)
   const [comments, setComments] = useState<any[]>([])
-  const [loadingComments, setLoadingComments] = useState(false)
+  const [loadingComments, setLoadingComments] = useState(!!defaultShowComments)
   const [posting, setPosting] = useState(false)
   const [translation, setTranslation] = useState<string | null>(null)
   const [translating, setTranslating] = useState(false)
@@ -438,6 +438,16 @@ export default function PostCard({ post, currentUserId }: any) {
     if (el) observer.observe(el)
     return () => observer.disconnect()
   }, [])
+
+  // Auto-load comments on detail page
+  useEffect(() => {
+    if (!defaultShowComments) return
+    supabase.from('comments')
+      .select('*, profiles:user_id (id, username, avatar_url)')
+      .eq('post_id', post.id)
+      .order('created_at', { ascending: true })
+      .then(({ data }) => { setComments(data ?? []); setLoadingComments(false) })
+  }, [defaultShowComments, post.id])
 
   async function saveEdit() {
     if (!editContent.trim()) return
@@ -714,11 +724,15 @@ export default function PostCard({ post, currentUserId }: any) {
               {totalReactions > 0 && <span className="text-xs">{totalReactions}</span>}
             </button>
             {showReactionPicker && (
-              <div className="absolute bottom-full mb-2 left-0 z-20 flex gap-1 p-2 rounded-2xl anim-pop" style={{ background: 'var(--surface-0)', boxShadow: 'var(--shadow-lg)', border: '1px solid var(--border)' }}>
-                {REACTIONS.map(emoji => (
-                  <button key={emoji} onClick={() => handleReaction(emoji)} className="w-9 h-9 flex items-center justify-center rounded-xl text-lg transition-all hover:scale-125 active:scale-95" style={activeReaction === emoji ? { background: 'var(--surface-2)' } : {}}>{emoji}</button>
-                ))}
-              </div>
+              <>
+                {/* Invisible overlay to close picker on outside tap */}
+                <div className="fixed inset-0 z-30" onClick={() => setShowReactionPicker(false)} />
+                <div className="absolute bottom-full mb-2 left-0 z-40 flex gap-1 p-2 rounded-2xl anim-pop" style={{ background: 'var(--surface-0)', boxShadow: 'var(--shadow-lg)', border: '1px solid var(--border)' }}>
+                  {REACTIONS.map(emoji => (
+                    <button key={emoji} onClick={() => handleReaction(emoji)} className="w-9 h-9 flex items-center justify-center rounded-xl text-lg transition-all hover:scale-125 active:scale-95" style={activeReaction === emoji ? { background: 'var(--surface-2)' } : {}}>{emoji}</button>
+                  ))}
+                </div>
+              </>
             )}
           </div>
 
@@ -770,11 +784,17 @@ export default function PostCard({ post, currentUserId }: any) {
         {showComments && (
           <div style={{ borderTop: '1px solid var(--border)' }}>
             {comments.length > 0 && (
-              <div className="px-4 pt-3 space-y-3 max-h-72 overflow-y-auto">
+              <div className="px-4 pt-3 space-y-3 comment-scroll" style={{ overscrollBehavior: 'contain' }}>
                 {comments.map(comment => <CommentRow key={comment.id} comment={comment} currentUserId={currentUserId} onDelete={id => { setComments(prev => prev.filter(c => c.id !== id)); setCommentCount((c: number) => Math.max(c - 1, 0)) }} />)}
               </div>
             )}
-            <CommentInput onSubmit={submitComment} posting={posting} />
+            {!currentUserId ? (
+              <div className="px-4 py-3 text-center text-sm" style={{ color: 'var(--text-tertiary)' }}>
+                <a href="/login" style={{ color: 'var(--nia-violet)', fontWeight: 600 }}>Sign in</a> to reply
+              </div>
+            ) : (
+              <CommentInput onSubmit={submitComment} posting={posting} />
+            )}
           </div>
         )}
       </article>

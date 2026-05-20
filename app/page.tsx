@@ -113,7 +113,7 @@ export default async function FeedPage({
   const empty = emptyMessages[currentTab] ?? emptyMessages.africa
 
   return (
-    <main className="max-w-xl px-4 py-6 space-y-4">
+    <main className="max-w-xl mx-auto px-4 py-6 space-y-4">
       {/* Header */}
       <div className="flex items-center gap-2 mb-1">
         <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: 'var(--grad-brand)' }}>

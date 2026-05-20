@@ -30,8 +30,7 @@ export default function SignupPage() {
       email: email.trim(),
       password,
       options: {
-        // ✅ Fixed: Use environment variable instead of window.location.origin
-        emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback`,
+      emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL ?? window.location.origin}/auth/callback`,
       },
     })
 

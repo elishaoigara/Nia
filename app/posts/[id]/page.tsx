@@ -75,7 +75,7 @@ export default async function PostDetailPage({ params }: Props) {
   )
 
   return (
-    <div style={{ minHeight: '100vh' }}>
+    <div style={{ minHeight: '100vh', paddingBottom: 32 }}>
       {/* Back nav */}
       <div style={{
         display: 'flex',
@@ -99,7 +99,7 @@ export default async function PostDetailPage({ params }: Props) {
       </div>
 
       <div className="feed-container">
-        {/* Original post */}
+        {/* Original post — comment section auto-opens on detail view */}
         <PostCard post={post} currentUserId={user.id} showThreadLine={comments.length > 0} />
 
         {/* Comments thread */}
@@ -107,35 +107,7 @@ export default async function PostDetailPage({ params }: Props) {
           <CommentThread comments={comments} currentUserId={user.id} postId={post.id} />
         )}
 
-        <div style={{ height: 100 }} />
-      </div>
-
-      {/* Reply bar — above bottom nav on mobile, stays at bottom on desktop */}
-      <div
-        className="reply-input-bar"
-        style={{
-          position: 'fixed',
-          bottom: 0,
-          left: 0,
-          right: 0,
-          paddingBottom: 'env(safe-area-inset-bottom)',
-        }}
-      >
-        <div style={{
-          maxWidth: 620,
-          margin: '0 auto',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 10,
-          padding: '0 16px',
-          width: '100%',
-        }}>
-          <div style={{
-            width: 28, height: 28, borderRadius: '50%',
-            background: 'var(--grad-brand)', flexShrink: 0,
-          }} />
-          <input className="reply-input" placeholder="Reply to thread…" readOnly />
-        </div>
+        <div style={{ height: 40 }} />
       </div>
     </div>
   )

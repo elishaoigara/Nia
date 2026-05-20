@@ -887,3 +887,90 @@ body {
     transform: translateX(-50%) !important;
   }
 }
+/* ── Missing utility classes fix ───────────────────────── */
+
+/* tap-sm: mobile-friendly tap target helper */
+.tap-sm {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  cursor: pointer;
+}
+.tap-sm:active {
+  transform: scale(0.92);
+  transition: transform 0.1s ease;
+}
+
+/* xs breakpoint (420px) — used by xs:inline, xs:grid-cols-2 etc */
+@media (min-width: 420px) {
+  .xs\:inline { display: inline !important; }
+  .hidden.xs\:inline { display: inline !important; }
+  .xs\:grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* Tailwind v4 doesn't have arbitrary z-index classes like z-200/z-300 */
+/* Fix story modals that use z-200 / z-300 */
+.z-200 { z-index: 200; }
+.z-300 { z-index: 300; }
+
+/* Fix Tailwind v4 pb-(--nav-bottom) syntax — pb-nav already defined above */
+
+/* Fix max-w-55 / max-w-65 / min-w-45 missing in Tailwind v4 */
+.max-w-55  { max-width: 13.75rem; }  /* 220px */
+.max-w-65  { max-width: 16.25rem; }  /* 260px */
+.min-w-45  { min-width:  11.25rem; } /* 180px */
+.min-w-65  { min-width:  16.25rem; } /* 260px */
+.max-w-35  { max-width:  8.75rem;  } /* 140px */
+
+/* ── Messages page: fix full-height layout on mobile ───── */
+/* The messages page uses height:100dvh but the global nav 
+   clips it. We hide the bottom nav inside messages. */
+body:has(.dm-page) .mobile-bottom-nav,
+body:has(.dm-page) nav[style*="bottom: 0"] {
+  display: none !important;
+}
+body:has(.dm-page) header[class*="fixed top-0"] {
+  display: none !important;
+}
+
+/* ── Post card fixes ─────────────────────────────────────── */
+/* Ensure reaction picker doesn't clip on small screens */
+@media (max-width: 400px) {
+  .reaction-picker {
+    left: -8px !important;
+  }
+}
+
+/* ── Input focus ring ────────────────────────────────────── */
+.input:focus-visible {
+  outline: 2px solid var(--nia-violet);
+  outline-offset: 0;
+}
+
+/* ── Comment section max-height scroll fix ───────────────── */
+.comment-scroll {
+  max-height: 18rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* ── Fix story z-index stacking ──────────────────────────── */
+.story-viewer { z-index: 9000; }
+.story-create { z-index: 9100; }
+.story-viewers-panel { z-index: 9200; }
+
+/* ── Flicks full-screen layout fix ──────────────────────── */
+.flicks-page {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+}
+
+/* ── Desktop: messages sidebar offset fix ────────────────── */
+@media (min-width: 640px) {
+  .dm-container {
+    max-width: 42rem;
+    margin: 0 auto;
+    height: calc(100dvh - var(--nav-top));
+    margin-top: var(--nav-top);
+  }
+}

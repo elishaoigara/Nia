@@ -18,7 +18,7 @@ export default function RootLayout({
       <body>
         <ThemeProvider>
           <Navbar />
-          <main className="sm:pl-60 pt-14 pb-(--nav-bottom) sm:pb-0 min-h-screen">
+          <main className="sm:pl-60 pt-14 min-h-screen" style={{ paddingBottom: 'var(--nav-bottom)' }}>
             {children}
           </main>
         </ThemeProvider>

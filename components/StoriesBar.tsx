@@ -272,7 +272,7 @@ export default function StoriesBar({ currentUserId }: { currentUserId: string })
 
       {/* ── Story viewer ─────────────────────────────────── */}
       {viewingStory && viewingGroup && (
-        <div className="fixed inset-0 z-200 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.95)' }}>
+        <div className="fixed inset-0 flex items-center justify-center story-viewer" style={{ background: 'rgba(0,0,0,0.95)', zIndex: 9000 }}>
           <div className="relative w-full max-w-sm h-[75vh] rounded-3xl overflow-hidden">
 
             {/* Progress bars — one per story in group */}
@@ -364,8 +364,8 @@ export default function StoriesBar({ currentUserId }: { currentUserId: string })
       {/* ── Create / Edit story modal ─────────────────── */}
       {showCreate && (
         <div
-          className="fixed inset-0 z-200 flex items-end sm:items-center justify-center"
-          style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}
+          className="fixed inset-0 flex items-end sm:items-center justify-center story-create"
+          style={{ zIndex: 9100, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}
           onClick={e => { if (e.target === e.currentTarget) setShowCreate(false) }}
         >
           <div className="w-full max-w-sm rounded-t-[28px] sm:rounded-[28px] p-6 space-y-5 anim-up" style={{ background: 'var(--surface-0)' }}>
@@ -454,8 +454,8 @@ export default function StoriesBar({ currentUserId }: { currentUserId: string })
       {/* ── Story viewers panel ──────────────────────── */}
       {showViewers && (
         <div
-          className="fixed inset-0 z-300 flex items-end sm:items-center justify-center px-4 pb-4 sm:pb-0"
-          style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}
+          className="fixed inset-0 flex items-end sm:items-center justify-center px-4 pb-4 sm:pb-0"
+          style={{ zIndex: 9200, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}
           onClick={() => setShowViewers(false)}
         >
           <div
@@ -498,8 +498,7 @@ export default function StoriesBar({ currentUserId }: { currentUserId: string })
       {/* ── Delete story confirmation ─────────────────── */}
       {showDeleteConfirm && (
         <div
-          className="fixed inset-0 z-300 flex items-center justify-center px-4"
-          style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}
+          className="fixed inset-0 flex items-center justify-center px-4" style={{ zIndex: 9200, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}
           onClick={() => setShowDeleteConfirm(false)}
         >
           <div
