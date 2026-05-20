@@ -6,11 +6,10 @@ import { createClient } from '@/lib/supabase/client'
 import {
   MessageCircle, Share2, Languages, Loader2, Play, Pause, Send,
   Repeat2, MoreHorizontal, Pencil, Trash2, X, Check, BadgeCheck,
-  ImagePlus, Eye, Link2, VolumeX, UserX, Flag,
+  ImagePlus, Eye, Link2, VolumeX, UserX, Flag
 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import TipButton from '@/components/TipButton'
 import PollCard from '@/components/PollCard'
 import VideoPlayer from '@/components/VideoPlayer'
 import MediaLightbox from '@/components/MediaLightbox'
@@ -188,7 +187,7 @@ function ReactorModal({ postId, onClose }: { postId: string; onClose: () => void
       onClick={onClose}
     >
       <div 
-        className="w-full max-w-sm rounded-3xl overflow-hidden animate-[pop-in_0.2s_ease-out_forwards] bg-(--surface-0) shadow-(--shadow-lg) max-h-[70vh] flex flex-col"
+        className="w-full max-w-sm rounded-3xl overflow-hidden animate-[pop-in_0.2s_ease_forwards] bg-(--surface-0) shadow-(--shadow-lg) max-h-[70vh] flex flex-col"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-(--border)">
@@ -500,15 +499,17 @@ export default function PostCard({ post, currentUserId, defaultShowComments }: a
   const [commentCount, setCommentCount] = useState(post.comments?.length ?? 0)
   const [viewCount, setViewCount] = useState<number>(post.view_count ?? 0)
 
+  const cardRef = useRef<HTMLDivElement>(null)
   const viewTracked = useRef(false)
   const isOwn = post.profiles?.id === currentUserId
   const totalReactions = Object.values(localReactions).reduce((a, b) => a + b, 0)
   const topReactions = Object.entries(localReactions).filter(([, c]) => c > 0).sort(([, a], [, b]) => b - a).slice(0, 3)
   const poll = Array.isArray(post.poll) ? post.poll[0] : post.poll
 
-  // Track viewport impression metrics
+  // Viewport Impression Observer Tracker Linkage
   useEffect(() => {
-    if (viewTracked.current || !currentUserId) return
+    if (viewTracked.current || !currentUserId || !cardRef.current) return
+    
     const observer = new IntersectionObserver(async ([entry]) => {
       if (entry.isIntersecting && !viewTracked.current) {
         viewTracked.current = true
@@ -518,12 +519,11 @@ export default function PostCard({ post, currentUserId, defaultShowComments }: a
       }
     }, { threshold: 0.6 })
     
-    const el = document.getElementById(`post-${post.id}`)
-    if (el) observer.observe(el)
+    observer.observe(cardRef.current)
     return () => observer.disconnect()
   }, [currentUserId, post.id, supabase])
 
-  // Hydrate explicit comments if on a localized focus frame view
+  // Hydrate custom context parameters
   useEffect(() => {
     if (!defaultShowComments) return
     supabase.from('comments')
@@ -608,7 +608,7 @@ export default function PostCard({ post, currentUserId, defaultShowComments }: a
       const res = await fetch('/api/translate', { 
         method: 'POST', 
         headers: { 'Content-Type': 'application/json' }, 
-        body: JSON.stringify({ text: post.content, targetLang: 'en' }) 
+        body: JSON.stringify({ text: post.content, targetLang: 'en' })
       })
       const data = await res.json()
       setTranslation(data.translation ?? null)
@@ -643,8 +643,9 @@ export default function PostCard({ post, currentUserId, defaultShowComments }: a
   return (
     <>
       <article
+        ref={cardRef}
         id={`post-${post.id}`}
-        className="card card-hover anim-up select-none"
+        className="card card-hover anim-up select-none border border-(--border) bg-(--surface-0) rounded-2xl mb-4"
         onClick={() => setShowReactionPicker(false)}
       >
         {/* ── Header ──────────────────────────────────────── */}
@@ -693,9 +694,7 @@ export default function PostCard({ post, currentUserId, defaultShowComments }: a
           </div>
 
           <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
-            {!isOwn && !post.is_anonymous && post.profiles?.id && (
-              <TipButton recipientUserId={post.profiles.id} recipientUsername={post.profiles.username} />
-            )}
+            {/* TipButton completely stripped from header structure layout */}
             <PostMenu
               postId={post.id}
               authorId={post.profiles?.id ?? ''}
@@ -715,133 +714,109 @@ export default function PostCard({ post, currentUserId, defaultShowComments }: a
               <textarea
                 value={editContent}
                 onChange={e => setEditContent(e.target.value)}
-                className="w-full text-sm rounded-xl p-3 outline-none resize-none bg-(--surface-2) text-(--text-primary) border border-(--border)"
+                className="w-full p-3 text-sm rounded-xl outline-none resize-none bg-(--surface-2) text-(--text-primary) border border-(--border)"
                 rows={3}
               />
               <div className="flex justify-end gap-2">
-                <button onClick={() => setIsEditing(false)} className="px-3 py-1.5 text-xs font-bold rounded-xl bg-(--surface-2) text-(--text-secondary)">Cancel</button>
-                <button onClick={saveEdit} disabled={editLoading} className="px-3 py-1.5 text-xs font-bold rounded-xl text-white bg-(--nia-violet)">
-                  {editLoading ? 'Saving…' : 'Save Changes'}
+                <button 
+                  onClick={() => setIsEditing(false)} 
+                  className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-(--surface-2) text-(--text-secondary)"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={saveEdit} 
+                  disabled={editLoading} 
+                  className="px-3 py-1.5 text-xs font-semibold rounded-lg text-white bg-(--nia-violet) flex items-center gap-1"
+                >
+                  {editLoading && <Loader2 size={12} className="animate-spin" />} Save
                 </button>
               </div>
             </div>
           ) : (
-            <>
-              {post.content && <p className="text-[15px] leading-relaxed text-(--text-primary) wrap-break-word whitespace-pre-wrap">{post.content}</p>}
-              {translation && (
-                <div className="p-3 rounded-xl border border-dashed border-(--border) bg-(--surface-1) animate-[slide-up_0.15s_ease_forwards]">
-                  <p className="text-xs font-black mb-1 text-(--nia-violet) flex items-center gap-1">
-                    <Languages size={12} /> Translated to English:
-                  </p>
-                  <p className="text-sm leading-relaxed text-(--text-secondary) wrap-break-word">{translation}</p>
-                </div>
+            <div className="space-y-1.5">
+              {post.content && (
+                <p className="text-sm text-(--text-primary) whitespace-pre-wrap wrap-break-word">
+                  {translation ? translation : post.content}
+                </p>
               )}
-              {post.content && post.language && post.language !== 'english' && (
+              {post.language && post.language !== 'english' && (
                 <button
                   onClick={e => { e.stopPropagation(); handleTranslate() }}
-                  disabled={translating}
-                  className="text-xs font-bold flex items-center gap-1 text-(--nia-violet) hover:underline disabled:opacity-60"
+                  className="text-xs font-bold text-(--nia-violet) flex items-center gap-1 hover:underline"
                 >
-                  {translating ? <Loader2 size={12} className="animate-spin" /> : <Languages size={12} />}
-                  {translation ? 'Show original' : 'Translate post'}
+                  <Languages size={13} />
+                  {translating ? 'Translating…' : translation ? 'Show original' : 'Translate to English'}
                 </button>
               )}
-            </>
+            </div>
+          )}
+
+          {/* ── Poll Module Insertion ── */}
+          {poll && <div onClick={e => e.stopPropagation()}><PollCard poll={poll} currentUserId={currentUserId} /></div>}
+
+          {/* ── Media Elements Rendering ── */}
+          {mediaItems.length > 0 && (
+            <div className="mt-2" onClick={e => e.stopPropagation()}>
+              {mediaItems[0].type === 'video' ? (
+                <VideoPlayer src={mediaItems[0].url} />
+              ) : (
+                <div className="grid grid-cols-1 gap-1 rounded-xl overflow-hidden max-h-96 border border-(--border)">
+                  <img
+                    src={mediaItems[0].url}
+                    alt="Attached preview content"
+                    className="w-full h-full object-cover cursor-pointer"
+                    onClick={() => setLightboxIndex(0)}
+                  />
+                </div>
+              )}
+            </div>
           )}
         </div>
 
-        {/* ── Poll Module Insertion ───────────────────────── */}
-        {poll && (
-          <div onClick={e => e.stopPropagation()}>
-            <PollCard poll={poll} currentUserId={currentUserId} />
-          </div>
-        )}
-
-        {/* ── Dynamic Media Grid ─────────────────────────── */}
-        {mediaItems.length > 0 && (
-          <div className="px-4 pb-3" onClick={e => e.stopPropagation()}>
-            {mediaItems.length === 1 ? (
-              <div className="rounded-2xl overflow-hidden border border-(--border) max-h-95 bg-(--surface-1)">
-                {mediaItems[0].type === 'video' ? (
-                  <VideoPlayer src={mediaItems[0].url} />
-                ) : (
-                  <img
-                    src={mediaItems[0].url}
-                    alt="Post media card"
-                    className="w-full h-full object-cover cursor-pointer hover:opacity-95 transition-opacity"
-                    onClick={() => setLightboxIndex(0)}
-                  />
-                )}
-              </div>
-            ) : (
-              <div className={`grid gap-1.5 rounded-2xl overflow-hidden border border-(--border) bg-(--surface-1) ${mediaItems.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
-                {mediaItems.slice(0, 3).map((item, idx) => (
-                  <div key={idx} className="aspect-square relative overflow-hidden bg-black/5">
-                    {item.type === 'video' ? (
-                      <video src={item.url} className="w-full h-full object-cover" muted playsInline />
-                    ) : (
-                      <img
-                        src={item.url}
-                        alt=""
-                        className="w-full h-full object-cover cursor-pointer hover:scale-[1.02] transition-transform duration-200"
-                        onClick={() => setLightboxIndex(idx)}
-                      />
-                    )}
-                    {idx === 2 && mediaItems.length > 3 && (
-                      <div 
-                        className="absolute inset-0 bg-black/60 flex items-center justify-center text-white text-lg font-black pointer-events-none"
-                      >
-                        +{mediaItems.length - 3}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ── Reactions & Social Counters Toolbar ─────────── */}
-        <div className="flex items-center justify-between px-4 py-1 border-t border-(--border) text-xs text-(--text-tertiary)">
-          <button
-            onClick={e => { e.stopPropagation(); if (totalReactions > 0) setShowReactorModal(true) }}
-            className="flex items-center gap-1.5 py-1 hover:underline font-medium"
+        {/* ── Interactive Counter Row ────────────────────── */}
+        <div className="flex items-center justify-between px-4 py-2 text-xs text-(--text-tertiary) border-t border-(--border)/40">
+          <button 
+            onClick={e => { e.stopPropagation(); if (totalReactions > 0) setShowReactorModal(true) }} 
+            className="hover:underline font-medium"
           >
-            {topReactions.length > 0 && (
-              <div className="flex items-center -space-x-1">
-                {topReactions.map(([emoji]) => <span key={emoji} className="text-sm leading-none">{emoji}</span>)}
+            {totalReactions > 0 ? (
+              <div className="flex items-center gap-1">
+                <span className="flex items-center -space-x-1">
+                  {topReactions.map(([emoji]) => <span key={emoji}>{emoji}</span>)}
+                </span>
+                <span>{totalReactions} reactions</span>
               </div>
-            )}
-            <span>{totalReactions > 0 ? `${totalReactions.toLocaleString()} reactions` : 'No reactions yet'}</span>
+            ) : 'No reactions'}
           </button>
           
-          <div className="flex items-center gap-3 font-semibold">
-            <span className="flex items-center gap-1"><Eye size={13} /> {viewCount.toLocaleString()}</span>
+          <div className="flex items-center gap-2">
             <span>{commentCount} replies</span>
-            <span>{repostCount} reposts</span>
+            <span>·</span>
+            <span className="flex items-center gap-0.5"><Eye size={12} /> {viewCount}</span>
           </div>
         </div>
 
-        {/* ── Bottom Call To Action Action Bar ────────────── */}
-        <div className="flex items-center justify-between px-2 py-1.5 border-t border-(--border) bg-(--surface-1)/30">
-          <div className="relative flex-1 flex justify-center" onClick={e => e.stopPropagation()}>
+        {/* ── Action Toolbar Buttons ──────────────────────── */}
+        <div className="flex items-center justify-between px-2 py-1.5 border-t border-(--border)/40" onClick={e => e.stopPropagation()}>
+          <div className="relative">
             <button
               onClick={() => setShowReactionPicker(!showReactionPicker)}
-              className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-sm font-bold w-full transition-all active:scale-95
-                ${activeReaction ? 'text-(--nia-violet)' : 'text-(--text-secondary) hover:bg-(--surface-2)'}
-              `}
+              className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-sm font-semibold transition-all active:scale-90 ${
+                activeReaction ? 'text-(--nia-violet) bg-purple-500/5' : 'text-(--text-secondary) hover:bg-(--surface-1)'
+              }`}
             >
-              <span className="text-base leading-none">{activeReaction ?? '❤️'}</span>
-              <span>{activeReaction ? 'Reacted' : 'React'}</span>
+              <span>{activeReaction ?? '❤️'}</span>
+              <span className="hidden sm:inline">{activeReaction ? 'Reacted' : 'React'}</span>
             </button>
-            
+
             {showReactionPicker && (
-              <div className="absolute bottom-full mb-2 left-4 bg-(--surface-0) border border-(--border) rounded-2xl p-1.5 shadow-(--shadow-lg) flex items-center gap-1 z-30 animate-[pop-in_0.15s_ease_forwards]">
+              <div className="absolute bottom-full left-0 mb-2 p-1.5 bg-(--surface-0) border border-(--border) rounded-2xl shadow-(--shadow-lg) flex gap-1 z-50 animate-[pop-in_0.15s_ease_forwards]">
                 {REACTIONS.map(emoji => (
                   <button
                     key={emoji}
                     onClick={() => handleReaction(emoji)}
-                    className="text-xl p-1 rounded-xl hover:bg-(--surface-2) active:scale-125 transition-all duration-100"
+                    className="text-xl p-1.5 hover:scale-125 transition-transform"
                   >
                     {emoji}
                   </button>
@@ -850,72 +825,82 @@ export default function PostCard({ post, currentUserId, defaultShowComments }: a
             )}
           </div>
 
-          <div className="flex-1 flex justify-center">
-            <button
-              onClick={e => { e.stopPropagation(); loadComments() }}
-              className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-sm font-bold w-full transition-all active:scale-95 text-(--text-secondary) hover:bg-(--surface-2)
-                ${showComments ? 'text-(--nia-violet)' : ''}
-              `}
-            >
-              <MessageCircle size={18} />
-              <span>Reply</span>
-            </button>
-          </div>
+          <button
+            onClick={loadComments}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-semibold transition-all active:scale-90 text-(--text-secondary) hover:bg-(--surface-1) ${
+              showComments ? 'text-(--nia-violet)' : ''
+            }`}
+          >
+            <MessageCircle size={16} />
+            <span className="hidden sm:inline">Reply</span>
+          </button>
 
-          <div className="flex-1 flex justify-center">
-            <button
-              onClick={e => { e.stopPropagation(); handleRepost() }}
-              disabled={reposted || isOwn}
-              className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-sm font-bold w-full transition-all active:scale-95 disabled:opacity-40 disabled:active:scale-100
-                ${reposted ? 'text-green-500' : 'text-(--text-secondary) hover:bg-(--surface-2)'}
-              `}
-            >
-              <Repeat2 size={18} />
-              <span>{reposted ? 'Reposted' : 'Repost'}</span>
-            </button>
-          </div>
+          <button
+            onClick={handleRepost}
+            disabled={reposted || isOwn}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-semibold transition-all active:scale-90 text-(--text-secondary) hover:bg-(--surface-1) ${
+              reposted ? 'text-green-500 bg-green-500/5' : ''
+            }`}
+          >
+            <Repeat2 size={16} className={reposted ? 'rotate-180 transition-transform duration-300' : ''} />
+            <span>{repostCount}</span>
+          </button>
 
-          <div className="flex-1 flex justify-center">
-            <button
-              onClick={e => { e.stopPropagation(); handleShare() }}
-              className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-sm font-bold text-(--text-secondary) hover:bg-(--surface-2) w-full transition-all active:scale-95"
-            >
-              <Share2 size={18} />
-              <span>Share</span>
-            </button>
-          </div>
+          <button
+            onClick={handleShare}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-semibold transition-all active:scale-90 text-(--text-secondary) hover:bg-(--surface-1)"
+          >
+            {copied ? <Check size={16} className="text-green-500" /> : <Share2 size={16} />}
+            <span className="hidden sm:inline">{copied ? 'Copied' : 'Share'}</span>
+          </button>
         </div>
 
-        {/* ── Active Comment Feed Drawer Section ──────────── */}
+        {/* ── Thread Tree Comment View Space ──────────────── */}
         {showComments && (
-          <div className="border-t border-(--border) bg-(--surface-1)/10" onClick={e => e.stopPropagation()}>
+          <div className="border-t border-(--border) bg-(--surface-1)/30 divide-y divide-(--border)/40 animate-[slide-down_0.2s_ease_out]">
             <CommentInput onSubmit={submitComment} posting={posting} />
             
             {loadingComments ? (
               <div className="flex justify-center py-6">
-                <Loader2 size={20} className="animate-spin text-(--text-tertiary)" />
+                <Loader2 size={18} className="animate-spin text-(--text-tertiary)" />
               </div>
             ) : (
-              comments.length > 0 && (
-                <div className="px-4 pb-4 pt-2 space-y-3 border-t border-(--border)/60 max-h-85 overflow-y-auto custom-scrollbar">
-                  {comments.map(comment => (
-                    <CommentRow
-                      key={comment.id}
-                      comment={comment}
-                      currentUserId={currentUserId}
-                      onDelete={handleCommentDelete}
+              <div className="p-4 space-y-4">
+                {comments.length === 0 ? (
+                  <p className="text-xs text-center text-(--text-tertiary) py-2">Be the first to join the conversation!</p>
+                ) : (
+                  comments.map(c => (
+                    <CommentRow 
+                      key={c.id} 
+                      comment={c} 
+                      currentUserId={currentUserId} 
+                      onDelete={handleCommentDelete} 
                     />
-                  ))}
-                </div>
-              )
+                  ))
+                )}
+              </div>
             )}
           </div>
         )}
       </article>
 
-      {/* ── Lightboxes & Modals Portals ─────────────────── */}
-      {showReactorModal && <ReactorModal postId={post.id} onClose={() => setShowReactorModal(false)} />}
-      
+      {/* ── Fallback Delete Confirmation Backdrop Modal ── */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-9999 flex items-center justify-center bg-black/60 backdrop-blur-xs px-4" onClick={() => setShowDeleteConfirm(false)}>
+          <div className="bg-(--surface-0) border border-(--border) p-5 rounded-3xl max-w-sm w-full space-y-4 shadow-(--shadow-xl)" onClick={e => e.stopPropagation()}>
+            <div className="space-y-1">
+              <h3 className="font-black text-base text-(--text-primary)">Delete this Post?</h3>
+              <p className="text-xs text-(--text-tertiary)">This action cannot be undone. It will remove this post from your profile timeline permanently.</p>
+            </div>
+            <div className="flex gap-2.5">
+              <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 py-2 rounded-xl text-xs font-bold bg-(--surface-2) text-(--text-secondary)">Cancel</button>
+              <button onClick={deletePost} className="flex-1 py-2 rounded-xl text-xs font-bold text-white bg-red-500 hover:bg-red-600 transition-colors">Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Fullscreen Image Portal Trigger ── */}
       {lightboxIndex !== null && (
         <MediaLightbox
           items={mediaItems}
@@ -924,20 +909,9 @@ export default function PostCard({ post, currentUserId, defaultShowComments }: a
         />
       )}
 
-      {/* Delete Confirmation Modal Layer */}
-      {showDeleteConfirm && (
-        <div className="fixed inset-0 z-100 flex items-center justify-center bg-black/60 backdrop-blur-xs px-4" onClick={() => setShowDeleteConfirm(false)}>
-          <div className="bg-(--surface-0) border border-(--border) w-full max-w-sm rounded-3xl p-5 shadow-(--shadow-2xl) space-y-4 animate-[pop-in_0.18s_ease_forwards]" onClick={e => e.stopPropagation()}>
-            <div className="space-y-1">
-              <h4 className="font-black text-base text-(--text-primary)">Delete Post?</h4>
-              <p className="text-xs text-(--text-tertiary)">This action cannot be undone. This post will permanently disappear from the feed streams.</p>
-            </div>
-            <div className="flex gap-2.5">
-              <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 py-2.5 text-xs font-bold rounded-xl bg-(--surface-2) text-(--text-secondary) active:scale-95 transition-transform">Cancel</button>
-              <button onClick={deletePost} className="flex-1 py-2.5 text-xs font-bold rounded-xl text-white bg-red-500 active:scale-95 transition-transform">Delete</button>
-            </div>
-          </div>
-        </div>
+      {/* ── Active Reactors Modal Layer ── */}
+      {showReactorModal && (
+        <ReactorModal postId={post.id} onClose={() => setShowReactorModal(false)} />
       )}
     </>
   )
