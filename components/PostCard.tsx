@@ -1,4 +1,5 @@
 'use client'
+
 import { getFlag, getLanguageEmoji } from '@/lib/african-data'
 import { useState, useRef, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
@@ -23,8 +24,8 @@ function timeAgo(date: string) {
 }
 
 const REACTIONS = ['❤️', '😂', '🔥', '😮', '👏', '😢']
-
 const TENOR_KEY = 'AIzaSyAyimkuYQYF_FXVALexPm_sspTcFcjHFS4'
+
 const FALLBACK_GIFS = [
   { url: 'https://media.giphy.com/media/l0MYt5jPR6QX5pnqM/giphy.gif', preview: 'https://media.giphy.com/media/l0MYt5jPR6QX5pnqM/giphy_s.gif' },
   { url: 'https://media.giphy.com/media/3o7TKSjRrfIPjeiVyM/giphy.gif', preview: 'https://media.giphy.com/media/3o7TKSjRrfIPjeiVyM/giphy_s.gif' },
@@ -102,6 +103,7 @@ function PostMenu({ postId, authorId, currentUserId, authorUsername, content, on
         onClick={e => { e.stopPropagation(); setOpen(o => !o) }}
         className="w-8 h-8 flex items-center justify-center rounded-xl transition-all active:scale-90"
         style={{ color: 'var(--text-tertiary)', background: open ? 'var(--surface-2)' : 'transparent' }}
+        aria-label="More options"
       >
         <MoreHorizontal size={18} />
       </button>
@@ -118,7 +120,6 @@ function PostMenu({ postId, authorId, currentUserId, authorUsername, content, on
             animation: 'pop-in 0.18s cubic-bezier(0.34,1.56,0.64,1) forwards',
           }}
         >
-          {/* Copy link - always shown */}
           <MenuItem icon={<Link2 size={15} />} label="Copy link" onClick={copyLink} />
 
           {isOwn ? (
@@ -221,6 +222,8 @@ function CommentInput({ onSubmit, posting }: { onSubmit: (text: string, mediaUrl
   const fileRef = useRef<HTMLInputElement>(null)
   const supabase = createClient()
 
+  const isSubmitDisabled = (!text.trim() && !mediaPreview) || posting || uploading
+
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]; if (!file) return
     setUploading(true)
@@ -243,7 +246,7 @@ function CommentInput({ onSubmit, posting }: { onSubmit: (text: string, mediaUrl
     setGifResults(await fetchGifs(q)); setGifLoading(false)
   }
   async function submit() {
-    if (!text.trim() && !mediaPreview) return
+    if (isSubmitDisabled) return
     await onSubmit(text.trim(), mediaPreview?.url, mediaPreview?.type)
     setText(''); setMediaPreview(null); setShowGifPicker(false)
   }
@@ -254,7 +257,7 @@ function CommentInput({ onSubmit, posting }: { onSubmit: (text: string, mediaUrl
         <div className="relative inline-block">
           {mediaPreview.type === 'video'
             ? <video src={mediaPreview.url} className="h-28 rounded-xl object-cover" muted />
-            : <img src={mediaPreview.url} alt="Selected" className="h-28 rounded-xl object-cover" style={{ border: '1px solid var(--border)' }} />}
+            : <img src={mediaPreview.url} alt="Selected file preview" className="h-28 rounded-xl object-cover" style={{ border: '1px solid var(--border)' }} />}
           <button onClick={() => setMediaPreview(null)} className="absolute -top-2 -right-2 w-6 h-6 rounded-full flex items-center justify-center text-white" style={{ background: 'rgba(0,0,0,0.75)' }}>
             <X size={12} />
           </button>
@@ -270,7 +273,7 @@ function CommentInput({ onSubmit, posting }: { onSubmit: (text: string, mediaUrl
               <div className="col-span-4 flex justify-center py-4"><Loader2 size={18} className="animate-spin" style={{ color: 'var(--text-tertiary)' }} /></div>
             ) : gifResults.map((g, i) => (
               <button key={i} onClick={() => { setMediaPreview({ url: g.url, type: 'gif' }); setShowGifPicker(false) }} className="rounded-lg overflow-hidden aspect-square active:scale-95 transition-transform">
-                <img src={g.preview || g.url} alt="" className="w-full h-full object-cover" loading="lazy" />
+                <img src={g.preview || g.url} alt="GIF Result" className="w-full h-full object-cover" loading="lazy" />
               </button>
             ))}
           </div>
@@ -296,7 +299,7 @@ function CommentInput({ onSubmit, posting }: { onSubmit: (text: string, mediaUrl
           placeholder="Reply…" rows={1}
           className="flex-1 px-3 py-2 rounded-2xl text-sm outline-none resize-none"
           style={{ background: 'var(--surface-2)', color: 'var(--text-primary)', border: '1.5px solid transparent', minHeight: 36, maxHeight: 96 }} />
-        <button onClick={submit} disabled={(!text.trim() && !mediaPreview) || posting}
+        <button onClick={submit} disabled={isSubmitDisabled}
           className="w-9 h-9 flex items-center justify-center rounded-xl text-white transition-all active:scale-90 disabled:opacity-40 shrink-0"
           style={{ background: 'var(--grad-brand)' }}>
           {posting ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
@@ -307,8 +310,9 @@ function CommentInput({ onSubmit, posting }: { onSubmit: (text: string, mediaUrl
 }
 
 // ── Comment Row ───────────────────────────────────────────
-function CommentRow({ comment, currentUserId, onDelete }: { comment: any; currentUserId: string; onDelete: (id: string) => void }) {
+function CommentRow({ comment: initialComment, currentUserId, onDelete }: { comment: any; currentUserId: string; onDelete: (id: string) => void }) {
   const supabase = createClient()
+  const [comment, setComment] = useState(initialComment)
   const [lightbox, setLightbox] = useState(false)
   const [editing, setEditing] = useState(false)
   const [editText, setEditText] = useState(comment.content ?? '')
@@ -319,8 +323,12 @@ function CommentRow({ comment, currentUserId, onDelete }: { comment: any; curren
   async function saveEdit() {
     if (!editText.trim()) return
     setSaving(true)
-    await supabase.from('comments').update({ content: editText.trim() }).eq('id', comment.id)
-    comment.content = editText.trim(); setEditing(false); setSaving(false)
+    const { error } = await supabase.from('comments').update({ content: editText.trim() }).eq('id', comment.id)
+    if (!error) {
+      setComment((prev: any) => ({ ...prev, content: editText.trim() }))
+      setEditing(false)
+    }
+    setSaving(false)
   }
 
   return (
@@ -334,7 +342,7 @@ function CommentRow({ comment, currentUserId, onDelete }: { comment: any; curren
         <div className="px-3 py-2 rounded-2xl rounded-tl-sm text-sm" style={{ background: 'var(--surface-2)' }}>
           <div className="flex items-start justify-between gap-2">
             <div className="flex-1 min-w-0">
-              <Link href={`/profile/${comment.profiles?.id}`} className="font-bold text-xs mr-1.5" style={{ color: 'var(--nia-violet)' }}>@{comment.profiles?.username}</Link>
+              <Link href={`/profile/${comment.profiles?.id}`} className="font-bold text-xs mr-1.5 max-w-35 truncate inline-block vertical-bottom" style={{ color: 'var(--nia-violet)' }}>@{comment.profiles?.username}</Link>
               {editing ? (
                 <div className="mt-1 space-y-1">
                   <textarea value={editText} onChange={e => setEditText(e.target.value)} className="w-full text-sm rounded-lg px-2 py-1 resize-none outline-none" style={{ background: 'var(--surface-1)', color: 'var(--text-primary)', border: '1px solid var(--border)' }} rows={2} autoFocus />
@@ -344,7 +352,7 @@ function CommentRow({ comment, currentUserId, onDelete }: { comment: any; curren
                   </div>
                 </div>
               ) : (
-                comment.content && <span style={{ color: 'var(--text-primary)' }}>{comment.content}</span>
+                comment.content && <span style={{ color: 'var(--text-primary)' }} className="wrap-break-word">{comment.content}</span>
               )}
             </div>
             {isOwn && !editing && (
@@ -372,7 +380,7 @@ function CommentRow({ comment, currentUserId, onDelete }: { comment: any; curren
               ? <video src={comment.media_url} controls className="rounded-xl max-h-48 max-w-55" style={{ border: '1px solid var(--border)' }} />
               : (
                 <>
-                  <img src={comment.media_url} alt="" onClick={() => setLightbox(true)} className="rounded-xl max-h-48 max-w-55 object-cover cursor-pointer active:scale-[0.98] transition-transform" style={{ border: '1px solid var(--border)' }} />
+                  <img src={comment.media_url} alt="Comment Attachment" onClick={() => setLightbox(true)} className="rounded-xl max-h-48 max-w-55 object-cover cursor-pointer active:scale-[0.98] transition-transform" style={{ border: '1px solid var(--border)' }} />
                   {lightbox && <MediaLightbox items={[{ url: comment.media_url, type: 'image' }]} startIndex={0} onClose={() => setLightbox(false)} />}
                 </>
               )}
@@ -437,7 +445,7 @@ export default function PostCard({ post, currentUserId, defaultShowComments }: a
     const el = document.getElementById(`post-${post.id}`)
     if (el) observer.observe(el)
     return () => observer.disconnect()
-  }, [])
+  }, [currentUserId, post.id, supabase])
 
   // Auto-load comments on detail page
   useEffect(() => {
@@ -447,7 +455,7 @@ export default function PostCard({ post, currentUserId, defaultShowComments }: a
       .eq('post_id', post.id)
       .order('created_at', { ascending: true })
       .then(({ data }) => { setComments(data ?? []); setLoadingComments(false) })
-  }, [defaultShowComments, post.id])
+  }, [defaultShowComments, post.id, supabase])
 
   async function saveEdit() {
     if (!editContent.trim()) return
@@ -521,6 +529,11 @@ export default function PostCard({ post, currentUserId, defaultShowComments }: a
     }
   }
 
+  function handleCommentDelete(deletedId: string) {
+    setComments(prev => prev.filter(c => c.id !== deletedId))
+    setCommentCount((c: number) => Math.max(0, c - 1))
+  }
+
   if (isDeleted) return null
 
   const displayName = post.is_anonymous ? 'Anonymous 🎭' : `@${post.profiles?.username}`
@@ -532,7 +545,7 @@ export default function PostCard({ post, currentUserId, defaultShowComments }: a
     <>
       <article
         id={`post-${post.id}`}
-        className="card card-hover overflow-hidden anim-up"
+        className="card card-hover anim-up"
         onClick={() => setShowReactionPicker(false)}
       >
         {/* ── Header ─────────────────────── */}
@@ -541,7 +554,7 @@ export default function PostCard({ post, currentUserId, defaultShowComments }: a
             <div className="avatar-ring">
               <div className="w-10 h-10 rounded-full overflow-hidden" style={{ background: post.is_anonymous ? 'linear-gradient(135deg,#555,#333)' : 'var(--grad-brand)' }}>
                 {!post.is_anonymous && post.profiles?.avatar_url
-                  ? <img src={post.profiles.avatar_url} className="w-full h-full object-cover" alt="" />
+                  ? <img src={post.profiles.avatar_url} className="w-full h-full object-cover" alt="Profile avatar" />
                   : <div className="w-full h-full flex items-center justify-center text-white font-bold text-sm">{post.is_anonymous ? '🎭' : post.profiles?.username?.[0]?.toUpperCase() ?? '?'}</div>}
               </div>
             </div>
@@ -549,11 +562,11 @@ export default function PostCard({ post, currentUserId, defaultShowComments }: a
 
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <Link href={post.is_anonymous ? '#' : `/profile/${post.profiles?.id}`} className="font-bold text-sm hover:underline">{displayName}</Link>
+              <Link href={post.is_anonymous ? '#' : `/profile/${post.profiles?.id}`} className="font-bold text-sm hover:underline max-w-37.5 truncate">{displayName}</Link>
               {post.profiles?.is_verified && <BadgeCheck size={15} style={{ color: 'var(--nia-violet)' }} fill="rgba(168,85,247,0.15)" />}
               {!post.is_anonymous && post.profiles?.country && <span title={post.profiles.country} className="text-base leading-none">{getFlag(post.profiles.country)}</span>}
               {post.circles && (
-                <Link href={`/circles/${post.circles.slug}`} className="text-xs font-semibold px-2.5 py-0.5 rounded-full" style={{ background: 'linear-gradient(135deg,rgba(255,107,107,0.15),rgba(168,85,247,0.15))', color: 'var(--nia-violet)' }}>{post.circles.name}</Link>
+                <Link href={`/circles/${post.circles.slug}`} className="text-xs font-semibold px-2.5 py-0.5 rounded-full max-w-30 truncate" style={{ background: 'linear-gradient(135deg,rgba(255,107,107,0.15),rgba(168,85,247,0.15))', color: 'var(--nia-violet)' }}>{post.circles.name}</Link>
               )}
               {post.language && post.language !== 'english' && (
                 <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: 'var(--surface-2)', color: 'var(--text-tertiary)' }}>{getLanguageEmoji(post.language)} {post.language}</span>
@@ -561,7 +574,7 @@ export default function PostCard({ post, currentUserId, defaultShowComments }: a
             </div>
             <div className="flex items-center gap-1.5 mt-0.5">
               {!post.is_anonymous && post.profiles?.country && (
-                <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>{post.profiles.city ? `${post.profiles.city}, ${post.profiles.country}` : post.profiles.country}</span>
+                <span className="text-xs max-w-45 truncate" style={{ color: 'var(--text-tertiary)' }}>{post.profiles.city ? `${post.profiles.city}, ${post.profiles.country}` : post.profiles.country}</span>
               )}
               {!post.is_anonymous && <span style={{ color: 'var(--text-tertiary)' }}>·</span>}
               <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>{timeAgo(post.created_at)}</span>
@@ -591,215 +604,82 @@ export default function PostCard({ post, currentUserId, defaultShowComments }: a
             <textarea value={editContent} onChange={e => setEditContent(e.target.value)} rows={3} className="input resize-none text-[15px] w-full" autoFocus />
             <div className="flex gap-2">
               <button onClick={() => { setIsEditing(false); setEditContent(post.content ?? '') }} className="btn-ghost flex items-center gap-1.5 px-3 py-2 text-sm flex-1 justify-center"><X size={14} /> Cancel</button>
-              <button onClick={saveEdit} disabled={!editContent.trim() || editLoading} className="btn-primary flex items-center gap-1.5 px-3 py-2 text-sm flex-1 justify-center" style={{ borderRadius: 12 }}>
+              <button onClick={saveEdit} disabled={!editContent.trim() || editLoading} className="btn flex items-center gap-1.5 px-3 py-2 text-sm flex-1 justify-center text-white" style={{ background: 'var(--nia-violet)' }}>
                 {editLoading ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Save
               </button>
             </div>
           </div>
         ) : (
-          <>
+          <div className="px-4 pb-3 space-y-3">
             {post.content && (
-              <div className="px-4 pb-3">
-                <p className="text-[15px] leading-relaxed" style={{ color: 'var(--text-primary)' }}>
-                  {post.content.split(/(\s+)/).map((word: string, i: number) =>
-                    word.startsWith('#')
-                      ? <Link key={i} href={`/tags/${word.slice(1).toLowerCase()}`} className="font-bold" style={{ color: 'var(--nia-violet)' }}>{word}</Link>
-                      : word
-                  )}
-                </p>
-                {translation && (
-                  <div className="mt-2 text-sm italic px-3 py-2.5 rounded-xl" style={{ background: 'var(--surface-2)', color: 'var(--text-secondary)', borderLeft: '3px solid var(--nia-violet)' }}>{translation}</div>
-                )}
-              </div>
+              <p className="text-[15px] leading-relaxed wrap-break-word whitespace-pre-wrap" style={{ color: 'var(--text-primary)' }}>
+                {translation ? translation : post.content}
+              </p>
             )}
-
-            {/* ── Media — edge-to-edge, Threads style ── */}
-            {mediaItems.length > 0 && (
-              <>
-                <div className={`pb-3 ${mediaItems.length === 1 ? '' : 'px-4'}`}>
-                  {mediaItems.length === 1 ? (
-                    /* Single: full card width, tall aspect */
-                    <div className="relative overflow-hidden" style={{ borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)' }}>
-                      {mediaItems[0].type === 'image' ? (
-                        <>
-                          <img src={mediaItems[0].url} alt="" className="w-full object-cover cursor-pointer" style={{ maxHeight: 480, display: 'block' }} onClick={() => setLightboxIndex(0)} />
-                          <button onClick={() => setLightboxIndex(0)} className="absolute top-2 right-2 w-7 h-7 flex items-center justify-center rounded-full" style={{ background: 'rgba(0,0,0,0.45)' }}>
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" /></svg>
-                          </button>
-                        </>
-                      ) : (
-                        <VideoPlayer src={mediaItems[0].url} />
-                      )}
-                    </div>
-                  ) : (
-                    /* Two up: equal squares with gap */
-                    <div className="grid grid-cols-2 gap-2">
-                      {mediaItems.map((m, i) => (
-                        <div key={i} className="relative rounded-2xl overflow-hidden" style={{ aspectRatio: '1/1', border: '1px solid var(--border)' }}>
-                          {m.type === 'image' ? (
-                            <>
-                              <img src={m.url} alt="" className="w-full h-full object-cover cursor-pointer" onClick={() => setLightboxIndex(i)} />
-                              <button onClick={() => setLightboxIndex(i)} className="absolute top-2 right-2 w-7 h-7 flex items-center justify-center rounded-full" style={{ background: 'rgba(0,0,0,0.45)' }}>
-                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" /></svg>
-                              </button>
-                            </>
-                          ) : (
-                            <VideoPlayer src={m.url} />
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                {lightboxIndex !== null && (
-                  <MediaLightbox items={mediaItems} startIndex={lightboxIndex} onClose={() => setLightboxIndex(null)} />
-                )}
-              </>
-            )}
-
-            {/* ── Audio message ────────────── */}
-            {post.media_url && post.media_type === 'audio' && (
-              <div className="px-4 pb-3">
-                <div className="flex items-center gap-3 px-4 py-3 rounded-2xl" style={{ background: 'var(--surface-2)' }}>
-                  <button
-                    onClick={() => {
-                      if (!audioRef.current) audioRef.current = new Audio(post.media_url)
-                      isPlaying ? audioRef.current.pause() : audioRef.current.play()
-                      setIsPlaying(!isPlaying)
-                      if (!audioRef.current.onended) audioRef.current.onended = () => setIsPlaying(false)
-                    }}
-                    className="w-10 h-10 rounded-full flex items-center justify-center text-white shrink-0" style={{ background: 'var(--grad-brand)' }}>
-                    {isPlaying ? <Pause size={16} fill="currentColor" /> : <Play size={16} fill="currentColor" />}
-                  </button>
-                  <span className="text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>Voice message</span>
-                </div>
-              </div>
-            )}
-          </>
-        )}
-
-        {poll && <PollCard poll={poll} currentUserId={currentUserId} />}
-
-        {/* ── Social summary ───────────────── */}
-        {(totalReactions > 0 || commentCount > 0 || viewCount > 0) && (
-          <div className="px-4 pb-2 flex items-center gap-2 flex-wrap">
-            {totalReactions > 0 && (
-              <button onClick={() => setShowReactorModal(true)} className="flex items-center gap-1 active:scale-95 transition-transform">
-                {topReactions.map(([emoji, count]) => (
-                  <span key={emoji} className="flex items-center gap-0.5 text-xs px-2 py-0.5 rounded-full" style={{ background: 'var(--surface-2)', color: 'var(--text-secondary)' }}>{emoji} {count}</span>
-                ))}
-                <span className="text-xs ml-0.5 hover:underline" style={{ color: 'var(--text-tertiary)' }}>{totalReactions} reaction{totalReactions !== 1 ? 's' : ''}</span>
+            {post.content && post.language && post.language !== 'english' && (
+              <button onClick={handleTranslate} disabled={translating} className="text-xs font-bold flex items-center gap-1" style={{ color: 'var(--nia-violet)' }}>
+                <Languages size={12} /> {translating ? 'Translating…' : translation ? 'Show original' : 'Translate to English'}
               </button>
-            )}
-            {commentCount > 0 && (
-              <button onClick={loadComments} className="flex items-center gap-1 active:scale-95 transition-transform">
-                {commenterProfiles.length > 0 && (
-                  <div className="flex -space-x-1.5">
-                    {commenterProfiles.map((p: any, i: number) => (
-                      <div key={i} className="w-5 h-5 rounded-full overflow-hidden border-2 flex items-center justify-center text-white text-[9px] font-bold" style={{ borderColor: 'var(--surface-0)', background: 'var(--grad-brand)' }}>
-                        {p?.avatar_url ? <img src={p.avatar_url} className="w-full h-full object-cover" alt="" /> : p?.username?.[0]?.toUpperCase()}
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>{commentCount} comment{commentCount !== 1 ? 's' : ''}</span>
-              </button>
-            )}
-            {viewCount > 0 && (
-              <span className="flex items-center gap-1 text-xs ml-auto" style={{ color: 'var(--text-tertiary)' }}><Eye size={12} />{viewCount.toLocaleString()}</span>
             )}
           </div>
         )}
 
-        {/* ── Action bar ───────────────────── */}
-        <div className="flex items-center gap-1 px-3 py-2" style={{ borderTop: '1px solid var(--border)' }}>
-          {/* Reaction */}
-          <div className="relative">
-            <button
-              onClick={() => setShowReactionPicker(!showReactionPicker)}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold transition-all active:scale-90"
-              style={activeReaction ? { background: 'rgba(168,85,247,0.1)', color: 'var(--nia-violet)' } : { background: 'transparent', color: 'var(--text-tertiary)' }}
-            >
-              <span className={activeReaction ? 'heart-pop' : ''}>{activeReaction ?? '🤍'}</span>
-              {totalReactions > 0 && <span className="text-xs">{totalReactions}</span>}
-            </button>
-            {showReactionPicker && (
-              <>
-                {/* Invisible overlay to close picker on outside tap */}
-                <div className="fixed inset-0 z-30" onClick={() => setShowReactionPicker(false)} />
-                <div className="absolute bottom-full mb-2 left-0 z-40 flex gap-1 p-2 rounded-2xl anim-pop" style={{ background: 'var(--surface-0)', boxShadow: 'var(--shadow-lg)', border: '1px solid var(--border)' }}>
-                  {REACTIONS.map(emoji => (
-                    <button key={emoji} onClick={() => handleReaction(emoji)} className="w-9 h-9 flex items-center justify-center rounded-xl text-lg transition-all hover:scale-125 active:scale-95" style={activeReaction === emoji ? { background: 'var(--surface-2)' } : {}}>{emoji}</button>
-                  ))}
-                </div>
-              </>
+        {poll && <div className="px-4 pb-3"><PollCard poll={poll} currentUserId={currentUserId} /></div>}
+        
+        {mediaItems.length > 0 && (
+          <div className="px-4 pb-3">
+            {mediaItems[0].type === 'video' ? (
+              <VideoPlayer src={mediaItems[0].url} />
+            ) : (
+              <img src={mediaItems[0].url} alt="Post content media" className="rounded-2xl max-h-96 w-full object-cover cursor-pointer" onClick={() => setLightboxIndex(0)} />
+            )}
+            {lightboxIndex !== null && (
+              <MediaLightbox items={mediaItems} startIndex={lightboxIndex} onClose={() => setLightboxIndex(null)} />
             )}
           </div>
+        )}
 
-          {/* Comment */}
-          <button onClick={loadComments} className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold transition-all active:scale-90" style={showComments ? { background: 'rgba(168,85,247,0.1)', color: 'var(--nia-violet)' } : { background: 'transparent', color: 'var(--text-tertiary)' }}>
-            {loadingComments ? <Loader2 size={16} className="animate-spin" /> : <MessageCircle size={16} />}
-            {commentCount > 0 && <span className="text-xs">{commentCount}</span>}
+        {/* ── Footer / Actions Panel ──────── */}
+        <div className="flex items-center justify-between px-4 py-2 border-t" style={{ borderColor: 'var(--border)' }}>
+          <button onClick={loadComments} className="flex items-center gap-1.5 text-xs text-slate-500">
+            <MessageCircle size={16} /> {commentCount}
           </button>
-
-          {/* Repost */}
-          {!isOwn && (
-            <button onClick={handleRepost} disabled={reposted} className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold transition-all active:scale-90 disabled:opacity-50" style={reposted ? { background: 'rgba(107,203,119,0.1)', color: 'var(--nia-mint)' } : { background: 'transparent', color: 'var(--text-tertiary)' }}>
-              <Repeat2 size={16} />
-              {repostCount > 0 && <span className="text-xs">{repostCount}</span>}
-            </button>
-          )}
-
-          {/* Translate */}
-          {post.content && post.language && post.language !== 'english' && (
-            <button onClick={handleTranslate} disabled={translating} className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold transition-all active:scale-90" style={translation ? { background: 'rgba(78,205,196,0.1)', color: 'var(--nia-sky)' } : { background: 'transparent', color: 'var(--text-tertiary)' }}>
-              {translating ? <Loader2 size={16} className="animate-spin" /> : <Languages size={16} />}
-            </button>
-          )}
-
-          {/* Share */}
-          <button onClick={handleShare} className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold transition-all active:scale-90 ml-auto" style={copied ? { background: 'rgba(107,203,119,0.1)', color: 'var(--nia-mint)' } : { background: 'transparent', color: 'var(--text-tertiary)' }}>
-            {copied ? <Check size={16} /> : <Share2 size={16} />}
+          <button onClick={handleRepost} disabled={reposted || isOwn} className={`flex items-center gap-1.5 text-xs ${reposted ? 'text-green-500' : 'text-slate-500'}`}>
+            <Repeat2 size={16} /> {repostCount}
+          </button>
+          <button onClick={handleShare} className="flex items-center gap-1.5 text-xs text-slate-500">
+            <Share2 size={16} /> {copied ? 'Copied!' : 'Share'}
           </button>
         </div>
 
-        {/* ── Delete confirm ───────────────── */}
-        {showDeleteConfirm && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }} onClick={() => setShowDeleteConfirm(false)}>
-            <div className="w-full max-w-xs rounded-3xl p-6 space-y-4 anim-pop" style={{ background: 'var(--surface-0)', boxShadow: 'var(--shadow-lg)' }} onClick={e => e.stopPropagation()}>
-              <div className="text-center space-y-2">
-                <div className="text-4xl">🗑️</div>
-                <h3 className="font-extrabold text-lg">Delete post?</h3>
-                <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>This permanently removes your post and all its comments.</p>
-              </div>
-              <div className="flex gap-3">
-                <button onClick={() => setShowDeleteConfirm(false)} className="btn-ghost flex-1 text-sm py-2.5">Cancel</button>
-                <button onClick={deletePost} className="flex-1 py-2.5 rounded-2xl text-sm font-bold text-white transition-all active:scale-95" style={{ background: '#ef4444' }}>Delete</button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ── Comments ─────────────────────── */}
         {showComments && (
-          <div style={{ borderTop: '1px solid var(--border)' }}>
-            {comments.length > 0 && (
-              <div className="px-4 pt-3 space-y-3 comment-scroll" style={{ overscrollBehavior: 'contain' }}>
-                {comments.map(comment => <CommentRow key={comment.id} comment={comment} currentUserId={currentUserId} onDelete={id => { setComments(prev => prev.filter(c => c.id !== id)); setCommentCount((c: number) => Math.max(c - 1, 0)) }} />)}
-              </div>
-            )}
-            {!currentUserId ? (
-              <div className="px-4 py-3 text-center text-sm" style={{ color: 'var(--text-tertiary)' }}>
-                <a href="/login" style={{ color: 'var(--nia-violet)', fontWeight: 600 }}>Sign in</a> to reply
-              </div>
+          <div className="border-t p-3 space-y-3" style={{ borderColor: 'var(--border)' }}>
+            <CommentInput onSubmit={submitComment} posting={posting} />
+            {loadingComments ? (
+              <div className="flex justify-center py-4"><Loader2 size={20} className="animate-spin text-slate-400" /></div>
             ) : (
-              <CommentInput onSubmit={submitComment} posting={posting} />
+              <div className="space-y-3">
+                {comments.map((comment) => (
+                  <CommentRow key={comment.id} comment={comment} currentUserId={currentUserId} onDelete={handleCommentDelete} />
+                ))}
+              </div>
             )}
           </div>
         )}
       </article>
 
-      {showReactorModal && <ReactorModal postId={post.id} onClose={() => setShowReactorModal(false)} />}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full mx-4 space-y-4">
+            <h4 className="font-bold text-lg">Delete Post?</h4>
+            <p className="text-sm text-slate-500">This action cannot be undone. This post will be permanently removed.</p>
+            <div className="flex gap-3">
+              <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 py-2 rounded-xl border font-semibold text-sm">Cancel</button>
+              <button onClick={deletePost} className="flex-1 py-2 rounded-xl bg-red-500 text-white font-semibold text-sm">Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }
