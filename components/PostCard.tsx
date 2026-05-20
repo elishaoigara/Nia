@@ -1,7 +1,7 @@
 'use client'
 
 import { getFlag, getLanguageEmoji } from '@/lib/african-data'
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import {
   MessageCircle, Share2, Languages, Loader2, Play, Pause, Send,
@@ -48,25 +48,29 @@ async function fetchGifs(query: string) {
   } catch { return FALLBACK_GIFS }
 }
 
-// ── Toast helper ────────────────────────────────────────
+// ── Toast Helper ─────────────────────────────────────────
 function Toast({ msg }: { msg: string }) {
   return (
-    <div style={{
-      position: 'fixed', bottom: 90, left: '50%', transform: 'translateX(-50%)',
-      background: 'var(--text-primary)', color: 'var(--surface-0)',
-      padding: '10px 22px', borderRadius: 40, fontSize: 13, fontWeight: 600,
-      zIndex: 9999, pointerEvents: 'none', whiteSpace: 'nowrap',
-      boxShadow: '0 4px 24px rgba(0,0,0,0.25)',
-      animation: 'slide-up 0.2s ease forwards',
-    }}>{msg}</div>
+    <div 
+      className="fixed bottom-22.5 left-1/2 -translate-x-1/2 bg-(--text-primary) text-(--surface-0) px-5.5 py-2.5 rounded-[40px] text-xs font-semibold z-9999 pointer-events-none whitespace-nowrap shadow-[0_4px_24px_rgba(0,0,0,0.25)] animate-[slide-up_0.2s_ease_forwards]"
+    >
+      {msg}
+    </div>
   )
 }
 
-// ── Post actions menu ────────────────────────────────────
-function PostMenu({ postId, authorId, currentUserId, authorUsername, content, onEdit, onDelete }: {
-  postId: string; authorId: string; currentUserId: string; authorUsername: string
-  content: string; onEdit: () => void; onDelete: () => void
-}) {
+// ── Post Actions Menu ────────────────────────────────────
+interface PostMenuProps {
+  postId: string
+  authorId: string
+  currentUserId: string
+  authorUsername: string
+  content: string
+  onEdit: () => void
+  onDelete: () => void
+}
+
+function PostMenu({ postId, authorId, currentUserId, authorUsername, content, onEdit, onDelete }: PostMenuProps) {
   const [open, setOpen] = useState(false)
   const [toast, setToast] = useState('')
   const ref = useRef<HTMLDivElement>(null)
@@ -75,34 +79,48 @@ function PostMenu({ postId, authorId, currentUserId, authorUsername, content, on
 
   useEffect(() => {
     if (!open) return
-    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
-    document.addEventListener('mousedown', h)
-    return () => document.removeEventListener('mousedown', h)
+    const handleClickOutside = (e: MouseEvent) => { 
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) 
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [open])
 
-  function showToast(m: string) { setToast(m); setTimeout(() => setToast(''), 2400) }
+  function showToast(m: string) { 
+    setToast(m)
+    setTimeout(() => setToast(''), 2400) 
+  }
 
   async function copyLink() {
     await navigator.clipboard.writeText(`${window.location.origin}/posts/${postId}`)
-    showToast('Link copied!'); setOpen(false)
+    showToast('Link copied!')
+    setOpen(false)
   }
+  
   async function mute() {
     await supabase.from('mutes').upsert({ muter_id: currentUserId, muted_id: authorId })
-    showToast(`@${authorUsername} muted`); setOpen(false)
+    showToast(`@${authorUsername} muted`)
+    setOpen(false)
   }
+  
   async function block() {
     if (!confirm(`Block @${authorUsername}?`)) return
     await supabase.from('blocks').upsert({ blocker_id: currentUserId, blocked_id: authorId })
-    showToast(`@${authorUsername} blocked`); setOpen(false)
+    showToast(`@${authorUsername} blocked`)
+    setOpen(false)
   }
-  function report() { showToast('Report submitted — thank you'); setOpen(false) }
+  
+  function report() { 
+    showToast('Report submitted — thank you')
+    setOpen(false) 
+  }
 
   return (
-    <div ref={ref} style={{ position: 'relative' }}>
+    <div ref={ref} className="relative">
       <button
         onClick={e => { e.stopPropagation(); setOpen(o => !o) }}
-        className="w-8 h-8 flex items-center justify-center rounded-xl transition-all active:scale-90"
-        style={{ color: 'var(--text-tertiary)', background: open ? 'var(--surface-2)' : 'transparent' }}
+        className="w-8 h-8 flex items-center justify-center rounded-xl transition-all active:scale-90 text-(--text-tertiary)"
+        style={{ background: open ? 'var(--surface-2)' : 'transparent' }}
         aria-label="More options"
       >
         <MoreHorizontal size={18} />
@@ -111,14 +129,7 @@ function PostMenu({ postId, authorId, currentUserId, authorUsername, content, on
       {open && (
         <div
           onClick={e => e.stopPropagation()}
-          style={{
-            position: 'absolute', top: '100%', right: 0, marginTop: 6,
-            zIndex: 100, background: 'var(--surface-0)',
-            border: '1px solid var(--border)', borderRadius: 16,
-            boxShadow: '0 8px 32px rgba(0,0,0,0.18)',
-            minWidth: 190, overflow: 'hidden',
-            animation: 'pop-in 0.18s cubic-bezier(0.34,1.56,0.64,1) forwards',
-          }}
+          className="absolute top-full right-0 mt-1.5 z-100 bg-(--surface-0) border border-(--border) rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.18)] min-w-47.5 overflow-hidden animate-[pop-in_0.18s_cubic-bezier(0.34,1.56,0.64,1)_forwards]"
         >
           <MenuItem icon={<Link2 size={15} />} label="Copy link" onClick={copyLink} />
 
@@ -146,28 +157,21 @@ function PostMenu({ postId, authorId, currentUserId, authorUsername, content, on
 }
 
 function MenuItem({ icon, label, onClick, danger }: { icon: React.ReactNode; label: string; onClick: () => void; danger?: boolean }) {
-  const [hover, setHover] = useState(false)
   return (
     <button
       onClick={onClick}
-      onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
-      style={{
-        display: 'flex', alignItems: 'center', gap: 10,
-        padding: '10px 16px', width: '100%', border: 'none',
-        background: hover ? (danger ? 'rgba(239,68,68,0.06)' : 'var(--surface-1)') : 'transparent',
-        cursor: 'pointer', textAlign: 'left',
-        fontSize: 14, fontWeight: 500,
-        color: danger ? '#ef4444' : 'var(--text-primary)',
-        transition: 'background 0.12s',
-      }}
+      className={`flex items-center gap-2.5 px-4 py-2.5 w-full border-none cursor-pointer text-left text-sm font-semibold transition-colors duration-100
+        ${danger ? 'text-red-500 hover:bg-red-500/5' : 'text-(--text-primary) hover:bg-(--surface-1)'}
+      `}
     >
-      {icon} {label}
+      {icon} <span>{label}</span>
     </button>
   )
 }
-function Divider() { return <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} /> }
 
-// ── Who-reacted modal ─────────────────────────────────────
+function Divider() { return <div className="h-px bg-(--border) my-1" /> }
+
+// ── Who-Reacted Modal ────────────────────────────────────
 function ReactorModal({ postId, onClose }: { postId: string; onClose: () => void }) {
   const supabase = createClient()
   const [reactors, setReactors] = useState<any[]>([])
@@ -176,30 +180,37 @@ function ReactorModal({ postId, onClose }: { postId: string; onClose: () => void
   useEffect(() => {
     supabase.from('reactions').select('emoji, profiles:user_id (id, username, avatar_url)').eq('post_id', postId)
       .then(({ data }) => { setReactors(data ?? []); setLoading(false) })
-  }, [postId])
+  }, [postId, supabase])
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center px-4 pb-4 sm:pb-0"
-      style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }} onClick={onClose}>
-      <div className="w-full max-w-sm rounded-3xl overflow-hidden anim-pop"
-        style={{ background: 'var(--surface-0)', boxShadow: 'var(--shadow-lg)', maxHeight: '70vh', display: 'flex', flexDirection: 'column' }}
-        onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid var(--border)' }}>
-          <h3 className="font-extrabold text-base">Reactions</h3>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-xl" style={{ background: 'var(--surface-2)' }}><X size={15} /></button>
+    <div 
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center px-4 pb-4 sm:pb-0 bg-black/60 backdrop-blur-xs"
+      onClick={onClose}
+    >
+      <div 
+        className="w-full max-w-sm rounded-3xl overflow-hidden animate-[pop-in_0.2s_ease-out_forwards] bg-(--surface-0) shadow-(--shadow-lg) max-h-[70vh] flex flex-col"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-5 py-4 border-b border-(--border)">
+          <h3 className="font-black text-base">Reactions</h3>
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-xl bg-(--surface-2)">
+            <X size={15} />
+          </button>
         </div>
         <div className="overflow-y-auto flex-1 p-4 space-y-2">
           {loading ? (
-            <div className="flex justify-center py-8"><Loader2 size={20} className="animate-spin" style={{ color: 'var(--text-tertiary)' }} /></div>
+            <div className="flex justify-center py-8">
+              <Loader2 size={20} className="animate-spin text-(--text-tertiary)" />
+            </div>
           ) : reactors.length === 0 ? (
-            <p className="text-center text-sm py-8" style={{ color: 'var(--text-tertiary)' }}>No reactions yet</p>
+            <p className="text-center text-sm py-8 text-(--text-tertiary)">No reactions yet</p>
           ) : reactors.map((r, i) => (
             <Link key={i} href={`/profile/${r.profiles?.id}`} onClick={onClose}>
-              <div className="flex items-center gap-3 px-2 py-2 rounded-2xl" style={{ background: 'var(--surface-1)' }}>
-                <div className="w-9 h-9 rounded-full overflow-hidden flex items-center justify-center text-white font-bold text-sm" style={{ background: 'var(--grad-brand)' }}>
+              <div className="flex items-center gap-3 px-3 py-2.5 rounded-2xl bg-(--surface-1) active:scale-[0.99] transition-transform">
+                <div className="w-9 h-9 rounded-full overflow-hidden flex items-center justify-center text-white font-bold text-sm bg-(--grad-brand)">
                   {r.profiles?.avatar_url ? <img src={r.profiles.avatar_url} className="w-full h-full object-cover" alt="" /> : r.profiles?.username?.[0]?.toUpperCase()}
                 </div>
-                <span className="flex-1 text-sm font-semibold">@{r.profiles?.username}</span>
+                <span className="flex-1 text-sm font-bold">@{r.profiles?.username}</span>
                 <span className="text-lg">{r.emoji}</span>
               </div>
             </Link>
@@ -211,7 +222,12 @@ function ReactorModal({ postId, onClose }: { postId: string; onClose: () => void
 }
 
 // ── Comment Input ─────────────────────────────────────────
-function CommentInput({ onSubmit, posting }: { onSubmit: (text: string, mediaUrl?: string, mediaType?: string) => Promise<void>; posting: boolean }) {
+interface CommentInputProps {
+  onSubmit: (text: string, mediaUrl?: string, mediaType?: string) => Promise<void>
+  posting: boolean
+}
+
+function CommentInput({ onSubmit, posting }: CommentInputProps) {
   const [text, setText] = useState('')
   const [mediaPreview, setMediaPreview] = useState<{ url: string; type: string } | null>(null)
   const [uploading, setUploading] = useState(false)
@@ -225,7 +241,8 @@ function CommentInput({ onSubmit, posting }: { onSubmit: (text: string, mediaUrl
   const isSubmitDisabled = (!text.trim() && !mediaPreview) || posting || uploading
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]; if (!file) return
+    const file = e.target.files?.[0]
+    if (!file) return
     setUploading(true)
     const path = `comments/${Date.now()}.${file.name.split('.').pop()}`
     const { error } = await supabase.storage.from('media').upload(path, file, { upsert: true })
@@ -233,75 +250,117 @@ function CommentInput({ onSubmit, posting }: { onSubmit: (text: string, mediaUrl
       const { data } = supabase.storage.from('media').getPublicUrl(path)
       setMediaPreview({ url: data.publicUrl, type: file.type.startsWith('video') ? 'video' : 'image' })
     }
-    setUploading(false); e.target.value = ''
+    setUploading(false)
+    e.target.value = ''
   }
 
   async function openGifPicker() {
     if (showGifPicker) { setShowGifPicker(false); return }
-    setShowGifPicker(true); setGifLoading(true)
-    setGifResults(await fetchGifs('')); setGifLoading(false)
+    setShowGifPicker(true)
+    setGifLoading(true)
+    setGifResults(await fetchGifs(''))
+    setGifLoading(false)
   }
+
   async function searchGifs(q: string) {
-    setGifQuery(q); setGifLoading(true)
-    setGifResults(await fetchGifs(q)); setGifLoading(false)
+    setGifQuery(q)
+    setGifLoading(true)
+    setGifResults(await fetchGifs(q))
+    setGifLoading(false)
   }
+
   async function submit() {
     if (isSubmitDisabled) return
     await onSubmit(text.trim(), mediaPreview?.url, mediaPreview?.type)
-    setText(''); setMediaPreview(null); setShowGifPicker(false)
+    setText('')
+    setMediaPreview(null)
+    setShowGifPicker(false)
   }
 
   return (
     <div className="p-3 space-y-2">
       {mediaPreview && (
         <div className="relative inline-block">
-          {mediaPreview.type === 'video'
-            ? <video src={mediaPreview.url} className="h-28 rounded-xl object-cover" muted />
-            : <img src={mediaPreview.url} alt="Selected file preview" className="h-28 rounded-xl object-cover" style={{ border: '1px solid var(--border)' }} />}
-          <button onClick={() => setMediaPreview(null)} className="absolute -top-2 -right-2 w-6 h-6 rounded-full flex items-center justify-center text-white" style={{ background: 'rgba(0,0,0,0.75)' }}>
+          {mediaPreview.type === 'video' ? (
+            <video src={mediaPreview.url} className="h-28 rounded-xl object-cover" muted />
+          ) : (
+            <img src={mediaPreview.url} alt="Selected file preview" className="h-28 rounded-xl object-cover border border-(--border)" />
+          )}
+          <button 
+            onClick={() => setMediaPreview(null)} 
+            className="absolute -top-2 -right-2 w-6 h-6 rounded-full flex items-center justify-center text-white bg-black/75 transition-transform active:scale-90"
+          >
             <X size={12} />
           </button>
         </div>
       )}
+
       {showGifPicker && (
-        <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid var(--border)', background: 'var(--surface-1)' }}>
+        <div className="rounded-2xl overflow-hidden border border-(--border) bg-(--surface-1)">
           <div className="p-2">
-            <input value={gifQuery} onChange={e => searchGifs(e.target.value)} placeholder="Search GIFs…" className="input w-full text-sm px-3 py-1.5" autoFocus />
+            <input 
+              value={gifQuery} 
+              onChange={e => searchGifs(e.target.value)} 
+              placeholder="Search GIFs…" 
+              className="input w-full text-sm px-3 py-1.5" 
+              autoFocus 
+            />
           </div>
           <div className="grid grid-cols-4 gap-1 p-2 max-h-44 overflow-y-auto">
             {gifLoading ? (
-              <div className="col-span-4 flex justify-center py-4"><Loader2 size={18} className="animate-spin" style={{ color: 'var(--text-tertiary)' }} /></div>
-            ) : gifResults.map((g, i) => (
-              <button key={i} onClick={() => { setMediaPreview({ url: g.url, type: 'gif' }); setShowGifPicker(false) }} className="rounded-lg overflow-hidden aspect-square active:scale-95 transition-transform">
-                <img src={g.preview || g.url} alt="GIF Result" className="w-full h-full object-cover" loading="lazy" />
-              </button>
-            ))}
+              <div className="col-span-4 flex justify-center py-4">
+                <Loader2 size={18} className="animate-spin text-(--text-tertiary)" />
+              </div>
+            ) : (
+              gifResults.map((g, i) => (
+                <button 
+                  key={i} 
+                  onClick={() => { setMediaPreview({ url: g.url, type: 'gif' }); setShowGifPicker(false) }} 
+                  className="rounded-lg overflow-hidden aspect-square active:scale-95 transition-transform"
+                >
+                  <img src={g.preview || g.url} alt="GIF Result" className="w-full h-full object-cover" loading="lazy" />
+                </button>
+              ))
+            )}
           </div>
-          <p className="text-center text-[10px] pb-1.5" style={{ color: 'var(--text-tertiary)' }}>Powered by Tenor</p>
+          <p className="text-center text-[10px] pb-1.5 text-(--text-tertiary)">Powered by Tenor</p>
         </div>
       )}
+
       <div className="flex items-end gap-2">
         <div className="flex gap-1 pb-1">
           <input ref={fileRef} type="file" accept="image/*,video/*" className="hidden" onChange={handleFile} />
-          <button onClick={() => { setShowGifPicker(false); fileRef.current?.click() }} disabled={uploading}
-            className="w-8 h-8 flex items-center justify-center rounded-xl transition-all active:scale-90"
-            style={{ color: 'var(--text-tertiary)', background: 'var(--surface-2)' }}>
+          <button 
+            onClick={() => { setShowGifPicker(false); fileRef.current?.click() }} 
+            disabled={uploading}
+            className="w-8 h-8 flex items-center justify-center rounded-xl transition-all active:scale-90 text-(--text-tertiary) bg-(--surface-2)"
+          >
             {uploading ? <Loader2 size={15} className="animate-spin" /> : <ImagePlus size={15} />}
           </button>
-          <button onClick={openGifPicker}
-            className="w-8 h-8 flex items-center justify-center rounded-xl transition-all active:scale-90 text-xs font-black"
-            style={{ color: showGifPicker ? 'white' : 'var(--text-tertiary)', background: showGifPicker ? 'var(--nia-violet)' : 'var(--surface-2)' }}>
+          <button 
+            onClick={openGifPicker}
+            className={`w-8 h-8 flex items-center justify-center rounded-xl transition-all active:scale-90 text-xs font-black
+              ${showGifPicker ? 'text-white bg-(--nia-violet)' : 'text-(--text-tertiary) bg-(--surface-2)'}
+            `}
+          >
             GIF
           </button>
         </div>
-        <textarea value={text} onChange={e => setText(e.target.value)}
+        
+        <textarea 
+          value={text} 
+          onChange={e => setText(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit() } }}
-          placeholder="Reply…" rows={1}
-          className="flex-1 px-3 py-2 rounded-2xl text-sm outline-none resize-none"
-          style={{ background: 'var(--surface-2)', color: 'var(--text-primary)', border: '1.5px solid transparent', minHeight: 36, maxHeight: 96 }} />
-        <button onClick={submit} disabled={isSubmitDisabled}
-          className="w-9 h-9 flex items-center justify-center rounded-xl text-white transition-all active:scale-90 disabled:opacity-40 shrink-0"
-          style={{ background: 'var(--grad-brand)' }}>
+          placeholder="Reply…" 
+          rows={1}
+          className="flex-1 px-3 py-2 rounded-2xl text-sm outline-none resize-none bg-(--surface-2) text-(--text-primary) border border-transparent min-h-9 max-h-24" 
+        />
+        
+        <button 
+          onClick={submit} 
+          disabled={isSubmitDisabled}
+          className="w-9 h-9 flex items-center justify-center rounded-xl text-white transition-all active:scale-90 disabled:opacity-40 shrink-0 bg-(--grad-brand)"
+        >
           {posting ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
         </button>
       </div>
@@ -332,40 +391,52 @@ function CommentRow({ comment: initialComment, currentUserId, onDelete }: { comm
   }
 
   return (
-    <div className="flex gap-2.5 group">
+    <div className="flex gap-2.5 group select-none">
       <Link href={`/profile/${comment.profiles?.id}`} className="shrink-0">
-        <div className="w-7 h-7 rounded-full overflow-hidden flex items-center justify-center text-white font-bold text-xs" style={{ background: 'var(--grad-brand)' }}>
+        <div className="w-7 h-7 rounded-full overflow-hidden flex items-center justify-center text-white font-bold text-xs bg-(--grad-brand)">
           {comment.profiles?.avatar_url ? <img src={comment.profiles.avatar_url} className="w-full h-full object-cover" alt="" /> : comment.profiles?.username?.[0]?.toUpperCase()}
         </div>
       </Link>
       <div className="flex-1 min-w-0 space-y-1">
-        <div className="px-3 py-2 rounded-2xl rounded-tl-sm text-sm" style={{ background: 'var(--surface-2)' }}>
+        <div className="px-3 py-2 rounded-2xl rounded-tl-xs text-sm bg-(--surface-2)">
           <div className="flex items-start justify-between gap-2">
             <div className="flex-1 min-w-0">
-              <Link href={`/profile/${comment.profiles?.id}`} className="font-bold text-xs mr-1.5 max-w-35 truncate inline-block vertical-bottom" style={{ color: 'var(--nia-violet)' }}>@{comment.profiles?.username}</Link>
+              <Link href={`/profile/${comment.profiles?.id}`} className="font-bold text-xs mr-1.5 max-w-35 truncate inline-block align-bottom text-(--nia-violet)">
+                @{comment.profiles?.username}
+              </Link>
               {editing ? (
                 <div className="mt-1 space-y-1">
-                  <textarea value={editText} onChange={e => setEditText(e.target.value)} className="w-full text-sm rounded-lg px-2 py-1 resize-none outline-none" style={{ background: 'var(--surface-1)', color: 'var(--text-primary)', border: '1px solid var(--border)' }} rows={2} autoFocus />
+                  <textarea 
+                    value={editText} 
+                    onChange={e => setEditText(e.target.value)} 
+                    className="w-full text-sm rounded-lg px-2 py-1 resize-none outline-none bg-(--surface-1) text-(--text-primary) border border-(--border)" 
+                    rows={2} 
+                    autoFocus 
+                  />
                   <div className="flex gap-2">
-                    <button onClick={() => setEditing(false)} className="text-xs px-2 py-1 rounded-lg" style={{ background: 'var(--surface-1)', color: 'var(--text-tertiary)' }}>Cancel</button>
-                    <button onClick={saveEdit} disabled={saving} className="text-xs px-2 py-1 rounded-lg text-white" style={{ background: 'var(--nia-violet)' }}>{saving ? 'Saving…' : 'Save'}</button>
+                    <button onClick={() => setEditing(false)} className="text-xs px-2 py-1 rounded-lg bg-(--surface-1) text-(--text-tertiary)">Cancel</button>
+                    <button onClick={saveEdit} disabled={saving} className="text-xs px-2 py-1 rounded-lg text-white bg-(--nia-violet)">{saving ? 'Saving…' : 'Save'}</button>
                   </div>
                 </div>
               ) : (
-                comment.content && <span style={{ color: 'var(--text-primary)' }} className="wrap-break-word">{comment.content}</span>
+                comment.content && <span className="text-(--text-primary) wrap-break-word">{comment.content}</span>
               )}
             </div>
+            
             {isOwn && !editing && (
               <div className="relative shrink-0">
-                <button onClick={() => setShowMenu(!showMenu)} className="w-6 h-6 flex items-center justify-center rounded-lg opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: 'var(--text-tertiary)', background: 'var(--surface-1)' }}>
+                <button 
+                  onClick={() => setShowMenu(!showMenu)} 
+                  className="w-6 h-6 flex items-center justify-center rounded-lg opacity-0 group-hover:opacity-100 transition-opacity text-(--text-tertiary) bg-(--surface-1)"
+                >
                   <MoreHorizontal size={12} />
                 </button>
                 {showMenu && (
-                  <div className="absolute right-0 top-7 z-20 w-32 rounded-xl overflow-hidden anim-pop" style={{ background: 'var(--surface-0)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-lg)' }}>
-                    <button onClick={() => { setEditing(true); setShowMenu(false) }} className="flex items-center gap-2 w-full px-3 py-2 text-xs font-semibold text-left" style={{ color: 'var(--text-primary)' }}>
-                      <Pencil size={12} style={{ color: 'var(--nia-violet)' }} /> Edit
+                  <div className="absolute right-0 top-7 z-20 w-32 rounded-xl overflow-hidden bg-(--surface-0) border border-(--border) shadow-(--shadow-lg) animate-[pop-in_0.15s_ease_forwards]">
+                    <button onClick={() => { setEditing(true); setShowMenu(false) }} className="flex items-center gap-2 w-full px-3 py-2 text-xs font-semibold text-left text-(--text-primary)">
+                      <Pencil size={12} className="text-(--nia-violet)" /> Edit
                     </button>
-                    <button onClick={() => { supabase.from('comments').delete().eq('id', comment.id); onDelete(comment.id); setShowMenu(false) }} className="flex items-center gap-2 w-full px-3 py-2 text-xs font-semibold text-left" style={{ color: '#ef4444' }}>
+                    <button onClick={() => { supabase.from('comments').delete().eq('id', comment.id); onDelete(comment.id); setShowMenu(false) }} className="flex items-center gap-2 w-full px-3 py-2 text-xs font-semibold text-left text-red-500">
                       <Trash2 size={12} /> Delete
                     </button>
                   </div>
@@ -374,25 +445,31 @@ function CommentRow({ comment: initialComment, currentUserId, onDelete }: { comm
             )}
           </div>
         </div>
+        
         {comment.media_url && (
           <div className="pl-1">
-            {comment.media_type === 'video'
-              ? <video src={comment.media_url} controls className="rounded-xl max-h-48 max-w-55" style={{ border: '1px solid var(--border)' }} />
-              : (
-                <>
-                  <img src={comment.media_url} alt="Comment Attachment" onClick={() => setLightbox(true)} className="rounded-xl max-h-48 max-w-55 object-cover cursor-pointer active:scale-[0.98] transition-transform" style={{ border: '1px solid var(--border)' }} />
-                  {lightbox && <MediaLightbox items={[{ url: comment.media_url, type: 'image' }]} startIndex={0} onClose={() => setLightbox(false)} />}
-                </>
-              )}
+            {comment.media_type === 'video' ? (
+              <video src={comment.media_url} controls className="rounded-xl max-h-48 max-w-55 border border-(--border)" />
+            ) : (
+              <>
+                <img 
+                  src={comment.media_url} 
+                  alt="Comment Attachment" 
+                  onClick={() => setLightbox(true)} 
+                  className="rounded-xl max-h-48 max-w-55 object-cover cursor-pointer active:scale-[0.98] transition-transform border border-(--border)" 
+                />
+                {lightbox && <MediaLightbox items={[{ url: comment.media_url, type: 'image' }]} startIndex={0} onClose={() => setLightbox(false)} />}
+              </>
+            )}
           </div>
         )}
-        <div className="text-[10px] pl-1" style={{ color: 'var(--text-tertiary)' }}>{timeAgo(comment.created_at)}</div>
+        <div className="text-[10px] pl-1 text-(--text-tertiary)">{timeAgo(comment.created_at)}</div>
       </div>
     </div>
   )
 }
 
-// ── Main PostCard ─────────────────────────────────────────
+// ── Main Postcard ─────────────────────────────────────────
 export default function PostCard({ post, currentUserId, defaultShowComments }: any) {
   const supabase = createClient()
   const router = useRouter()
@@ -411,7 +488,6 @@ export default function PostCard({ post, currentUserId, defaultShowComments }: a
   const [posting, setPosting] = useState(false)
   const [translation, setTranslation] = useState<string | null>(null)
   const [translating, setTranslating] = useState(false)
-  const [isPlaying, setIsPlaying] = useState(false)
   const [copied, setCopied] = useState(false)
   const [reposted, setReposted] = useState(post.reposts?.some((r: any) => r.user_id === currentUserId) ?? false)
   const [repostCount, setRepostCount] = useState(post.reposts?.length ?? 0)
@@ -424,30 +500,30 @@ export default function PostCard({ post, currentUserId, defaultShowComments }: a
   const [commentCount, setCommentCount] = useState(post.comments?.length ?? 0)
   const [viewCount, setViewCount] = useState<number>(post.view_count ?? 0)
 
-  const audioRef = useRef<HTMLAudioElement | null>(null)
   const viewTracked = useRef(false)
   const isOwn = post.profiles?.id === currentUserId
   const totalReactions = Object.values(localReactions).reduce((a, b) => a + b, 0)
   const topReactions = Object.entries(localReactions).filter(([, c]) => c > 0).sort(([, a], [, b]) => b - a).slice(0, 3)
   const poll = Array.isArray(post.poll) ? post.poll[0] : post.poll
-  const commenterProfiles: any[] = post.comments?.slice(0, 3)?.map((c: any) => c.profiles).filter(Boolean) ?? []
 
-  // Track view
+  // Track viewport impression metrics
   useEffect(() => {
     if (viewTracked.current || !currentUserId) return
     const observer = new IntersectionObserver(async ([entry]) => {
       if (entry.isIntersecting && !viewTracked.current) {
-        viewTracked.current = true; observer.disconnect()
+        viewTracked.current = true
+        observer.disconnect()
         const { error } = await supabase.from('post_views').insert({ post_id: post.id, user_id: currentUserId })
         if (!error) setViewCount(c => c + 1)
       }
     }, { threshold: 0.6 })
+    
     const el = document.getElementById(`post-${post.id}`)
     if (el) observer.observe(el)
     return () => observer.disconnect()
   }, [currentUserId, post.id, supabase])
 
-  // Auto-load comments on detail page
+  // Hydrate explicit comments if on a localized focus frame view
   useEffect(() => {
     if (!defaultShowComments) return
     supabase.from('comments')
@@ -472,18 +548,22 @@ export default function PostCard({ post, currentUserId, defaultShowComments }: a
   }
 
   async function handleReaction(emoji: string) {
-    if (!currentUserId) return; setShowReactionPicker(false)
+    if (!currentUserId) return
+    setShowReactionPicker(false)
     const newCounts = { ...localReactions }
+    
     if (activeReaction === emoji) {
       await supabase.from('reactions').delete().match({ post_id: post.id, user_id: currentUserId })
-      newCounts[emoji] = Math.max((newCounts[emoji] ?? 1) - 1, 0); setActiveReaction(null)
+      newCounts[emoji] = Math.max((newCounts[emoji] ?? 1) - 1, 0)
+      setActiveReaction(null)
     } else {
       if (activeReaction) {
         await supabase.from('reactions').delete().match({ post_id: post.id, user_id: currentUserId })
         newCounts[activeReaction] = Math.max((newCounts[activeReaction] ?? 1) - 1, 0)
       }
       await supabase.from('reactions').insert({ post_id: post.id, user_id: currentUserId, emoji })
-      newCounts[emoji] = (newCounts[emoji] ?? 0) + 1; setActiveReaction(emoji)
+      newCounts[emoji] = (newCounts[emoji] ?? 0) + 1
+      setActiveReaction(emoji)
     }
     setLocalReactions(newCounts)
   }
@@ -491,32 +571,49 @@ export default function PostCard({ post, currentUserId, defaultShowComments }: a
   async function handleRepost() {
     if (!currentUserId || reposted || isOwn) return
     await supabase.from('reposts').insert({ post_id: post.id, user_id: currentUserId })
-    setReposted(true); setRepostCount((c: number) => c + 1)
+    setReposted(true)
+    setRepostCount((c: number) => c + 1)
   }
 
   async function loadComments() {
     if (showComments) { setShowComments(false); return }
     setLoadingComments(true)
     const { data } = await supabase.from('comments').select('*, profiles:user_id (id, username, avatar_url)').eq('post_id', post.id).order('created_at', { ascending: true })
-    setComments(data ?? []); setLoadingComments(false); setShowComments(true)
+    setComments(data ?? [])
+    setLoadingComments(false)
+    setShowComments(true)
   }
 
   async function submitComment(text: string, mediaUrl?: string, mediaType?: string) {
-    if (!currentUserId) return; setPosting(true)
+    if (!currentUserId) return
+    setPosting(true)
     const payload: any = { post_id: post.id, user_id: currentUserId }
     if (text) payload.content = text
     if (mediaUrl) { payload.media_url = mediaUrl; payload.media_type = mediaType }
+    
     const { data, error } = await supabase.from('comments').insert(payload).select('*, profiles:user_id (id, username, avatar_url)').single()
-    if (!error && data) { setComments(prev => [...prev, data]); setCommentCount((c: number) => c + 1) }
-    setPosting(false); router.refresh()
+    if (!error && data) { 
+      setComments(prev => [...prev, data])
+      setCommentCount((c: number) => c + 1) 
+    }
+    setPosting(false)
+    router.refresh()
   }
 
   async function handleTranslate() {
     if (translation) { setTranslation(null); return }
-    if (!post.content) return; setTranslating(true)
+    if (!post.content) return
+    setTranslating(true)
     try {
-      const res = await fetch('/api/translate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: post.content, targetLang: 'en' }) })
-      const data = await res.json(); setTranslation(data.translation ?? null)
+      const res = await fetch('/api/translate', { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify({ text: post.content, targetLang: 'en' }) 
+      })
+      const data = await res.json()
+      setTranslation(data.translation ?? null)
+    } catch (err) {
+      console.error(err)
     } finally { setTranslating(false) }
   }
 
@@ -525,14 +622,16 @@ export default function PostCard({ post, currentUserId, defaultShowComments }: a
     if (navigator.share) {
       try { await navigator.share({ title: `@${post.profiles?.username} on Nia`, text: post.content ?? '', url }) } catch {}
     } else {
-      await navigator.clipboard.writeText(url); setCopied(true); setTimeout(() => setCopied(false), 2000)
+      await navigator.clipboard.writeText(url)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
     }
   }
 
-  function handleCommentDelete(deletedId: string) {
+  const handleCommentDelete = useCallback((deletedId: string) => {
     setComments(prev => prev.filter(c => c.id !== deletedId))
     setCommentCount((c: number) => Math.max(0, c - 1))
-  }
+  }, [])
 
   if (isDeleted) return null
 
@@ -545,44 +644,55 @@ export default function PostCard({ post, currentUserId, defaultShowComments }: a
     <>
       <article
         id={`post-${post.id}`}
-        className="card card-hover anim-up"
+        className="card card-hover anim-up select-none"
         onClick={() => setShowReactionPicker(false)}
       >
-        {/* ── Header ─────────────────────── */}
+        {/* ── Header ──────────────────────────────────────── */}
         <div className="flex items-start gap-3 p-4 pb-3">
           <Link href={post.is_anonymous ? '#' : `/profile/${post.profiles?.id}`} className="shrink-0">
             <div className="avatar-ring">
-              <div className="w-10 h-10 rounded-full overflow-hidden" style={{ background: post.is_anonymous ? 'linear-gradient(135deg,#555,#333)' : 'var(--grad-brand)' }}>
-                {!post.is_anonymous && post.profiles?.avatar_url
-                  ? <img src={post.profiles.avatar_url} className="w-full h-full object-cover" alt="Profile avatar" />
-                  : <div className="w-full h-full flex items-center justify-center text-white font-bold text-sm">{post.is_anonymous ? '🎭' : post.profiles?.username?.[0]?.toUpperCase() ?? '?'}</div>}
+              <div className="w-10 h-10 rounded-full overflow-hidden" style={{ background: post.is_anonymous ? 'linear-gradient(135deg, #555, #333)' : 'var(--grad-brand)' }}>
+                {!post.is_anonymous && post.profiles?.avatar_url ? (
+                  <img src={post.profiles.avatar_url} className="w-full h-full object-cover" alt="Profile avatar" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-white font-bold text-sm">
+                    {post.is_anonymous ? '🎭' : post.profiles?.username?.[0]?.toUpperCase() ?? '?'}
+                  </div>
+                )}
               </div>
             </div>
           </Link>
 
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <Link href={post.is_anonymous ? '#' : `/profile/${post.profiles?.id}`} className="font-bold text-sm hover:underline max-w-37.5 truncate">{displayName}</Link>
-              {post.profiles?.is_verified && <BadgeCheck size={15} style={{ color: 'var(--nia-violet)' }} fill="rgba(168,85,247,0.15)" />}
+              <Link href={post.is_anonymous ? '#' : `/profile/${post.profiles?.id}`} className="font-bold text-sm hover:underline max-w-37.5 truncate">
+                {displayName}
+              </Link>
+              {post.profiles?.is_verified && <BadgeCheck size={15} className="text-(--nia-violet)" fill="rgba(168,85,247,0.15)" />}
               {!post.is_anonymous && post.profiles?.country && <span title={post.profiles.country} className="text-base leading-none">{getFlag(post.profiles.country)}</span>}
               {post.circles && (
-                <Link href={`/circles/${post.circles.slug}`} className="text-xs font-semibold px-2.5 py-0.5 rounded-full max-w-30 truncate" style={{ background: 'linear-gradient(135deg,rgba(255,107,107,0.15),rgba(168,85,247,0.15))', color: 'var(--nia-violet)' }}>{post.circles.name}</Link>
+                <Link href={`/circles/${post.circles.slug}`} className="text-xs font-bold px-2.5 py-0.5 rounded-full max-w-30 truncate bg-linear-to-br from-red-500/15 to-purple-500/15 text-(--nia-violet)">
+                  {post.circles.name}
+                </Link>
               )}
               {post.language && post.language !== 'english' && (
-                <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: 'var(--surface-2)', color: 'var(--text-tertiary)' }}>{getLanguageEmoji(post.language)} {post.language}</span>
+                <span className="text-xs px-2 py-0.5 rounded-full font-semibold bg-(--surface-2) text-(--text-tertiary)">
+                  {getLanguageEmoji(post.language)} {post.language}
+                </span>
               )}
             </div>
-            <div className="flex items-center gap-1.5 mt-0.5">
+            
+            <div className="flex items-center gap-1.5 mt-0.5 text-xs text-(--text-tertiary)">
               {!post.is_anonymous && post.profiles?.country && (
-                <span className="text-xs max-w-45 truncate" style={{ color: 'var(--text-tertiary)' }}>{post.profiles.city ? `${post.profiles.city}, ${post.profiles.country}` : post.profiles.country}</span>
+                <span className="max-w-45 truncate">{post.profiles.city ? `${post.profiles.city}, ${post.profiles.country}` : post.profiles.country}</span>
               )}
-              {!post.is_anonymous && <span style={{ color: 'var(--text-tertiary)' }}>·</span>}
-              <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>{timeAgo(post.created_at)}</span>
-              {post.updated_at && post.updated_at !== post.created_at && <span className="text-xs italic" style={{ color: 'var(--text-tertiary)' }}>· edited</span>}
+              {!post.is_anonymous && <span>·</span>}
+              <span>{timeAgo(post.created_at)}</span>
+              {post.updated_at && post.updated_at !== post.created_at && <span className="italic">· edited</span>}
             </div>
           </div>
 
-          <div className="flex items-center gap-1 shrink-0">
+          <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
             {!isOwn && !post.is_anonymous && post.profiles?.id && (
               <TipButton recipientUserId={post.profiles.id} recipientUsername={post.profiles.username} />
             )}
@@ -598,84 +708,233 @@ export default function PostCard({ post, currentUserId, defaultShowComments }: a
           </div>
         </div>
 
-        {/* ── Content ────────────────────── */}
-        {isEditing ? (
-          <div className="px-4 pb-3 space-y-2">
-            <textarea value={editContent} onChange={e => setEditContent(e.target.value)} rows={3} className="input resize-none text-[15px] w-full" autoFocus />
-            <div className="flex gap-2">
-              <button onClick={() => { setIsEditing(false); setEditContent(post.content ?? '') }} className="btn-ghost flex items-center gap-1.5 px-3 py-2 text-sm flex-1 justify-center"><X size={14} /> Cancel</button>
-              <button onClick={saveEdit} disabled={!editContent.trim() || editLoading} className="btn flex items-center gap-1.5 px-3 py-2 text-sm flex-1 justify-center text-white" style={{ background: 'var(--nia-violet)' }}>
-                {editLoading ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Save
-              </button>
+        {/* ── Content Text / Translation Layout ───────────── */}
+        <div className="px-4 pb-2 space-y-2">
+          {isEditing ? (
+            <div className="space-y-2 mt-1" onClick={e => e.stopPropagation()}>
+              <textarea
+                value={editContent}
+                onChange={e => setEditContent(e.target.value)}
+                className="w-full text-sm rounded-xl p-3 outline-none resize-none bg-(--surface-2) text-(--text-primary) border border-(--border)"
+                rows={3}
+              />
+              <div className="flex justify-end gap-2">
+                <button onClick={() => setIsEditing(false)} className="px-3 py-1.5 text-xs font-bold rounded-xl bg-(--surface-2) text-(--text-secondary)">Cancel</button>
+                <button onClick={saveEdit} disabled={editLoading} className="px-3 py-1.5 text-xs font-bold rounded-xl text-white bg-(--nia-violet)">
+                  {editLoading ? 'Saving…' : 'Save Changes'}
+                </button>
+              </div>
             </div>
-          </div>
-        ) : (
-          <div className="px-4 pb-3 space-y-3">
-            {post.content && (
-              <p className="text-[15px] leading-relaxed wrap-break-word whitespace-pre-wrap" style={{ color: 'var(--text-primary)' }}>
-                {translation ? translation : post.content}
-              </p>
-            )}
-            {post.content && post.language && post.language !== 'english' && (
-              <button onClick={handleTranslate} disabled={translating} className="text-xs font-bold flex items-center gap-1" style={{ color: 'var(--nia-violet)' }}>
-                <Languages size={12} /> {translating ? 'Translating…' : translation ? 'Show original' : 'Translate to English'}
-              </button>
-            )}
-          </div>
-        )}
-
-        {poll && <div className="px-4 pb-3"><PollCard poll={poll} currentUserId={currentUserId} /></div>}
-        
-        {mediaItems.length > 0 && (
-          <div className="px-4 pb-3">
-            {mediaItems[0].type === 'video' ? (
-              <VideoPlayer src={mediaItems[0].url} />
-            ) : (
-              <img src={mediaItems[0].url} alt="Post content media" className="rounded-2xl max-h-96 w-full object-cover cursor-pointer" onClick={() => setLightboxIndex(0)} />
-            )}
-            {lightboxIndex !== null && (
-              <MediaLightbox items={mediaItems} startIndex={lightboxIndex} onClose={() => setLightboxIndex(null)} />
-            )}
-          </div>
-        )}
-
-        {/* ── Footer / Actions Panel ──────── */}
-        <div className="flex items-center justify-between px-4 py-2 border-t" style={{ borderColor: 'var(--border)' }}>
-          <button onClick={loadComments} className="flex items-center gap-1.5 text-xs text-slate-500">
-            <MessageCircle size={16} /> {commentCount}
-          </button>
-          <button onClick={handleRepost} disabled={reposted || isOwn} className={`flex items-center gap-1.5 text-xs ${reposted ? 'text-green-500' : 'text-slate-500'}`}>
-            <Repeat2 size={16} /> {repostCount}
-          </button>
-          <button onClick={handleShare} className="flex items-center gap-1.5 text-xs text-slate-500">
-            <Share2 size={16} /> {copied ? 'Copied!' : 'Share'}
-          </button>
+          ) : (
+            <>
+              {post.content && <p className="text-[15px] leading-relaxed text-(--text-primary) wrap-break-word whitespace-pre-wrap">{post.content}</p>}
+              {translation && (
+                <div className="p-3 rounded-xl border border-dashed border-(--border) bg-(--surface-1) animate-[slide-up_0.15s_ease_forwards]">
+                  <p className="text-xs font-black mb-1 text-(--nia-violet) flex items-center gap-1">
+                    <Languages size={12} /> Translated to English:
+                  </p>
+                  <p className="text-sm leading-relaxed text-(--text-secondary) wrap-break-word">{translation}</p>
+                </div>
+              )}
+              {post.content && post.language && post.language !== 'english' && (
+                <button
+                  onClick={e => { e.stopPropagation(); handleTranslate() }}
+                  disabled={translating}
+                  className="text-xs font-bold flex items-center gap-1 text-(--nia-violet) hover:underline disabled:opacity-60"
+                >
+                  {translating ? <Loader2 size={12} className="animate-spin" /> : <Languages size={12} />}
+                  {translation ? 'Show original' : 'Translate post'}
+                </button>
+              )}
+            </>
+          )}
         </div>
 
-        {showComments && (
-          <div className="border-t p-3 space-y-3" style={{ borderColor: 'var(--border)' }}>
-            <CommentInput onSubmit={submitComment} posting={posting} />
-            {loadingComments ? (
-              <div className="flex justify-center py-4"><Loader2 size={20} className="animate-spin text-slate-400" /></div>
+        {/* ── Poll Module Insertion ───────────────────────── */}
+        {poll && (
+          <div onClick={e => e.stopPropagation()}>
+            <PollCard poll={poll} currentUserId={currentUserId} />
+          </div>
+        )}
+
+        {/* ── Dynamic Media Grid ─────────────────────────── */}
+        {mediaItems.length > 0 && (
+          <div className="px-4 pb-3" onClick={e => e.stopPropagation()}>
+            {mediaItems.length === 1 ? (
+              <div className="rounded-2xl overflow-hidden border border-(--border) max-h-95 bg-(--surface-1)">
+                {mediaItems[0].type === 'video' ? (
+                  <VideoPlayer src={mediaItems[0].url} />
+                ) : (
+                  <img
+                    src={mediaItems[0].url}
+                    alt="Post media card"
+                    className="w-full h-full object-cover cursor-pointer hover:opacity-95 transition-opacity"
+                    onClick={() => setLightboxIndex(0)}
+                  />
+                )}
+              </div>
             ) : (
-              <div className="space-y-3">
-                {comments.map((comment) => (
-                  <CommentRow key={comment.id} comment={comment} currentUserId={currentUserId} onDelete={handleCommentDelete} />
+              <div className={`grid gap-1.5 rounded-2xl overflow-hidden border border-(--border) bg-(--surface-1) ${mediaItems.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
+                {mediaItems.slice(0, 3).map((item, idx) => (
+                  <div key={idx} className="aspect-square relative overflow-hidden bg-black/5">
+                    {item.type === 'video' ? (
+                      <video src={item.url} className="w-full h-full object-cover" muted playsInline />
+                    ) : (
+                      <img
+                        src={item.url}
+                        alt=""
+                        className="w-full h-full object-cover cursor-pointer hover:scale-[1.02] transition-transform duration-200"
+                        onClick={() => setLightboxIndex(idx)}
+                      />
+                    )}
+                    {idx === 2 && mediaItems.length > 3 && (
+                      <div 
+                        className="absolute inset-0 bg-black/60 flex items-center justify-center text-white text-lg font-black pointer-events-none"
+                      >
+                        +{mediaItems.length - 3}
+                      </div>
+                    )}
+                  </div>
                 ))}
               </div>
             )}
           </div>
         )}
+
+        {/* ── Reactions & Social Counters Toolbar ─────────── */}
+        <div className="flex items-center justify-between px-4 py-1 border-t border-(--border) text-xs text-(--text-tertiary)">
+          <button
+            onClick={e => { e.stopPropagation(); if (totalReactions > 0) setShowReactorModal(true) }}
+            className="flex items-center gap-1.5 py-1 hover:underline font-medium"
+          >
+            {topReactions.length > 0 && (
+              <div className="flex items-center -space-x-1">
+                {topReactions.map(([emoji]) => <span key={emoji} className="text-sm leading-none">{emoji}</span>)}
+              </div>
+            )}
+            <span>{totalReactions > 0 ? `${totalReactions.toLocaleString()} reactions` : 'No reactions yet'}</span>
+          </button>
+          
+          <div className="flex items-center gap-3 font-semibold">
+            <span className="flex items-center gap-1"><Eye size={13} /> {viewCount.toLocaleString()}</span>
+            <span>{commentCount} replies</span>
+            <span>{repostCount} reposts</span>
+          </div>
+        </div>
+
+        {/* ── Bottom Call To Action Action Bar ────────────── */}
+        <div className="flex items-center justify-between px-2 py-1.5 border-t border-(--border) bg-(--surface-1)/30">
+          <div className="relative flex-1 flex justify-center" onClick={e => e.stopPropagation()}>
+            <button
+              onClick={() => setShowReactionPicker(!showReactionPicker)}
+              className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-sm font-bold w-full transition-all active:scale-95
+                ${activeReaction ? 'text-(--nia-violet)' : 'text-(--text-secondary) hover:bg-(--surface-2)'}
+              `}
+            >
+              <span className="text-base leading-none">{activeReaction ?? '❤️'}</span>
+              <span>{activeReaction ? 'Reacted' : 'React'}</span>
+            </button>
+            
+            {showReactionPicker && (
+              <div className="absolute bottom-full mb-2 left-4 bg-(--surface-0) border border-(--border) rounded-2xl p-1.5 shadow-(--shadow-lg) flex items-center gap-1 z-30 animate-[pop-in_0.15s_ease_forwards]">
+                {REACTIONS.map(emoji => (
+                  <button
+                    key={emoji}
+                    onClick={() => handleReaction(emoji)}
+                    className="text-xl p-1 rounded-xl hover:bg-(--surface-2) active:scale-125 transition-all duration-100"
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="flex-1 flex justify-center">
+            <button
+              onClick={e => { e.stopPropagation(); loadComments() }}
+              className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-sm font-bold w-full transition-all active:scale-95 text-(--text-secondary) hover:bg-(--surface-2)
+                ${showComments ? 'text-(--nia-violet)' : ''}
+              `}
+            >
+              <MessageCircle size={18} />
+              <span>Reply</span>
+            </button>
+          </div>
+
+          <div className="flex-1 flex justify-center">
+            <button
+              onClick={e => { e.stopPropagation(); handleRepost() }}
+              disabled={reposted || isOwn}
+              className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-sm font-bold w-full transition-all active:scale-95 disabled:opacity-40 disabled:active:scale-100
+                ${reposted ? 'text-green-500' : 'text-(--text-secondary) hover:bg-(--surface-2)'}
+              `}
+            >
+              <Repeat2 size={18} />
+              <span>{reposted ? 'Reposted' : 'Repost'}</span>
+            </button>
+          </div>
+
+          <div className="flex-1 flex justify-center">
+            <button
+              onClick={e => { e.stopPropagation(); handleShare() }}
+              className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-sm font-bold text-(--text-secondary) hover:bg-(--surface-2) w-full transition-all active:scale-95"
+            >
+              <Share2 size={18} />
+              <span>Share</span>
+            </button>
+          </div>
+        </div>
+
+        {/* ── Active Comment Feed Drawer Section ──────────── */}
+        {showComments && (
+          <div className="border-t border-(--border) bg-(--surface-1)/10" onClick={e => e.stopPropagation()}>
+            <CommentInput onSubmit={submitComment} posting={posting} />
+            
+            {loadingComments ? (
+              <div className="flex justify-center py-6">
+                <Loader2 size={20} className="animate-spin text-(--text-tertiary)" />
+              </div>
+            ) : (
+              comments.length > 0 && (
+                <div className="px-4 pb-4 pt-2 space-y-3 border-t border-(--border)/60 max-h-85 overflow-y-auto custom-scrollbar">
+                  {comments.map(comment => (
+                    <CommentRow
+                      key={comment.id}
+                      comment={comment}
+                      currentUserId={currentUserId}
+                      onDelete={handleCommentDelete}
+                    />
+                  ))}
+                </div>
+              )
+            )}
+          </div>
+        )}
       </article>
 
+      {/* ── Lightboxes & Modals Portals ─────────────────── */}
+      {showReactorModal && <ReactorModal postId={post.id} onClose={() => setShowReactorModal(false)} />}
+      
+      {lightboxIndex !== null && (
+        <MediaLightbox
+          items={mediaItems}
+          startIndex={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+        />
+      )}
+
+      {/* Delete Confirmation Modal Layer */}
       {showDeleteConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl p-6 max-w-sm w-full mx-4 space-y-4">
-            <h4 className="font-bold text-lg">Delete Post?</h4>
-            <p className="text-sm text-slate-500">This action cannot be undone. This post will be permanently removed.</p>
-            <div className="flex gap-3">
-              <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 py-2 rounded-xl border font-semibold text-sm">Cancel</button>
-              <button onClick={deletePost} className="flex-1 py-2 rounded-xl bg-red-500 text-white font-semibold text-sm">Delete</button>
+        <div className="fixed inset-0 z-100 flex items-center justify-center bg-black/60 backdrop-blur-xs px-4" onClick={() => setShowDeleteConfirm(false)}>
+          <div className="bg-(--surface-0) border border-(--border) w-full max-w-sm rounded-3xl p-5 shadow-(--shadow-2xl) space-y-4 animate-[pop-in_0.18s_ease_forwards]" onClick={e => e.stopPropagation()}>
+            <div className="space-y-1">
+              <h4 className="font-black text-base text-(--text-primary)">Delete Post?</h4>
+              <p className="text-xs text-(--text-tertiary)">This action cannot be undone. This post will permanently disappear from the feed streams.</p>
+            </div>
+            <div className="flex gap-2.5">
+              <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 py-2.5 text-xs font-bold rounded-xl bg-(--surface-2) text-(--text-secondary) active:scale-95 transition-transform">Cancel</button>
+              <button onClick={deletePost} className="flex-1 py-2.5 text-xs font-bold rounded-xl text-white bg-red-500 active:scale-95 transition-transform">Delete</button>
             </div>
           </div>
         </div>

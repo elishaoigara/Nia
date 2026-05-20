@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { AFRICAN_LANGUAGES } from '@/lib/african-data'
 import {
@@ -47,6 +47,12 @@ export default function CreatePost({ userId, circleId = null }: CreatePostProps)
 
   const canAddMore = mediaItems.length < MAX_MEDIA && !voiceBlob
 
+  useEffect(() => {
+    return () => {
+      mediaItems.forEach(item => URL.revokeObjectURL(item.preview))
+    }
+  }, [mediaItems])
+
   function handleImagePick(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? [])
     addMediaFiles(files, 'image')
@@ -55,30 +61,38 @@ export default function CreatePost({ userId, circleId = null }: CreatePostProps)
 
   async function handleVideoPick(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? [])
+    setError('')
+    
     for (const file of files) {
       if (file.size > MAX_VIDEO_SIZE_MB * 1024 * 1024) {
         setError(`Video must be under ${MAX_VIDEO_SIZE_MB} MB — keeps uploads fast on mobile data.`)
         continue
       }
-      const dur = await getVideoDuration(file)
-      if (dur > MAX_VIDEO_DURATION_S) {
-        setError(`Videos must be under ${MAX_VIDEO_DURATION_S} seconds.`)
-        continue
+      try {
+        const dur = await getVideoDuration(file)
+        if (dur > MAX_VIDEO_DURATION_S) {
+          setError(`Videos must be under ${MAX_VIDEO_DURATION_S} seconds.`)
+          continue
+        }
+        addMediaFiles([file], 'video')
+      } catch {
+        setError('Failed to verify video duration metadata.')
       }
-      addMediaFiles([file], 'video')
     }
     e.target.value = ''
   }
 
   function addMediaFiles(files: File[], type: 'image' | 'video') {
-    setError('')
     const slots = MAX_MEDIA - mediaItems.length
+    if (slots <= 0) return
+    
     const toAdd = files.slice(0, slots)
     const newItems: MediaItem[] = toAdd.map(file => ({
       file,
       preview: URL.createObjectURL(file),
       type,
     }))
+    
     setMediaItems(prev => [...prev, ...newItems])
     if (newItems.length > 0) setVoiceBlob(null)
   }
@@ -91,12 +105,18 @@ export default function CreatePost({ userId, circleId = null }: CreatePostProps)
   }
 
   function getVideoDuration(file: File): Promise<number> {
-    return new Promise(resolve => {
+    return new Promise((resolve) => {
       const url = URL.createObjectURL(file)
       const v = document.createElement('video')
       v.preload = 'metadata'
-      v.onloadedmetadata = () => { URL.revokeObjectURL(url); resolve(v.duration) }
-      v.onerror = () => { URL.revokeObjectURL(url); resolve(0) }
+      v.onloadedmetadata = () => { 
+        URL.revokeObjectURL(url)
+        resolve(v.duration) 
+      }
+      v.onerror = () => { 
+        URL.revokeObjectURL(url)
+        resolve(0) 
+      }
       v.src = url
     })
   }
@@ -109,6 +129,7 @@ export default function CreatePost({ userId, circleId = null }: CreatePostProps)
   async function generateCaption() {
     if (!content.trim() && mediaItems.length === 0) return
     setCaptionLoading(true)
+    setError('')
     try {
       const res = await fetch('/api/caption', {
         method: 'POST',
@@ -117,17 +138,19 @@ export default function CreatePost({ userId, circleId = null }: CreatePostProps)
       })
       const data = await res.json()
       if (data.caption) setContent(data.caption)
-    } catch { setError('Caption generation failed.') }
-    finally { setCaptionLoading(false) }
+    } catch { 
+      setError('Caption generation failed.') 
+    } finally { 
+      setCaptionLoading(false) 
+    }
   }
 
   async function handlePost() {
-    const hasPoll =
-      showPoll && pollQuestion.trim() &&
-      pollOptions.filter(o => o.trim()).length >= 2
-
+    const hasPoll = showPoll && pollQuestion.trim() && pollOptions.filter(o => o.trim()).length >= 2
     if (!content.trim() && mediaItems.length === 0 && !voiceBlob && !hasPoll) return
-    setLoading(true); setError('')
+    
+    setLoading(true)
+    setError('')
 
     let media_url: string | null = null
     let media_type: string | null = null
@@ -138,18 +161,22 @@ export default function CreatePost({ userId, circleId = null }: CreatePostProps)
         const path = `${userId}/voice_${Date.now()}.webm`
         const { error: upErr } = await supabase.storage
           .from('post-media').upload(path, voiceBlob, { contentType: 'audio/webm' })
-        if (upErr) { setError('Voice upload failed.'); setLoading(false); return }
+        if (upErr) throw new Error('Voice message upload dropped connection.')
+        
         const { data } = supabase.storage.from('post-media').getPublicUrl(path)
-        media_url = data.publicUrl; media_type = 'audio'
+        media_url = data.publicUrl
+        media_type = 'audio'
       } else if (mediaItems.length > 0) {
         const uploaded: { url: string; type: string }[] = []
         for (const item of mediaItems) {
           const ext = item.file.name.split('.').pop() ?? (item.type === 'video' ? 'mp4' : 'jpg')
           const path = `${userId}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`
           const contentType = item.file.type || (item.type === 'video' ? 'video/mp4' : 'image/jpeg')
+          
           const { error: upErr } = await supabase.storage
             .from('post-media').upload(path, item.file, { contentType })
-          if (upErr) { setError(`Upload failed: ${upErr.message}`); setLoading(false); return }
+          if (upErr) throw new Error(`Media transmission faulted: ${upErr.message}`)
+          
           const { data } = supabase.storage.from('post-media').getPublicUrl(path)
           uploaded.push({ url: data.publicUrl, type: item.type })
         }
@@ -161,15 +188,18 @@ export default function CreatePost({ userId, circleId = null }: CreatePostProps)
       const { data: post, error: postError } = await supabase
         .from('posts')
         .insert({
-          user_id: userId, circle_id: circleId,
+          user_id: userId, 
+          circle_id: circleId,
           content: content.trim() || null,
-          media_url, media_type,
+          media_url, 
+          media_type,
           extra_media: extra_media.length > 0 ? extra_media : null,
-          is_anonymous: isAnonymous, language,
+          is_anonymous: isAnonymous, 
+          language,
         })
         .select().single()
 
-      if (postError) { setError(postError.message); setLoading(false); return }
+      if (postError) throw postError
 
       if (post && content.trim()) {
         const tags = extractHashtags(content)
@@ -194,29 +224,37 @@ export default function CreatePost({ userId, circleId = null }: CreatePostProps)
       }
 
       mediaItems.forEach(m => URL.revokeObjectURL(m.preview))
-      setContent(''); setMediaItems([]); setVoiceBlob(null)
-      setShowPoll(false); setPollQuestion(''); setPollOptions(['', '']); setPollDuration('24')
-      setLanguage('english'); setShowLangPicker(false); setFocused(false)
+      setContent('')
+      setMediaItems([])
+      setVoiceBlob(null)
+      setShowPoll(false)
+      setPollQuestion('')
+      setPollOptions(['', ''])
+      setPollDuration('24')
+      setLanguage('english')
+      setShowLangPicker(false)
+      setFocused(false)
       router.refresh()
-    } catch (err) {
+    } catch (err: any) {
       console.error(err)
-      setError('Something went wrong while creating post.')
-    } finally { setLoading(false) }
+      setError(err.message || 'Something went wrong while creating post.')
+    } finally { 
+      setLoading(false) 
+    }
   }
 
-  const canPost =
-    content.trim() || mediaItems.length > 0 || voiceBlob ||
+  const canPost = content.trim() || mediaItems.length > 0 || voiceBlob ||
     (showPoll && pollQuestion.trim() && pollOptions.filter(o => o.trim()).length >= 2)
 
   return (
     <div
-      className="card overflow-hidden transition-all duration-200"
-      style={focused ? { border: '1.5px solid var(--nia-violet)', boxShadow: '0 0 0 3px rgba(168,85,247,0.1)' } : {}}
+      className="card overflow-hidden transition-all duration-200 border"
+      style={focused ? { borderColor: 'var(--nia-violet)', boxShadow: '0 0 0 3px rgba(168,85,247,0.1)' } : { borderColor: 'var(--border)' }}
     >
-      {/* ── Composer ──────────────────────────────────────── */}
+      {/* ── Composer Module ────────────────────────────────── */}
       <div className="flex gap-3 p-4">
         <div
-          className="w-10 h-10 rounded-full shrink-0 flex items-center justify-center text-white font-bold text-sm"
+          className="w-10 h-10 rounded-full shrink-0 flex items-center justify-center text-white font-bold text-sm select-none"
           style={{ background: 'var(--grad-brand)' }}
         >
           +
@@ -227,27 +265,26 @@ export default function CreatePost({ userId, circleId = null }: CreatePostProps)
           onFocus={() => setFocused(true)}
           placeholder={circleId ? "What's happening in this circle? 🎯" : "What's happening? ✨"}
           rows={focused || content ? 3 : 1}
-          className="flex-1 bg-transparent text-[15px] resize-none focus:outline-none leading-relaxed"
-          style={{ color: 'var(--text-primary)' }}
+          style={{ color: 'var(--text-primary)', borderColor: focused ? 'var(--nia-violet)' : 'transparent' }}
+          className="flex-1 min-h-10 bg-transparent text-[15px] resize-none focus:outline-hidden leading-relaxed placeholder-slate-500 border-0 focus:ring-0"
         />
       </div>
 
-      {/* ── Media Previews ────────────────────────────────── */}
+      {/* ── Media Previews Layout ──────────────────────────── */}
       {mediaItems.length > 0 && (
         <div className="mx-4 mb-1">
           <div className={mediaItems.length === 2 ? 'grid grid-cols-2 gap-2' : 'flex'}>
             {mediaItems.map((item, idx) => (
               <div
                 key={idx}
-                className="relative rounded-2xl overflow-hidden"
+                className="relative rounded-2xl overflow-hidden bg-black"
                 style={{
                   border: '1px solid var(--border)',
                   aspectRatio: mediaItems.length === 2 ? '1/1' : '16/9',
-                  background: '#000',
                 }}
               >
                 {item.type === 'image' ? (
-                  <img src={item.preview} alt="" className="w-full h-full object-cover" />
+                  <img src={item.preview} alt="Upload preview" className="w-full h-full object-cover" />
                 ) : (
                   <>
                     <video
@@ -257,18 +294,15 @@ export default function CreatePost({ userId, circleId = null }: CreatePostProps)
                       muted
                       playsInline
                     />
-                    <div
-                      className="absolute bottom-2 left-2 flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold text-white"
-                      style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)' }}
-                    >
+                    <div className="absolute bottom-2 left-2 flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold text-white bg-black/55 backdrop-blur-xs">
                       <Video size={11} /> Video
                     </div>
                   </>
                 )}
                 <button
                   onClick={() => removeMedia(idx)}
-                  className="absolute top-2 right-2 w-7 h-7 flex items-center justify-center rounded-full text-white transition-all active:scale-90"
-                  style={{ background: 'rgba(0,0,0,0.6)' }}
+                  className="absolute top-2 right-2 w-7 h-7 flex items-center justify-center rounded-full text-white transition-all bg-black/60 active:scale-90"
+                  aria-label="Remove media"
                 >
                   <X size={14} />
                 </button>
@@ -276,14 +310,12 @@ export default function CreatePost({ userId, circleId = null }: CreatePostProps)
             ))}
           </div>
 
-          {/* Slot hint */}
-          <div className="flex items-center gap-1.5 mt-2 mb-2">
+          <div className="flex items-center gap-1.5 mt-2 mb-2 select-none">
             {[0, 1].map(i => (
               <div
                 key={i}
-                className="h-1 rounded-full transition-all duration-200"
+                className="h-1 w-6 rounded-full transition-all duration-200"
                 style={{
-                  width: 24,
                   background: i < mediaItems.length ? 'var(--nia-violet)' : 'var(--surface-3)',
                 }}
               />
@@ -296,12 +328,12 @@ export default function CreatePost({ userId, circleId = null }: CreatePostProps)
         </div>
       )}
 
-      {/* ── Poll Builder ──────────────────────────────────── */}
+      {/* ── Poll Builder Dropdown Module ─────────────────────── */}
       {showPoll && (
         <div className="mx-4 mb-3 p-4 rounded-2xl space-y-3" style={{ background: 'var(--surface-2)' }}>
           <div className="flex items-center justify-between">
             <p className="text-sm font-bold" style={{ color: 'var(--nia-violet)' }}>📊 Poll</p>
-            <button onClick={() => setShowPoll(false)} style={{ color: 'var(--text-tertiary)' }}>
+            <button onClick={() => setShowPoll(false)} style={{ color: 'var(--text-tertiary)' }} aria-label="Close poll">
               <X size={15} />
             </button>
           </div>
@@ -309,7 +341,7 @@ export default function CreatePost({ userId, circleId = null }: CreatePostProps)
             value={pollQuestion}
             onChange={e => setPollQuestion(e.target.value)}
             placeholder="Ask a question…"
-            className="input text-sm"
+            className="input text-sm w-full"
           />
           {pollOptions.map((opt, i) => (
             <div key={i} className="flex gap-2">
@@ -323,6 +355,7 @@ export default function CreatePost({ userId, circleId = null }: CreatePostProps)
                 <button
                   onClick={() => setPollOptions(pollOptions.filter((_, j) => j !== i))}
                   style={{ color: 'var(--text-tertiary)' }}
+                  aria-label="Delete option"
                 >
                   <Trash2 size={15} />
                 </button>
@@ -332,7 +365,7 @@ export default function CreatePost({ userId, circleId = null }: CreatePostProps)
           {pollOptions.length < 4 && (
             <button
               onClick={() => setPollOptions([...pollOptions, ''])}
-              className="text-xs font-bold flex items-center gap-1"
+              className="text-xs font-bold flex items-center gap-1 transition-transform active:scale-95"
               style={{ color: 'var(--nia-violet)' }}
             >
               <Plus size={13} /> Add option
@@ -357,12 +390,12 @@ export default function CreatePost({ userId, circleId = null }: CreatePostProps)
         </div>
       )}
 
-      {error && <p className="px-4 pb-2 text-sm text-red-500">{error}</p>}
+      {error && <p className="px-4 pb-2 text-sm text-rose-500 font-medium">{error}</p>}
 
-      {/* ── Toolbar ───────────────────────────────────────── */}
+      {/* ── Toolbar Flex Action Management Matrix ─────────────── */}
       <div
-        className="flex items-center gap-1.5 px-3 py-2.5 flex-wrap"
-        style={{ borderTop: '1px solid var(--border)' }}
+        className="flex items-center gap-1.5 px-3 py-2.5 flex-wrap border-t"
+        style={{ borderColor: 'var(--border)' }}
       >
         <button
           onClick={() => imageRef.current?.click()}
@@ -415,7 +448,6 @@ export default function CreatePost({ userId, circleId = null }: CreatePostProps)
           <span className="hidden xs:inline text-xs">AI</span>
         </button>
 
-        {/* Language picker */}
         <div className="relative">
           <button
             onClick={() => setShowLangPicker(!showLangPicker)}
@@ -427,14 +459,15 @@ export default function CreatePost({ userId, circleId = null }: CreatePostProps)
               {AFRICAN_LANGUAGES.find(l => l.code === language)?.label ?? 'English'}
             </span>
           </button>
+          
           {showLangPicker && (
             <>
               <div className="fixed inset-0 z-40" onClick={() => setShowLangPicker(false)} />
               <div
-                className="absolute z-50 rounded-2xl p-2 shadow-xl anim-pop"
+                className="absolute z-50 rounded-2xl p-2 shadow-xl anim-pop border"
                 style={{
                   background: 'var(--surface-0)',
-                  border: '1px solid var(--border)',
+                  borderColor: 'var(--border)',
                   width: '260px',
                   maxHeight: '300px',
                   overflowY: 'auto',
@@ -476,8 +509,7 @@ export default function CreatePost({ userId, circleId = null }: CreatePostProps)
               : { background: 'var(--surface-2)', color: 'var(--text-secondary)' }
             }
           >
-            🎭
-            <span className="hidden xs:inline text-xs">Anon</span>
+            🎭 <span className="hidden xs:inline text-xs">Anon</span>
           </button>
         )}
 
@@ -487,11 +519,17 @@ export default function CreatePost({ userId, circleId = null }: CreatePostProps)
         <button
           onClick={handlePost}
           disabled={!canPost || loading}
-          className="ml-auto btn-primary flex items-center gap-1.5 px-4 py-2 text-sm"
-          style={{ borderRadius: '12px', minHeight: '38px' }}
+          className="ml-auto btn-primary flex items-center gap-1.5 px-4 py-2 text-sm font-bold text-white transition-all active:scale-95 disabled:opacity-40 disabled:pointer-events-none rounded-xl min-h-9.5"
+          style={{ background: 'var(--grad-brand)' }}
         >
-          {loading && <Loader2 size={15} className="animate-spin" />}
-          {loading ? 'Posting…' : 'Post 🚀'}
+          {loading ? (
+            <>
+              <Loader2 size={15} className="animate-spin" />
+              <span>Posting…</span>
+            </>
+          ) : (
+            <span>Post 🚀</span>
+          )}
         </button>
       </div>
     </div>

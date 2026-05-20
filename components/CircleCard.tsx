@@ -1,8 +1,9 @@
 'use client'
+
 import { useState } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
-import { Users, Lock } from 'lucide-react'
+import { Users, Lock, Loader2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -32,10 +33,12 @@ export default function CircleCard({ circle, currentUserId }: any) {
 
   async function toggleJoin(e: React.MouseEvent) {
     e.preventDefault()
+    e.stopPropagation()
+    
     setLoading(true)
     if (joined) {
       await supabase.from('circle_members').delete().match({ circle_id: circle.id, user_id: currentUserId })
-      setMemberCount((c: number) => c - 1)
+      setMemberCount((c: number) => Math.max(0, c - 1))
     } else {
       await supabase.from('circle_members').insert({ circle_id: circle.id, user_id: currentUserId })
       setMemberCount((c: number) => c + 1)
@@ -46,27 +49,45 @@ export default function CircleCard({ circle, currentUserId }: any) {
   }
 
   return (
-    <Link href={`/circles/${circle.slug}`} className="block group">
-      <div className="card card-hover p-4 h-full flex flex-col gap-3">
+    <Link href={`/circles/${circle.slug}`} className="block group h-full">
+      {/* Implemented hover:border-(--border) */}
+      <div className="card card-hover p-5 h-full flex flex-col gap-4 border border-transparent hover:border-(--border) transition-all duration-200" style={{ background: 'var(--surface-0)' }}>
+        
         {/* Top: emoji + name */}
-        <div className="flex items-start gap-3">
-          <div
-            className="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl flex-shrink-0"
-            style={{ background: `${color}22` }}
-          >
-            {emoji}
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div
+              className="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl shrink-0 transition-transform group-hover:scale-105"
+              style={{ backgroundColor: color, bias: 0.12, opacity: 0.15 } as any} 
+            >
+              <span style={{ opacity: 1 }}>{emoji}</span>
+            </div>
+            
+            <div className="min-w-0">
+              {/* Implemented group-hover:text-(--nia-violet) */}
+              <h3 className="font-bold text-base leading-tight group-hover:text-(--nia-violet) transition-colors truncate">
+                {circle.name}
+              </h3>
+              
+              <div className="flex items-center gap-2 mt-1">
+                {circle.university && (
+                  <p className="text-xs truncate font-medium" style={{ color: 'var(--text-tertiary)' }}>
+                    {circle.university.split(' ').slice(0, 3).join(' ')}
+                  </p>
+                )}
+                <span className="inline-block w-1 h-1 rounded-full shrink-0" style={{ background: 'var(--border)' }} />
+                <span className="text-[10px] uppercase font-bold tracking-wider" style={{ color: color }}>
+                  {cat}
+                </span>
+              </div>
+            </div>
           </div>
-          <div className="flex-1 min-w-0">
-            <h3 className="font-bold text-base leading-tight group-hover:underline truncate">
-              {circle.name}
-            </h3>
-            {circle.university && (
-              <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--text-tertiary)' }}>
-                {circle.university.split(' ').slice(0, 3).join(' ')}
-              </p>
-            )}
-          </div>
-          {circle.is_private && <Lock size={14} style={{ color: 'var(--text-tertiary)' }} />}
+
+          {circle.is_private && (
+            <div className="p-1.5 rounded-lg shrink-0" style={{ background: 'var(--surface-1)' }}>
+              <Lock size={13} style={{ color: 'var(--text-tertiary)' }} />
+            </div>
+          )}
         </div>
 
         {/* Description */}
@@ -77,23 +98,33 @@ export default function CircleCard({ circle, currentUserId }: any) {
         )}
 
         {/* Footer */}
-        <div className="flex items-center justify-between mt-auto pt-1">
-          <div className="flex items-center gap-1.5" style={{ color: 'var(--text-tertiary)' }}>
-            <Users size={14} />
-            <span className="text-sm font-semibold">{memberCount}</span>
-            <span className="text-xs">members</span>
+        <div className="flex items-center justify-between mt-auto pt-2 border-t border-dashed" style={{ borderColor: 'var(--border)' }}>
+          <div className="flex items-center gap-1.5" style={{ color: 'var(--text-secondary)' }}>
+            <div className="p-1 rounded-md" style={{ background: 'var(--surface-1)' }}>
+              <Users size={13} style={{ color: 'var(--text-tertiary)' }} />
+            </div>
+            <div className="text-xs font-medium">
+              <span className="font-bold text-sm" style={{ color: 'var(--text-primary)' }}>{memberCount}</span> members
+            </div>
           </div>
 
+          {/* Implemented min-w-19 */}
           <button
             onClick={toggleJoin}
             disabled={loading}
-            className="px-4 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-90 disabled:opacity-50"
+            className="px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center min-w-19"
             style={joined
-              ? { background: 'var(--surface-3)', color: 'var(--text-secondary)' }
-              : { background: color + '22', color }
+              ? { background: 'var(--surface-2)', color: 'var(--text-secondary)' }
+              : { backgroundColor: color, color: '#fff' }
             }
           >
-            {loading ? '…' : joined ? 'Joined ✓' : '+ Join'}
+            {loading ? (
+              <Loader2 size={13} className="animate-spin" />
+            ) : joined ? (
+              'Leave'
+            ) : (
+              'Join'
+            )}
           </button>
         </div>
       </div>

@@ -13,73 +13,103 @@ interface VideoPlayerProps {
 export default function VideoPlayer({ src, poster, className = '' }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  
   const [playing, setPlaying] = useState(false)
   const [muted, setMuted] = useState(true)
   const [progress, setProgress] = useState(0)
   const [duration, setDuration] = useState(0)
   const [tapped, setTapped] = useState(false)
   const [lightbox, setLightbox] = useState(false)
+  
+  // Track if the video was intentionally playing before rolling past the viewport boundary
+  const wasPlayingRef = useRef(false)
 
-  // Set muted on mount via ref — avoids the React controlled-prop bug where
-  // the `muted` attribute is only applied once and ignores subsequent re-renders.
-  // (defaultMuted is not in React's TS types; this is the correct workaround.)
+  // Explicit mutation bypasses React's virtual tree property mapping quirks
   useEffect(() => {
-    if (videoRef.current) videoRef.current.muted = true
+    if (videoRef.current) {
+      videoRef.current.muted = true
+    }
   }, [])
 
-  // Pause when scrolled off screen
+  // Viewport intersection side-effects handler
   useEffect(() => {
-    const el = containerRef.current
-    if (!el) return
-    const obs = new IntersectionObserver(
+    const element = containerRef.current
+    if (!element) return
+
+    const observer = new IntersectionObserver(
       ([entry]) => {
-        if (!entry.isIntersecting && videoRef.current && !videoRef.current.paused) {
-          videoRef.current.pause()
-          setPlaying(false)
+        const video = videoRef.current
+        if (!video) return
+
+        if (!entry.isIntersecting) {
+          // If it leaves viewport, track state, pause execution, and clear flags
+          if (!video.paused) {
+            wasPlayingRef.current = true
+            video.pause()
+            setPlaying(false)
+          }
+        } else {
+          // If it re-enters viewport and was manually left playing, resume playback
+          if (wasPlayingRef.current) {
+            video.play().then(() => setPlaying(true)).catch(() => {})
+            wasPlayingRef.current = false
+          }
         }
       },
       { threshold: 0.25 }
     )
-    obs.observe(el)
-    return () => obs.disconnect()
+
+    observer.observe(element)
+    return () => observer.disconnect()
   }, [])
 
   function togglePlay() {
-    const v = videoRef.current
-    if (!v) return
+    const video = videoRef.current
+    if (!video) return
+    
     setTapped(true)
-    // play() returns a Promise on mobile — must .catch() or the page can hang
-    if (v.paused) { v.play().then(() => setPlaying(true)).catch(() => {}) }
-    else { v.pause(); setPlaying(false) }
+    wasPlayingRef.current = false // Reset intersection tracking flag on manual interaction
+
+    if (video.paused) {
+      video.play()
+        .then(() => setPlaying(true))
+        .catch((err) => console.warn("Playback interrupted or blocked:", err))
+    } else {
+      video.pause()
+      setPlaying(false)
+    }
   }
 
   function toggleMute() {
-    const v = videoRef.current
-    if (!v) return
-    // Mutate the property directly; don't rely on the controlled prop
-    v.muted = !v.muted
-    setMuted(v.muted)
+    const video = videoRef.current
+    if (!video) return
+    
+    video.muted = !video.muted
+    setMuted(video.muted)
   }
 
   function handleScrub(e: React.MouseEvent<HTMLDivElement>) {
-    const v = videoRef.current
-    if (!v || !v.duration) return
+    const video = videoRef.current
+    if (!video || !video.duration) return
+    
     const rect = e.currentTarget.getBoundingClientRect()
-    v.currentTime = ((e.clientX - rect.left) / rect.width) * v.duration
+    const clickPositionPositionRatio = (e.clientX - rect.left) / rect.width
+    video.currentTime = clickPositionPositionRatio * video.duration
   }
 
-  function fmt(s: number) {
-    const m = Math.floor(s / 60)
-    return `${m}:${String(Math.floor(s % 60)).padStart(2, '0')}`
+  function fmt(seconds: number) {
+    const minutes = Math.floor(seconds / 60)
+    const remainder = Math.floor(seconds % 60)
+    return `${minutes}:${String(remainder).padStart(2, '0')}`
   }
 
   return (
     <>
       <div
         ref={containerRef}
-        className={`relative overflow-hidden rounded-2xl ${className}`}
-        style={{ background: '#000', border: '1px solid var(--border)' }}
+        className={`relative overflow-hidden rounded-2xl bg-black border border-(--border) ${className}`}
       >
+        {/* HTML Canvas Video Node */}
         <video
           ref={videoRef}
           src={src}
@@ -87,89 +117,115 @@ export default function VideoPlayer({ src, poster, className = '' }: VideoPlayer
           preload="none"
           playsInline
           onTimeUpdate={() => {
-            const v = videoRef.current
-            if (v && v.duration) setProgress((v.currentTime / v.duration) * 100)
+            const video = videoRef.current
+            if (video && video.duration) {
+              setProgress((video.currentTime / video.duration) * 100)
+            }
           }}
           onLoadedMetadata={() => {
             if (videoRef.current) setDuration(videoRef.current.duration)
           }}
-          onEnded={() => { setPlaying(false); setProgress(0); setTapped(false) }}
-          onError={() => { setPlaying(false) }}
+          onEnded={() => {
+            setPlaying(false)
+            setProgress(0)
+            setTapped(false)
+            wasPlayingRef.current = false
+          }}
+          onError={() => {
+            setPlaying(false)
+            wasPlayingRef.current = false
+          }}
           onClick={togglePlay}
-          className="w-full max-h-80 object-contain cursor-pointer"
-          style={{ display: 'block' }}
+          className="w-full max-h-80 object-contain cursor-pointer block"
         />
 
-        {/* Tap-to-play overlay */}
+        {/* Playback Intermission Overlay Button Trigger */}
         {!playing && (
           <div
             onClick={togglePlay}
-            className="absolute inset-0 flex items-center justify-center cursor-pointer"
-            style={{ background: tapped ? 'rgba(0,0,0,0.2)' : 'rgba(0,0,0,0.35)' }}
+            className={`absolute inset-0 flex items-center justify-center cursor-pointer transition-colors ${
+              tapped ? 'bg-black/20' : 'bg-black/35'
+            }`}
           >
-            <div
-              className="w-14 h-14 rounded-full flex items-center justify-center transition-transform active:scale-95"
-              style={{ background: 'rgba(255,255,255,0.2)', backdropFilter: 'blur(6px)', border: '1.5px solid rgba(255,255,255,0.35)' }}
-            >
-              <Play size={22} fill="white" color="white" style={{ marginLeft: 3 }} />
+            <div className="w-14 h-14 rounded-full flex items-center justify-center transition-transform active:scale-95 bg-white/20 backdrop-blur-md border border-white/35">
+              <Play size={22} className="fill-white text-white ml-1" />
             </div>
           </div>
         )}
 
-        {/* Controls bar */}
+        {/* Controls Overlay Bar */}
         {tapped && (
-          <div
-            className="absolute bottom-0 left-0 right-0 flex items-center gap-2 px-3 py-2"
-            style={{ background: 'linear-gradient(transparent, rgba(0,0,0,0.65))' }}
-          >
+          <div className="absolute bottom-0 left-0 right-0 flex items-center gap-2 px-3 py-3 bg-linear-to-t from-black/70 to-transparent">
+            {/* Play/Pause Toggle Switch */}
             <button
-              onClick={toggleMute}
-              className="w-7 h-7 flex items-center justify-center rounded-full transition-all active:scale-90 shrink-0"
-              style={{ background: 'rgba(255,255,255,0.15)' }}
+              onClick={togglePlay}
+              className="w-7 h-7 flex items-center justify-center rounded-full transition-all active:scale-90 shrink-0 bg-white/15"
+              aria-label={playing ? "Pause video" : "Play video"}
             >
-              {muted ? <VolumeX size={13} color="white" /> : <Volume2 size={13} color="white" />}
+              {playing ? <Pause size={12} className="text-white fill-white" /> : <Play size={12} className="text-white fill-white ml-0.5" />}
             </button>
 
+            {/* Mute Button Control Wrapper */}
+            <button
+              onClick={toggleMute}
+              className="w-7 h-7 flex items-center justify-center rounded-full transition-all active:scale-90 shrink-0 bg-white/15"
+              aria-label={muted ? "Unmute sound" : "Mute sound"}
+            >
+              {muted ? <VolumeX size={13} className="text-white" /> : <Volume2 size={13} className="text-white" />}
+            </button>
+
+            {/* Time Slider Timeline Scrub Container */}
             <div
-              className="flex-1 h-1 rounded-full cursor-pointer"
-              style={{ background: 'rgba(255,255,255,0.25)' }}
+              className="flex-1 h-1.5 rounded-full cursor-pointer bg-white/25 flex items-center group relative"
               onClick={handleScrub}
             >
               <div
-                className="h-full rounded-full"
-                style={{ width: `${progress}%`, background: 'rgba(255,255,255,0.9)' }}
-              />
+                className="h-full rounded-full bg-white/90 relative"
+                style={{ width: `${progress}%` }}
+              >
+                {/* Scrub head handle visual feedback node */}
+                <div className="absolute right-0 top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-white opacity-0 group-hover:opacity-100 transition-opacity transform translate-x-1/2 shadow-sm" />
+              </div>
             </div>
 
+            {/* Live Counter Display */}
             {duration > 0 && (
-              <span style={{ color: 'rgba(255,255,255,0.85)', fontSize: 11, fontVariantNumeric: 'tabular-nums', minWidth: 36, textAlign: 'right' }}>
-                {fmt(duration)}
+              <span className="text-white/85 text-[11px] tabular-nums min-w-9 text-right font-medium">
+                {fmt(videoRef.current ? videoRef.current.currentTime : 0)} / {fmt(duration)}
               </span>
             )}
 
-            {/* Fullscreen button */}
+            {/* Fullscreen Modal Portal Trigger */}
             <button
-              onClick={e => { e.stopPropagation(); videoRef.current?.pause(); setPlaying(false); setLightbox(true) }}
-              className="w-7 h-7 flex items-center justify-center rounded-full transition-all active:scale-90 shrink-0"
-              style={{ background: 'rgba(255,255,255,0.15)' }}
+              onClick={e => {
+                e.stopPropagation()
+                videoRef.current?.pause()
+                setPlaying(false)
+                setLightbox(true)
+              }}
+              className="w-7 h-7 flex items-center justify-center rounded-full transition-all active:scale-90 shrink-0 bg-white/15"
+              title="Expand window"
             >
-              <Maximize2 size={13} color="white" />
+              <Maximize2 size={13} className="text-white" />
             </button>
           </div>
         )}
 
-        {/* Fullscreen button before first tap */}
+        {/* Floating Quick Fullscreen Trigger before initial engagement */}
         {!tapped && (
           <button
-            onClick={e => { e.stopPropagation(); setLightbox(true) }}
-            className="absolute top-2 right-2 w-7 h-7 flex items-center justify-center rounded-full transition-all active:scale-90"
-            style={{ background: 'rgba(0,0,0,0.45)' }}
+            onClick={e => {
+              e.stopPropagation()
+              setLightbox(true)
+            }}
+            className="absolute top-2 right-2 w-7 h-7 flex items-center justify-center rounded-full transition-all active:scale-90 bg-black/45"
           >
-            <Maximize2 size={13} color="white" />
+            <Maximize2 size={13} className="text-white" />
           </button>
         )}
       </div>
 
+      {/* Portal Lightbox Mount Render */}
       {lightbox && (
         <MediaLightbox
           items={[{ url: src, type: 'video' }]}

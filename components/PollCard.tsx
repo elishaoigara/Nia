@@ -1,5 +1,6 @@
 'use client'
-import { useState } from 'react'
+
+import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 
 interface PollOption {
@@ -14,29 +15,53 @@ interface Poll {
   question: string
   options: PollOption[]
   total_votes: number
-  user_vote: string | null // option_id the current user voted for
+  user_vote: string | null
   ends_at: string
 }
 
-export default function PollCard({ poll, currentUserId, onVoted }: { poll: Poll; currentUserId: string; onVoted?: () => void }) {
+interface PollCardProps {
+  poll: Poll
+  currentUserId: string
+  onVoted?: () => void
+}
+
+export default function PollCard({ poll, currentUserId, onVoted }: PollCardProps) {
   const supabase = createClient()
   const [localPoll, setLocalPoll] = useState(poll)
   const [voting, setVoting] = useState(false)
+  
   const isExpired = new Date(poll.ends_at) < new Date()
+
+  // Sync state if incoming server component props or feed arrays shift
+  useEffect(() => {
+    setLocalPoll(poll)
+  }, [poll])
 
   async function vote(optionId: string) {
     if (localPoll.user_vote || voting || isExpired) return
     setVoting(true)
-    await supabase.from('poll_votes').insert({ poll_id: poll.id, option_id: optionId, user_id: currentUserId })
-    // Optimistic update
-    setLocalPoll(prev => ({
-      ...prev,
-      user_vote: optionId,
-      total_votes: prev.total_votes + 1,
-      options: prev.options.map(o => o.id === optionId ? { ...o, votes: o.votes + 1 } : o),
-    }))
-    setVoting(false)
-    onVoted?.()
+    
+    try {
+      await supabase.from('poll_votes').insert({ 
+        poll_id: poll.id, 
+        option_id: optionId, 
+        user_id: currentUserId 
+      })
+
+      // Optimistic layout mutation handler
+      setLocalPoll(prev => ({
+        ...prev,
+        user_vote: optionId,
+        total_votes: prev.total_votes + 1,
+        options: prev.options.map(o => o.id === optionId ? { ...o, votes: o.votes + 1 } : o),
+      }))
+      
+      onVoted?.()
+    } catch (err) {
+      console.error('Failed to submit vote:', err)
+    } finally {
+      setVoting(false)
+    }
   }
 
   const showResults = !!localPoll.user_vote || isExpired
@@ -52,8 +77,10 @@ export default function PollCard({ poll, currentUserId, onVoted }: { poll: Poll;
   }
 
   return (
-    <div className="mx-4 mb-3 space-y-2">
-      <p className="font-bold text-sm" style={{ color: 'var(--text-primary)' }}>📊 {localPoll.question}</p>
+    <div className="mx-4 mb-3 space-y-2 select-none">
+      <p className="font-bold text-sm text-(--text-primary)">
+        📊 {localPoll.question}
+      </p>
 
       <div className="space-y-2">
         {localPoll.options.map(option => {
@@ -66,30 +93,38 @@ export default function PollCard({ poll, currentUserId, onVoted }: { poll: Poll;
               key={option.id}
               onClick={() => vote(option.id)}
               disabled={showResults || voting}
-              className="w-full text-left relative overflow-hidden rounded-2xl transition-all active:scale-[0.98]"
+              className="w-full text-left relative overflow-hidden rounded-2xl transition-all active:scale-[0.99] border-2 disabled:active:scale-100 bg-(--surface-1)"
               style={{
-                border: isVoted ? '2px solid var(--nia-violet)' : '2px solid var(--border)',
-                background: 'var(--surface-1)',
+                borderColor: isVoted ? 'var(--nia-violet)' : 'var(--border)',
               }}
             >
-              {/* Progress fill */}
+              {/* Progress fill — background variables clean-up */}
               {showResults && (
                 <div
-                  className="absolute inset-0 rounded-[14px] transition-all duration-700"
+                  className="absolute inset-y-0 left-0 transition-all duration-700 ease-out"
                   style={{
                     width: `${pct}%`,
                     background: isWinner
-                      ? 'linear-gradient(90deg,rgba(168,85,247,0.15),rgba(255,107,107,0.1))'
+                      ? 'linear-gradient(90deg, rgba(168,85,247,0.15), rgba(255,107,107,0.1))'
                       : 'var(--surface-2)',
                   }}
                 />
               )}
-              <div className="relative flex items-center justify-between px-4 py-3">
-                <span className="text-sm font-semibold" style={{ color: isVoted ? 'var(--nia-violet)' : 'var(--text-primary)' }}>
-                  {isVoted && '✓ '}{option.text}
+              
+              <div className="relative flex items-center justify-between px-4 py-3 pointer-events-none">
+                <span 
+                  className="text-sm font-bold flex items-center gap-1" 
+                  style={{ color: isVoted ? 'var(--nia-violet)' : 'var(--text-primary)' }}
+                >
+                  {isVoted && <span className="text-xs font-black">✓</span>}
+                  {option.text}
                 </span>
+                
                 {showResults && (
-                  <span className="text-sm font-extrabold" style={{ color: isWinner ? 'var(--nia-violet)' : 'var(--text-tertiary)' }}>
+                  <span 
+                    className="text-sm font-black tabular-nums" 
+                    style={{ color: isWinner ? 'var(--nia-violet)' : 'var(--text-tertiary)' }}
+                  >
                     {pct}%
                   </span>
                 )}
@@ -99,11 +134,14 @@ export default function PollCard({ poll, currentUserId, onVoted }: { poll: Poll;
         })}
       </div>
 
-      <div className="flex items-center justify-between px-1">
-        <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+      <div className="flex items-center justify-between px-1 text-xs text-(--text-tertiary)">
+        <span>
           {localPoll.total_votes} vote{localPoll.total_votes !== 1 ? 's' : ''}
         </span>
-        <span className="text-xs font-semibold" style={{ color: isExpired ? '#ef4444' : 'var(--text-tertiary)' }}>
+        <span 
+          className="font-bold" 
+          style={isExpired ? { color: '#ef4444' } : {}}
+        >
           {timeLeft()}
         </span>
       </div>
