@@ -1,35 +1,26 @@
-import './globals.css'
-import type { Metadata } from 'next'
-import { ThemeProvider } from '@/components/ThemeProvider'
-import Navbar from '@/components/Navbar'
+import React from 'react';
+import './globals.css';
 
-export const metadata: Metadata = {
-  title: 'Nia',
-  description: 'A social platform for Africa',
-}
-
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+const Layout = () => {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body className="bg-[#0b0c10] antialiased">
-        <ThemeProvider>
-          <Navbar />
-          
-          {/* Main flex container pushes past the desktop sidebar width smoothly */}
-          <main
-            className="sm:pl-60 pt-16 min-h-screen w-full"
-            style={{ paddingBottom: 'var(--nav-bottom)' }}
-          >
-            <div className="w-full">
-              {children}
-            </div>
-          </main>
-        </ThemeProvider>
-      </body>
-    </html>
-  )
-}
+    <div className='layout'
+      <header className='header'
+        <nav className='nav'
+          <ul>
+            <li><a href='#'>Home</a></li>
+            <li><a href='#'>About</a></li>
+            <li><a href='#'>Contact</a></li>
+          </ul>
+        </nav>
+      </header>
+      <main className='main'
+        {/* Page content */}
+      </main>
+      <footer className='footer'
+        {/* Footer content */}
+      </footer>
+    </div>
+  );
+};
+
+export default Layout;
