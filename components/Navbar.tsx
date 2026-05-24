@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 import NotificationBell from '@/components/NotificationBell'
 import ThemeToggle from '@/components/ThemeToggle'
+import LogoutButton from '@/components/LogoutButton'
 import { createClient } from '@/lib/supabase/client'
 
 const LINKS = [
@@ -94,6 +95,7 @@ export default function Navbar() {
           <div className="flex items-center gap-1.5">
             <ThemeToggle />
             {userId && <NotificationBell userId={userId} />}
+            {userId && <LogoutButton variant="icon" />}
             <Link
               href="/#compose"
               className="tap-sm flex items-center gap-1.5 text-white text-sm font-bold px-3.5 py-2 rounded-xl transition-all active:scale-95 min-h-9 bg-(--grad-brand) shadow-[0_4px_14px_rgba(168,85,247,0.3)]"
@@ -209,13 +211,16 @@ export default function Navbar() {
           )}
         </div>
 
-        <Link 
-          href="/#compose" 
-          className="flex items-center justify-center gap-2 mt-4 w-full text-white text-sm font-bold py-3 rounded-xl transition-all duration-150 tap-sm active:scale-95 bg-(--grad-brand) shadow-[0_4px_14px_rgba(168,85,247,0.25)]"
-        >
-          <Plus size={18} strokeWidth={2.5} /> 
-          <span>New Post</span>
-        </Link>
+        <div className="mt-4 space-y-2">
+          <Link 
+            href="/#compose" 
+            className="flex items-center justify-center gap-2 w-full text-white text-sm font-bold py-3 rounded-xl transition-all duration-150 tap-sm active:scale-95 bg-(--grad-brand) shadow-[0_4px_14px_rgba(168,85,247,0.25)]"
+          >
+            <Plus size={18} strokeWidth={2.5} /> 
+            <span>New Post</span>
+          </Link>
+          {userId && <LogoutButton />}
+        </div>
       </aside>
     </>
   )
