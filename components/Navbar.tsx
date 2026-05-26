@@ -4,149 +4,236 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
-  Home, Compass, Users, User, Search, Bell, Plus,
-  Clapperboard, MessageSquare,
+  Home, Compass, Clapperboard, Search,
+  MessageSquare, Users, User, Bell, Plus,
 } from 'lucide-react'
 import NotificationBell from '@/components/NotificationBell'
+<<<<<<< HEAD
 import ThemeToggle from '@/components/ThemeToggle'
 import LogoutButton from '@/components/LogoutButton'
+=======
+import ThemeToggle      from '@/components/ThemeToggle'
+import LogoutButton     from '@/components/LogoutButton'
+>>>>>>> 70a68ce (fix:331666133166613316661331666133888)
 import { createClient } from '@/lib/supabase/client'
 
+/* ── Nav items ─────────────────────────────────────────────
+   mobile: true  → show in bottom tab bar
+   mobile: false → desktop sidebar only
+*/
 const LINKS = [
-  { href: '/',             icon: Home,          label: 'Home',      mobile: true  },
-  { href: '/discover',     icon: Compass,       label: 'Discover',  mobile: true  },
-  { href: '/flicks',       icon: Clapperboard,  label: 'Flicks',    mobile: true  },
-  { href: '/search',       icon: Search,        label: 'Search',    mobile: true  },
-  { href: '/messages',     icon: MessageSquare, label: 'Messages',  mobile: true  },
-  { href: '/circles',      icon: Users,         label: 'Circles',   mobile: false },
-  { href: '/profile',      icon: User,          label: 'Me',        mobile: true  },
+  { href: '/',         icon: Home,          label: 'Home',     mobile: true  },
+  { href: '/discover', icon: Compass,       label: 'Discover', mobile: true  },
+  { href: '/flicks',   icon: Clapperboard,  label: 'Flicks',   mobile: true  },
+  { href: '/search',   icon: Search,        label: 'Search',   mobile: true  },
+  { href: '/messages', icon: MessageSquare, label: 'Messages', mobile: true  },
+  { href: '/circles',  icon: Users,         label: 'Circles',  mobile: false },
+  { href: '/profile',  icon: User,          label: 'Me',       mobile: true  },
 ]
 
 export default function Navbar() {
   const pathname = usePathname() ?? ''
   const supabase = createClient()
-  const [userId, setUserId] = useState<string | null>(null)
+
+  const [userId,         setUserId]         = useState<string | null>(null)
   const [unreadMessages, setUnreadMessages] = useState(0)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
-      setUserId(user?.id ?? null)
-      if (!user?.id) return
+      if (!user) return
+      setUserId(user.id)
 
-      const fetchUnreadCount = async () => {
+      const fetchUnread = async () => {
         const { count } = await supabase
           .from('messages')
           .select('*', { count: 'exact', head: true })
           .eq('recipient_id', user.id)
           .eq('is_read', false)
-        
         setUnreadMessages(count ?? 0)
       }
+      fetchUnread()
 
-      fetchUnreadCount()
-
-      const channel = supabase
-        .channel('nav-msgs')
-        .on(
-          'postgres_changes',
-          { event: 'INSERT', schema: 'public', table: 'messages', filter: `recipient_id=eq.${user.id}` },
-          () => setUnreadMessages(prev => prev + 1)
-        )
-        .on(
-          'postgres_changes',
-          { event: 'UPDATE', schema: 'public', table: 'messages', filter: `recipient_id=eq.${user.id}` },
-          () => fetchUnreadCount()
-        )
+      const ch = supabase.channel('nav-msgs')
+        .on('postgres_changes', {
+          event: 'INSERT', schema: 'public', table: 'messages',
+          filter: `recipient_id=eq.${user.id}`,
+        }, () => setUnreadMessages(p => p + 1))
+        .on('postgres_changes', {
+          event: 'UPDATE', schema: 'public', table: 'messages',
+          filter: `recipient_id=eq.${user.id}`,
+        }, fetchUnread)
         .subscribe()
 
-      return () => {
-        supabase.removeChannel(channel)
-      }
+      return () => { supabase.removeChannel(ch) }
     })
-  }, [supabase])
+  }, []) // eslint-disable-line
 
-  const isDmPage = pathname.startsWith('/messages/') && pathname.split('/').length === 3
-
-  if (pathname === '/flicks') return null
+  /* hide everything on fullscreen flicks page and DM pages */
+  const isFlicks  = pathname === '/flicks'
+  const isDmThread = pathname.startsWith('/messages/') && pathname.split('/').length === 3
 
   function isActive(href: string) {
-    if (href === '/') return pathname === '/'
+    if (href === '/')         return pathname === '/'
     if (href === '/messages') return pathname.startsWith('/messages')
-    if (href === '/profile') return pathname.startsWith('/profile')
+    if (href === '/profile')  return pathname.startsWith('/profile')
     return pathname.startsWith(href)
   }
 
+  if (isFlicks) return null
+
+  /* ── shared active style ─────────────────────────────── */
+  const activeNavItem = {
+    background: 'linear-gradient(135deg, rgba(255,107,107,0.12), rgba(139,92,246,0.12))',
+    color: 'var(--nia-violet)',
+  } as const
+
   return (
     <>
-      {/* ── Top Header Navbar ───────────────────────────── */}
-      {!isDmPage && (
-        <header
-          className="fixed top-0 left-0 right-0 z-50 h-14 flex items-center justify-between px-4 sm:left-60 bg-(--surface-0) border-b backdrop-blur-md"
-          style={{ borderColor: 'var(--border)' }}
-        >
-          {/* Logo — shown on mobile only */}
-          <Link href="/" className="flex items-center gap-2 select-none sm:invisible" aria-label="Nia home">
-            <div className="w-8 h-8 rounded-xl flex items-center justify-center text-white font-black text-base bg-(--grad-brand)">
+      {/* ══════════════════════════════════════════════════
+          TOP BAR  (mobile + desktop)
+          On desktop it sits to the right of the sidebar.
+      ══════════════════════════════════════════════════ */}
+      {!isDmThread && (
+        <header style={{
+          position:    'fixed',
+          top:         0,
+          left:        0,
+          right:       0,
+          height:      'var(--nav-top)',
+          zIndex:      50,
+          display:     'flex',
+          alignItems:  'center',
+          justifyContent: 'space-between',
+          padding:     '0 16px',
+          background:  'var(--surface-0)',
+          borderBottom: '1px solid var(--border)',
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
+        }}>
+          {/* Logo — visible on mobile, hidden on desktop (sidebar has it) */}
+          <Link
+            href="/"
+            style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none' }}
+            className="sm:invisible"
+            aria-label="Nia home"
+          >
+            <div style={{
+              width: 30, height: 30, borderRadius: 10,
+              background: 'var(--grad-brand)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: '#fff', fontWeight: 900, fontSize: 15,
+            }}>
               N
             </div>
-            <span className="font-extrabold text-lg tracking-tight text-(--text-primary)">Nia</span>
+            <span style={{ fontWeight: 800, fontSize: 17, color: 'var(--text-primary)' }}>Nia</span>
           </Link>
 
-          <div className="flex items-center gap-1.5">
+          {/* Right controls */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <ThemeToggle />
             {userId && <NotificationBell userId={userId} />}
             {userId && <LogoutButton variant="icon" />}
             <Link
               href="/#compose"
-              className="tap-sm flex items-center gap-1.5 text-white text-sm font-bold px-3.5 py-2 rounded-xl transition-all active:scale-95 min-h-9 bg-(--grad-brand) shadow-[0_4px_14px_rgba(168,85,247,0.3)]"
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                background: 'var(--grad-brand)',
+                color: '#fff',
+                fontSize: 13, fontWeight: 700,
+                padding: '7px 14px',
+                borderRadius: 10,
+                textDecoration: 'none',
+                minHeight: 34,
+              }}
+              className="tap-sm"
             >
-              <Plus size={16} strokeWidth={2.5} />
+              <Plus size={15} strokeWidth={2.5} />
               <span className="hidden xs:inline">Post</span>
             </Link>
           </div>
         </header>
       )}
 
-      {/* ── Mobile Base Bottom Tab Navigation ────────────── */}
-      {!isDmPage && (
+      {/* ══════════════════════════════════════════════════
+          MOBILE BOTTOM TAB BAR
+      ══════════════════════════════════════════════════ */}
+      {!isDmThread && (
         <nav
-          className="fixed bottom-0 left-0 right-0 z-50 flex items-center justify-around sm:hidden border-t bg-(--surface-0) h-(--nav-bottom)"
           style={{
-            borderColor: 'var(--border)',
-            paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+            position:       'fixed',
+            bottom:         0,
+            left:           0,
+            right:          0,
+            height:         'var(--nav-bottom)',
+            zIndex:         50,
+            display:        'flex',
+            alignItems:     'center',
+            justifyContent: 'space-around',
+            background:     'var(--surface-0)',
+            borderTop:      '1px solid var(--border)',
+            paddingBottom:  'env(safe-area-inset-bottom, 0px)',
+            backdropFilter: 'blur(12px)',
+            WebkitBackdropFilter: 'blur(12px)',
           }}
+          className="sm:hidden"
         >
           {LINKS.filter(l => l.mobile).map(({ href, icon: Icon, label }) => {
-            const active = isActive(href)
+            const active    = isActive(href)
             const showBadge = href === '/messages' && unreadMessages > 0
-            
+
             return (
               <Link
                 key={href}
                 href={href}
                 aria-label={label}
-                className="flex flex-col items-center justify-center gap-0.5 flex-1 py-1 min-h-12 select-none tap-xs"
+                style={{
+                  display:        'flex',
+                  flexDirection:  'column',
+                  alignItems:     'center',
+                  justifyContent: 'center',
+                  gap:            2,
+                  flex:           1,
+                  padding:        '6px 0',
+                  textDecoration: 'none',
+                }}
+                className="tap-xs"
               >
-                <div
-                  className="relative w-9 h-9 flex items-center justify-center rounded-xl transition-all duration-200"
-                  style={active ? { background: 'linear-gradient(135deg, rgba(255,107,107,0.15), rgba(168,85,247,0.15))' } : {}}
-                >
-                  <Icon 
-                    size={20} 
-                    strokeWidth={active ? 2.5 : 1.8} 
-                    style={{ color: active ? 'var(--nia-violet)' : 'var(--text-tertiary)' }} 
+                <div style={{
+                  position:       'relative',
+                  width:          36, height: 36,
+                  borderRadius:   10,
+                  display:        'flex',
+                  alignItems:     'center',
+                  justifyContent: 'center',
+                  ...(active ? activeNavItem : {}),
+                  transition: 'background 0.2s',
+                }}>
+                  <Icon
+                    size={20}
+                    strokeWidth={active ? 2.5 : 1.8}
+                    color={active ? 'var(--nia-violet)' : 'var(--text-tertiary)'}
                   />
-                  
                   {showBadge && (
-                    <span className="absolute -top-1 -right-1 min-w-4.5 h-4.5 flex items-center justify-center text-white text-[9px] font-black rounded-full px-1 bg-(--nia-coral) shadow-sm">
+                    <span style={{
+                      position:   'absolute',
+                      top: -3, right: -3,
+                      minWidth:   16, height: 16,
+                      borderRadius: 8,
+                      background: 'var(--nia-coral)',
+                      color:      '#fff',
+                      fontSize:   9, fontWeight: 800,
+                      display:    'flex', alignItems: 'center', justifyContent: 'center',
+                      padding:    '0 3px',
+                    }}>
                       {unreadMessages > 9 ? '9+' : unreadMessages}
                     </span>
                   )}
                 </div>
-                <span 
-                  className="text-[9px] font-bold" 
-                  style={{ color: active ? 'var(--nia-violet)' : 'var(--text-tertiary)' }}
-                >
+                <span style={{
+                  fontSize:   9,
+                  fontWeight: 700,
+                  color:      active ? 'var(--nia-violet)' : 'var(--text-tertiary)',
+                }}>
                   {label}
                 </span>
               </Link>
@@ -155,55 +242,100 @@ export default function Navbar() {
         </nav>
       )}
 
-      {/* ── Desktop Anchor Sidebar ──────────────────────── */}
+      {/* ══════════════════════════════════════════════════
+          DESKTOP SIDEBAR
+      ══════════════════════════════════════════════════ */}
       <aside
-        className="hidden sm:flex fixed left-0 top-0 h-full flex-col px-3 pt-4 pb-6 border-r bg-(--surface-0) w-60 z-40 select-none"
-        style={{ borderColor: 'var(--border)' }}
+        className="hidden sm:flex"
+        style={{
+          position:      'fixed',
+          top:           0,
+          left:          0,
+          bottom:        0,
+          width:         'var(--sidebar-w)',
+          zIndex:        40,
+          flexDirection: 'column',
+          padding:       '16px 12px 24px',
+          background:    'var(--surface-0)',
+          borderRight:   '1px solid var(--border)',
+          overflowY:     'auto',
+        }}
       >
         {/* Logo */}
-        <Link href="/" className="flex items-center gap-2.5 px-3 mb-6 mt-1">
-          <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-black text-lg bg-(--grad-brand)">
-            N
-          </div>
-          <span className="font-extrabold text-xl tracking-tight text-(--text-primary)">Nia</span>
+        <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', marginBottom: 20, textDecoration: 'none' }}>
+          <div style={{
+            width: 34, height: 34, borderRadius: 10,
+            background: 'var(--grad-brand)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: '#fff', fontWeight: 900, fontSize: 17,
+          }}>N</div>
+          <span style={{ fontWeight: 800, fontSize: 18, color: 'var(--text-primary)' }}>Nia</span>
         </Link>
 
-        <div className="flex-1 space-y-0.5 overflow-y-auto hidden-scrollbar">
+        {/* Nav links */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
           {LINKS.map(({ href, icon: Icon, label }) => {
-            const active = isActive(href)
+            const active    = isActive(href)
             const showBadge = href === '/messages' && unreadMessages > 0
-            
+
             return (
               <Link
                 key={href}
                 href={href}
-                className="flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-[15px] font-bold transition-all duration-150 relative tap-sm"
-                style={active
-                  ? { background: 'linear-gradient(135deg, rgba(255,107,107,0.12), rgba(168,85,247,0.12))', color: 'var(--nia-violet)' }
-                  : { color: 'var(--text-secondary)' }}
+                className="tap-sm"
+                style={{
+                  display:    'flex',
+                  alignItems: 'center',
+                  gap:        12,
+                  padding:    '10px 12px',
+                  borderRadius: 14,
+                  textDecoration: 'none',
+                  fontSize:   15, fontWeight: active ? 700 : 500,
+                  transition: 'background 0.15s, color 0.15s',
+                  position:   'relative',
+                  ...(active ? activeNavItem : { color: 'var(--text-secondary)' }),
+                }}
               >
-                <div className="relative">
+                <div style={{ position: 'relative', flexShrink: 0 }}>
                   <Icon size={20} strokeWidth={active ? 2.5 : 1.8} />
-                  
                   {showBadge && (
-                    <span className="absolute -top-1.5 -right-1.5 min-w-4.5 h-4.5 flex items-center justify-center text-white text-[9px] font-black rounded-full px-1 bg-(--nia-coral) shadow-sm">
+                    <span style={{
+                      position: 'absolute', top: -4, right: -4,
+                      minWidth: 15, height: 15, borderRadius: 8,
+                      background: 'var(--nia-coral)',
+                      color: '#fff', fontSize: 9, fontWeight: 800,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      padding: '0 3px',
+                    }}>
                       {unreadMessages > 9 ? '9+' : unreadMessages}
                     </span>
                   )}
                 </div>
                 <span>{label}</span>
-                {active && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-(--nia-violet)" />}
+                {active && (
+                  <div style={{
+                    marginLeft: 'auto',
+                    width: 6, height: 6, borderRadius: '50%',
+                    background: 'var(--nia-violet)',
+                  }} />
+                )}
               </Link>
             )
           })}
 
+          {/* Notifications — desktop only */}
           {userId && (
             <Link
               href="/notifications"
-              className="flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-[15px] font-bold transition-all duration-150 tap-sm"
-              style={pathname === '/notifications'
-                ? { background: 'linear-gradient(135deg, rgba(255,107,107,0.12), rgba(168,85,247,0.12))', color: 'var(--nia-violet)' }
-                : { color: 'var(--text-secondary)' }}
+              className="tap-sm"
+              style={{
+                display: 'flex', alignItems: 'center', gap: 12,
+                padding: '10px 12px', borderRadius: 14,
+                textDecoration: 'none',
+                fontSize: 15, fontWeight: pathname === '/notifications' ? 700 : 500,
+                transition: 'background 0.15s',
+                ...(pathname === '/notifications' ? activeNavItem : { color: 'var(--text-secondary)' }),
+              }}
             >
               <Bell size={20} strokeWidth={pathname === '/notifications' ? 2.5 : 1.8} />
               <span>Notifications</span>
@@ -211,6 +343,7 @@ export default function Navbar() {
           )}
         </div>
 
+<<<<<<< HEAD
         <div className="mt-4 space-y-2">
           <Link 
             href="/#compose" 
@@ -218,6 +351,26 @@ export default function Navbar() {
           >
             <Plus size={18} strokeWidth={2.5} /> 
             <span>New Post</span>
+=======
+        {/* Bottom: new post + logout */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 16 }}>
+          <Link
+            href="/#compose"
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+              background: 'var(--grad-brand)',
+              color: '#fff',
+              fontWeight: 700, fontSize: 14,
+              padding: '12px',
+              borderRadius: 14,
+              textDecoration: 'none',
+              boxShadow: '0 4px 16px rgba(139,92,246,0.25)',
+            }}
+            className="tap-sm"
+          >
+            <Plus size={17} strokeWidth={2.5} />
+            New Post
+>>>>>>> 70a68ce (fix:331666133166613316661331666133888)
           </Link>
           {userId && <LogoutButton />}
         </div>

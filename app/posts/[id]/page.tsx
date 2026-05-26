@@ -2,12 +2,12 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect, notFound } from 'next/navigation'
 import PostCard from '@/components/PostCard'
 import CommentThread from '@/components/CommentThread'
+import ReplyBar from '@/components/ReplyBar'
 import { ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
 
 interface Props { params: Promise<{ id: string }> }
 
-// Full query including comment likes (works if comment_likes table exists)
 const FULL_SELECT = `
   *,
   profiles:user_id (id, username, avatar_url, country),
@@ -22,7 +22,6 @@ const FULL_SELECT = `
   )
 `
 
-// Fallback query without comment_likes (safe if that table is missing)
 const SAFE_SELECT = `
   *,
   profiles:user_id (id, username, avatar_url, country),
@@ -42,73 +41,75 @@ export default async function PostDetailPage({ params }: Props) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  // Try full query; fall back to safe query if comment_likes table is missing
   let post: any = null
+  const { data: fullData, error: fullErr } = await supabase
+    .from('posts').select(FULL_SELECT).eq('id', id).single()
 
-  const { data: fullData, error: fullError } = await supabase
-    .from('posts')
-    .select(FULL_SELECT)
-    .eq('id', id)
-    .single()
-
-  if (!fullError) {
+  if (!fullErr) {
     post = fullData
   } else {
-    // PGRST116 = "no rows returned" → post genuinely doesn't exist
-    if (fullError.code === 'PGRST116') notFound()
-
-    // Any other error (e.g. missing relation) → retry without comment_likes
-    const { data: safeData, error: safeError } = await supabase
-      .from('posts')
-      .select(SAFE_SELECT)
-      .eq('id', id)
-      .single()
-
-    if (safeError || !safeData) notFound()
+    if (fullErr.code === 'PGRST116') notFound()
+    const { data: safeData, error: safeErr } = await supabase
+      .from('posts').select(SAFE_SELECT).eq('id', id).single()
+    if (safeErr || !safeData) notFound()
     post = safeData
   }
 
   if (!post) notFound()
 
   const comments = ((post.comments ?? []) as any[]).sort(
-    (a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
   )
 
   return (
-    <div style={{ minHeight: '100vh', paddingBottom: 32 }}>
+    <div style={{ maxWidth: 620, margin: '0 auto', minHeight: '100vh' }}>
+
       {/* Back nav */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
         gap: 12,
-        padding: '14px 16px',
+        padding: '12px 16px',
         borderBottom: '1px solid var(--divider)',
-        maxWidth: 620,
-        margin: '0 auto',
+        position: 'sticky',
+        top: 'var(--nav-top)',
+        background: 'var(--surface-0)',
+        zIndex: 10,
       }}>
         <Link href="/" style={{
+          width: 34, height: 34,
+          borderRadius: '50%',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          width: 36, height: 36, borderRadius: '50%',
+          background: 'var(--surface-2)',
           color: 'var(--text-primary)',
           textDecoration: 'none',
-          background: 'var(--surface-2)',
         }}>
-          <ArrowLeft size={20} strokeWidth={2} />
+          <ArrowLeft size={18} strokeWidth={2.5} />
         </Link>
-        <span style={{ fontWeight: 700, fontSize: 16 }}>Thread</span>
+        <span style={{ fontWeight: 800, fontSize: 16 }}>Post</span>
       </div>
 
-      <div className="feed-container">
-        {/* Original post — comment section auto-opens on detail view */}
-        <PostCard post={post} currentUserId={user.id} showThreadLine={comments.length > 0} />
+      {/* Original post */}
+      <PostCard
+        post={post}
+        currentUserId={user.id}
+        showLine={comments.length > 0}
+      />
 
-        {/* Comments thread */}
-        {comments.length > 0 && (
-          <CommentThread comments={comments} currentUserId={user.id} postId={post.id} />
-        )}
+      {/* Comments */}
+      {comments.length > 0 && (
+        <CommentThread
+          comments={comments}
+          currentUserId={user.id}
+          postId={post.id}
+        />
+      )}
 
-        <div style={{ height: 40 }} />
-      </div>
+      {/* Spacer so content isn't hidden behind reply bar */}
+      <div style={{ height: 80 }} />
+
+      {/* Sticky reply input */}
+      <ReplyBar postId={post.id} currentUserId={user.id} />
     </div>
   )
 }
