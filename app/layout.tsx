@@ -1,20 +1,30 @@
-import { Html, Head, Main, NextScript } from 'next/document';
-import Navbar from '../components/Navbar';
-import '../styles/globals.css';
+// app/layout.tsx
+import './globals.css';
+import Navbar from '@/components/Navbar';
+import { ThemeProvider } from '@/components/ThemeProvider';
 
-export default function RootLayout({ children }) {
+export const metadata = {
+  title: 'Nia — Africa Connects Here',
+  description: 'Pan‑African social media',
+};
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <Head>
-        <title>Nia — Africa Connects Here</title>
-        <meta name="description" content="Pan-African social media" />
-      </Head>
-      <body className="bg-[var(--surface-0)] text-[var(--text-primary)] antialiased">
-        <Navbar />
-        <div className="page-transition">
-          <Main>{children}</Main>
-        </div>
-        <NextScript />
+      <body
+        className="bg-[var(--surface-0)] text-[var(--text-primary)] antialiased"
+      >
+        <ThemeProvider>
+          <Navbar />
+          {/* Main app content – give it a left‑margin when the sidebar is visible */}
+          <div className="page-transition pt-14 sm:pt-0 sm:pl-60">
+            {children}
+          </div>
+        </ThemeProvider>
       </body>
     </html>
   );

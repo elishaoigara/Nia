@@ -1,27 +1,41 @@
+// app/notifications/page.tsx
+'use client';
+
 import { useState, useEffect } from 'react';
-import { supabase } from '../utils/supabase';
+import { createClient } from '@/lib/supabase/client';
 
 export default function Notifications() {
-  const [notifications, setNotifications] = useState([]);
+  const supabase = createClient();
+  const [notifications, setNotifications] = useState<any[]>([]);
 
   useEffect(() => {
-    const fetchNotifications = async () => {
-      const { data, error } = await supabase.from('notifications').select('*');
+    const fetch = async () => {
+      const { data, error } = await supabase
+        .from('notifications')
+        .select('*')
+        .order('created_at', { ascending: false });
+
       if (error) console.error(error);
-      else setNotifications(data);
+      else setNotifications(data ?? []);
     };
-    fetchNotifications();
-  }, []);
+    fetch();
+  }, [supabase]);
 
   return (
-    <div>
-      <h1>Notifications</h1>
+    <div className="max-w-xl mx-auto p-4">
+      <h1 className="text-2xl font-bold mb-4">Notifications</h1>
+
       {notifications.length === 0 ? (
         <p>No notifications yet 🔔</p>
       ) : (
-        <ul>
-          {notifications.map((notification) => (
-            <li key={notification.id}>{notification.message}</li>
+        <ul className="space-y-2">
+          {notifications.map((n) => (
+            <li
+              key={n.id}
+              className="p-3 border rounded-lg bg-[var(--surface-1)]"
+            >
+              {n.message}
+            </li>
           ))}
         </ul>
       )}

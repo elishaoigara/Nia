@@ -1,14 +1,16 @@
-import React from 'react';
-import './Stories.css';
+// components/Stories.tsx
+'use client';
 
-const Stories = () => {
+import React from 'react';
+
+const Stories: React.FC = () => {
   return (
-    <div className='stories-container'>
-      <div className='story-content'>
-        <h1>Story Title</h1>
-        <p>Story Content</p>
-        <img src='story-image.jpg' alt='Story Image' />
-        <video src='story-video.mp4' alt='Story Video' />
+    <div className="stories-container p-4">
+      <div className="story-content space-y-2">
+        <h1 className="text-xl font-bold">Story Title</h1>
+        <p className="text-sm">Story Content</p>
+        <img src="story-image.jpg" alt="Story Image" className="w-full h-auto rounded" />
+        <video src="story-video.mp4" controls className="w-full h-auto rounded" />
       </div>
     </div>
   );
