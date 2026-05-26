@@ -8,13 +8,8 @@ import {
   MessageSquare, Users, User, Bell, Plus,
 } from 'lucide-react'
 import NotificationBell from '@/components/NotificationBell'
-<<<<<<< HEAD
-import ThemeToggle from '@/components/ThemeToggle'
-import LogoutButton from '@/components/LogoutButton'
-=======
 import ThemeToggle      from '@/components/ThemeToggle'
 import LogoutButton     from '@/components/LogoutButton'
->>>>>>> 70a68ce (fix:331666133166613316661331666133888)
 import { createClient } from '@/lib/supabase/client'
 
 /* ── Nav items ─────────────────────────────────────────────
@@ -343,15 +338,6 @@ export default function Navbar() {
           )}
         </div>
 
-<<<<<<< HEAD
-        <div className="mt-4 space-y-2">
-          <Link 
-            href="/#compose" 
-            className="flex items-center justify-center gap-2 w-full text-white text-sm font-bold py-3 rounded-xl transition-all duration-150 tap-sm active:scale-95 bg-(--grad-brand) shadow-[0_4px_14px_rgba(168,85,247,0.25)]"
-          >
-            <Plus size={18} strokeWidth={2.5} /> 
-            <span>New Post</span>
-=======
         {/* Bottom: new post + logout */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 16 }}>
           <Link
@@ -370,7 +356,6 @@ export default function Navbar() {
           >
             <Plus size={17} strokeWidth={2.5} />
             New Post
->>>>>>> 70a68ce (fix:331666133166613316661331666133888)
           </Link>
           {userId && <LogoutButton />}
         </div>
