@@ -1,26 +1,21 @@
-import React from 'react';
-import './globals.css';
+import { Html, Head, Main, NextScript } from 'next/document';
+import Navbar from '../components/Navbar';
+import '../styles/globals.css';
 
-const Layout = () => {
+export default function RootLayout({ children }) {
   return (
-    <div className='layout'
-      <header className='header'
-        <nav className='nav'
-          <ul>
-            <li><a href='#'>Home</a></li>
-            <li><a href='#'>About</a></li>
-            <li><a href='#'>Contact</a></li>
-          </ul>
-        </nav>
-      </header>
-      <main className='main'
-        {/* Page content */}
-      </main>
-      <footer className='footer'
-        {/* Footer content */}
-      </footer>
-    </div>
+    <html lang="en" suppressHydrationWarning>
+      <Head>
+        <title>Nia — Africa Connects Here</title>
+        <meta name="description" content="Pan-African social media" />
+      </Head>
+      <body className="bg-[var(--surface-0)] text-[var(--text-primary)] antialiased">
+        <Navbar />
+        <div className="page-transition">
+          <Main>{children}</Main>
+        </div>
+        <NextScript />
+      </body>
+    </html>
   );
-};
-
-export default Layout;
+}
