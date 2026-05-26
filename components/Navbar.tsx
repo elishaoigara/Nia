@@ -23,7 +23,7 @@ const LINKS = [
 ]
 
 export default function Navbar() {
-  const pathname = usePathname()
+  const pathname = usePathname() ?? ''
   const supabase = createClient()
   const [userId, setUserId] = useState<string | null>(null)
   const [unreadMessages, setUnreadMessages] = useState(0)
