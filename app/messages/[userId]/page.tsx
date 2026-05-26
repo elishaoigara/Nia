@@ -37,9 +37,13 @@ type Profile = { id: string; username: string; avatar_url: string | null; full_n
 
 export default function DirectMessagePage() {
   const supabase = createClient()
-  const params = useParams()
+  const { userId } = useParams() as { userId?: string }
   const router = useRouter()
-  const recipientId = params.userId as string
+
+  if (!userId) {
+    return <div className="text-center py-8">Invalid conversation</div>
+  }
+  const recipientId = userId
 
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [recipient, setRecipient] = useState<Profile | null>(null)
@@ -122,7 +126,6 @@ export default function DirectMessagePage() {
   async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>, type: string) {
     const file = e.target.files?.[0]
     if (!file || !currentUserId) return
-    // Detect GIFs so they render without object-cover (preserves animation)
     const detectedType = file.type === 'image/gif' ? 'gif' : type
     const result = await uploadFile(file)
     if (result) await sendMessage(null, result.url, detectedType, result.name)
