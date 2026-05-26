@@ -26,11 +26,11 @@ const PostCard: React.FC<PostCardProps> = ({ post, currentUserId, showThreadLine
         .from('likes')
         .delete()
         .match({ post_id: post.id, user_id: currentUserId });
-      setLikes((c) => c - 1);
+      setLikes((c: number) => c - 1);
       setLiked(false);
     } else {
       await supabase.from('likes').insert({ post_id: post.id, user_id: currentUserId });
-      setLikes((c) => c + 1);
+      setLikes((c: number) => c + 1);
       setLiked(true);
     }
   };
