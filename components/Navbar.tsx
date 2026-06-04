@@ -109,7 +109,7 @@ export default function Navbar() {
           <Link
             href="/"
             style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none' }}
-            className="sm:invisible"
+            className="hide-on-desktop"
             aria-label="Nia home"
           >
             <div style={{
@@ -170,7 +170,7 @@ export default function Navbar() {
             backdropFilter: 'blur(12px)',
             WebkitBackdropFilter: 'blur(12px)',
           }}
-          className="sm:hidden"
+          className="mobile-bottom-nav"
         >
           {LINKS.filter(l => l.mobile).map(({ href, icon: Icon, label }) => {
             const active    = isActive(href)
@@ -241,7 +241,7 @@ export default function Navbar() {
           DESKTOP SIDEBAR
       ══════════════════════════════════════════════════ */}
       <aside
-        className="hidden sm:flex"
+        className="desktop-sidebar"
         style={{
           position:      'fixed',
           top:           0,
