@@ -146,6 +146,7 @@ export default function PostCard({ post, currentUserId, onDelete }: PostCardProp
   const [showMenu, setShowMenu] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
+  const [initialIsFollowing, setInitialIsFollowing] = useState(false);
 
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -175,6 +176,20 @@ export default function PostCard({ post, currentUserId, onDelete }: PostCardProp
         if (data) setLiked(true);
       });
   }, [currentUserId, post.id]); // eslint-disable-line
+
+  /* Check if current user is following the post author */
+  useEffect(() => {
+    if (!currentUserId || !profile?.id || currentUserId === profile.id) return;
+    supabase
+      .from('follows')
+      .select('follower_id')
+      .eq('follower_id', currentUserId)
+      .eq('following_id', profile.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        setInitialIsFollowing(!!data);
+      });
+  }, [currentUserId, profile?.id]); // eslint-disable-line
 
   /* Close menu on outside click */
   useEffect(() => {
@@ -268,6 +283,7 @@ export default function PostCard({ post, currentUserId, onDelete }: PostCardProp
                 <FollowButton
                   targetUserId={profile.id}
                   currentUserId={currentUserId}
+                  initialIsFollowing={initialIsFollowing}
                 />
               )}
               <div style={{ position: 'relative' }} ref={menuRef}>
@@ -486,8 +502,8 @@ export default function PostCard({ post, currentUserId, onDelete }: PostCardProp
       {/* Lightbox */}
       {lightboxOpen && (
         <MediaLightbox
-          media={allMedia}
-          index={lightboxIndex}
+          items={allMedia}
+          startIndex={lightboxIndex}
           onClose={() => setLightboxOpen(false)}
         />
       )}
