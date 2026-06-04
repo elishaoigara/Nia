@@ -70,6 +70,7 @@ interface PostCardProps {
   };
   currentUserId?: string | null;
   onDelete?: (postId: string) => void;
+  showLine?: boolean;
 }
 
 /* ── HTML-escape helper (XSS-safe) ────────────── */
@@ -135,7 +136,7 @@ function mediaGridClass(count: number): string {
 }
 
 /* ── Component ───────────────────────────────── */
-export default function PostCard({ post, currentUserId, onDelete }: PostCardProps) {
+export default function PostCard({ post, currentUserId, onDelete, showLine }: PostCardProps) {
   const supabase = createClient();
   const router = useRouter();
 
@@ -253,7 +254,7 @@ export default function PostCard({ post, currentUserId, onDelete }: PostCardProp
               <div className="post-avatar-inner">{initials}</div>
             )}
           </Link>
-          <div className="post-line" />
+          {showLine && <div className="post-line" />}
         </div>
 
         {/* ── Body ──────────────────────────── */}
