@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import {
   Home, Compass, Clapperboard, Search,
   MessageSquare, Users, User, Bell, Plus,
@@ -28,10 +28,24 @@ const LINKS = [
 
 export default function Navbar() {
   const pathname = usePathname() ?? ''
+  const router   = useRouter()
   const supabase = createClient()
 
   const [userId,         setUserId]         = useState<string | null>(null)
   const [unreadMessages, setUnreadMessages] = useState(0)
+
+  function scrollToCompose() {
+    if (pathname !== '/') {
+      router.push('/#compose')
+      return
+    }
+    const el = document.getElementById('compose')
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      const textarea = el.querySelector('textarea')
+      textarea?.focus()
+    }
+  }
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -128,8 +142,8 @@ export default function Navbar() {
             <ThemeToggle />
             {userId && <NotificationBell userId={userId} />}
             {userId && <LogoutButton variant="icon" />}
-            <Link
-              href="/#compose"
+            <button
+              onClick={scrollToCompose}
               style={{
                 display: 'flex', alignItems: 'center', gap: 6,
                 background: 'var(--grad-brand)',
@@ -137,14 +151,15 @@ export default function Navbar() {
                 fontSize: 13, fontWeight: 700,
                 padding: '7px 14px',
                 borderRadius: 10,
-                textDecoration: 'none',
+                border: 'none',
+                cursor: 'pointer',
                 minHeight: 34,
               }}
               className="tap-sm"
             >
               <Plus size={15} strokeWidth={2.5} />
               <span className="hidden xs:inline">Post</span>
-            </Link>
+            </button>
           </div>
         </header>
       )}
@@ -340,8 +355,8 @@ export default function Navbar() {
 
         {/* Bottom: new post + logout */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 16 }}>
-          <Link
-            href="/#compose"
+          <button
+            onClick={scrollToCompose}
             style={{
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
               background: 'var(--grad-brand)',
@@ -349,14 +364,15 @@ export default function Navbar() {
               fontWeight: 700, fontSize: 14,
               padding: '12px',
               borderRadius: 14,
-              textDecoration: 'none',
+              border: 'none',
+              cursor: 'pointer',
               boxShadow: '0 4px 16px rgba(139,92,246,0.25)',
             }}
             className="tap-sm"
           >
             <Plus size={17} strokeWidth={2.5} />
             New Post
-          </Link>
+          </button>
           {userId && <LogoutButton />}
         </div>
       </aside>
