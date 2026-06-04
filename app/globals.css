@@ -1,19 +1,3 @@
-<<<<<<< HEAD
-/* ── Color Palette ────────────────────────────── */
-:root {
-  /* Brand accent colors */
-  --nia-violet: #8B5CF6;   /* purple brand */
-  --nia-coral:  #FF6B6B;   /* warm red */
-  --nia-sky:    #38BDF8;   /* blue */
-  --nia-pink:   #F472B6;   /* pink */
-  --nia-mint:   #4ECDC4;   /* teal */
-  --nia-amber:  #F59E0B;   /* amber */
-
-  /* Surfaces (light mode) */
-  --surface-0: #FFFFFF;
-  --surface-1: #F8FAFC;
-  --surface-2: #F1F5F9;
-=======
 /* ════════════════════════════════════════════════════
    Nia — Design System
    ════════════════════════════════════════════════════ */
@@ -32,27 +16,12 @@
   --surface-1: #F8FAFC;
   --surface-2: #F1F5F9;
   --surface-3: #E2E8F0;
->>>>>>> 70a68ce (fix:331666133166613316661331666133888)
 
   /* Text */
   --text-primary:   #0F172A;
   --text-secondary: #475569;
   --text-tertiary:  #94A3B8;
 
-<<<<<<< HEAD
-  /* Borders & dividers */
-  --border: #E2E8F0;
-
-  /* Gradients */
-  --grad-brand: linear-gradient(135deg, var(--nia-violet), var(--nia-coral));
-  --grad-cool:  linear-gradient(135deg, var(--nia-violet), var(--nia-sky));
-  --grad-warm:  linear-gradient(135deg, var(--nia-coral), var(--nia-amber));
-
-  /* Layout */
-  --nav-bottom: 3.5rem;
-}
-
-=======
   /* Borders */
   --border:   #E2E8F0;
   --divider:  rgba(0, 0, 0, 0.07);
@@ -72,114 +41,10 @@
 }
 
 /* ── Dark Mode ─────────────────────────────────────── */
->>>>>>> 70a68ce (fix:331666133166613316661331666133888)
 .dark {
   --surface-0: #0B1120;
   --surface-1: #1E293B;
   --surface-2: #334155;
-<<<<<<< HEAD
-  --text-primary:   #F1F5F9;
-  --text-secondary: #94A3B8;
-  --text-tertiary:  #64748B;
-  --border: #334155;
-}
-
-/* ── Card ───────────────────────────────────── */
-.card {
-  background: var(--surface-0);
-  border: 1px solid var(--border);
-  border-radius: 1rem;
-}
-.card-hover {
-  transition: all 0.2s ease;
-}
-.card-hover:hover {
-  border-color: var(--nia-violet);
-  box-shadow: 0 4px 24px rgba(139, 92, 246, 0.08);
-  transform: translateY(-1px);
-}
-
-/* ── Buttons ────────────────────────────────── */
-.btn-primary {
-  background: var(--grad-brand);
-  color: white;
-  padding: 0.625rem 1.25rem;
-  border-radius: 0.75rem;
-  font-weight: 700;
-  font-size: 0.875rem;
-  transition: all 0.15s ease;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-.btn-primary:hover:not(:disabled) {
-  opacity: 0.9;
-  transform: scale(1.02);
-}
-.btn-primary:active:not(:disabled) {
-  transform: scale(0.97);
-}
-.btn-primary:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.btn-ghost {
-  color: var(--text-secondary);
-  padding: 0.5rem 1rem;
-  border-radius: 0.75rem;
-  font-weight: 600;
-  font-size: 0.875rem;
-  transition: all 0.15s ease;
-}
-.btn-ghost:hover {
-  background: var(--surface-2);
-}
-
-/* ── Inputs ─────────────────────────────────── */
-.input {
-  width: 100%;
-  padding: 0.75rem 1rem;
-  background: var(--surface-1);
-  border: 1.5px solid var(--border);
-  border-radius: 0.75rem;
-  font-size: 0.875rem;
-  color: var(--text-primary);
-  transition: all 0.15s ease;
-  outline: none;
-}
-.input:focus {
-  border-color: var(--nia-violet);
-  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
-}
-.input::placeholder {
-  color: var(--text-tertiary);
-}
-
-/* ── Avatar Ring ────────────────────────────── */
-.avatar-ring {
-  border-radius: 50%;
-  background: var(--grad-brand);
-  padding: 2px;
-  display: inline-flex;
-}
-
-/* ── Tap Feedback ───────────────────────────── */
-.tap-sm {
-  transition: transform 0.1s ease;
-}
-.tap-sm:active {
-  transform: scale(0.96);
-}
-.tap-xs {
-  transition: transform 0.1s ease;
-}
-.tap-xs:active {
-  transform: scale(0.94);
-}
-
-/* ── Keyframes ──────────────────────────────── */
-=======
   --surface-3: #475569;
 
   --text-primary:   #F1F5F9;
@@ -213,8 +78,7 @@ body {
 }
 
 /* ════════════════════════════════════════════════════
-   FEED / POST LAYOUT  (Nia-native, inspired by
-   the flat row + vertical-line paradigm)
+   FEED / POST LAYOUT
    ════════════════════════════════════════════════════ */
 
 /* The feed column — max-width, centred */
@@ -252,7 +116,6 @@ body {
   overflow: hidden;
   flex-shrink: 0;
   position: relative;
-  /* ring */
   box-shadow: 0 0 0 2px var(--surface-0), 0 0 0 4px transparent;
   background: var(--grad-brand);
   padding: 2px;
@@ -364,7 +227,7 @@ body {
   font-weight: 500;
 }
 
-/* ── Media grid (1 or 2 items) ─────────────────────── */
+/* ── Media grid (1, 2, 3, 4, or 5 items) ──────────── */
 .post-media {
   margin-bottom: 10px;
   border-radius: 16px;
@@ -391,6 +254,95 @@ body {
 }
 .post-media.dual img,
 .post-media.dual video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* 3 items: 3 equal columns */
+.post-media.triple {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 2px;
+}
+.post-media.triple > * {
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  background: #000;
+}
+.post-media.triple img,
+.post-media.triple video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* 4 items: 2x2 grid */
+.post-media.quad {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 2px;
+}
+.post-media.quad > * {
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  background: #000;
+}
+.post-media.quad img,
+.post-media.quad video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* 5 items: first spans 2 cols, then 3 below */
+.post-media.penta {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-rows: auto auto;
+  gap: 2px;
+}
+.post-media.penta > *:first-child {
+  grid-column: 1 / 3;
+  grid-row: 1 / 3;
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  background: #000;
+}
+.post-media.penta > *:nth-child(2) {
+  grid-column: 3;
+  grid-row: 1;
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  background: #000;
+}
+.post-media.penta > *:nth-child(3) {
+  grid-column: 3;
+  grid-row: 2;
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  background: #000;
+}
+.post-media.penta > *:nth-child(4) {
+  grid-column: 1;
+  grid-row: 3;
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  background: #000;
+}
+.post-media.penta > *:nth-child(5) {
+  grid-column: 2;
+  grid-row: 3;
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  background: #000;
+}
+.post-media.penta img,
+.post-media.penta video {
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -445,7 +397,7 @@ body {
 .post-stat a:hover { text-decoration: underline; }
 
 /* ════════════════════════════════════════════════════
-   COMPOSE ROW  (matches post-row structure visually)
+   COMPOSE ROW
    ════════════════════════════════════════════════════ */
 .compose-row {
   display: flex;
@@ -511,7 +463,7 @@ body {
 }
 .compose-icon-btn:hover { color: var(--nia-violet); }
 
-/* Post button (dark pill, like the reference app) */
+/* Post button (dark pill) */
 .btn-post {
   background: var(--text-primary);
   color: var(--surface-0);
@@ -754,7 +706,7 @@ body {
 .input:focus { border-color: var(--nia-violet); }
 
 /* ════════════════════════════════════════════════════
-   CARD  (for non-post surfaces like compose, profile)
+   CARD
    ════════════════════════════════════════════════════ */
 .card {
   background: var(--surface-0);
@@ -774,12 +726,10 @@ body {
 /* ════════════════════════════════════════════════════
    NAVBAR LAYOUT HELPERS
    ════════════════════════════════════════════════════ */
-/* Content area padding — mobile: top bar + bottom tab */
 .page-wrap {
   padding-top: var(--nav-top);
   padding-bottom: var(--nav-bottom);
 }
-/* Desktop: sidebar offset */
 @media (min-width: 640px) {
   .page-wrap {
     padding-left: var(--sidebar-w);
@@ -811,99 +761,19 @@ body {
 /* ════════════════════════════════════════════════════
    ANIMATIONS
    ════════════════════════════════════════════════════ */
->>>>>>> 70a68ce (fix:331666133166613316661331666133888)
 @keyframes fade-in {
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-<<<<<<< HEAD
-
-@keyframes pop-in {
-  0%   { opacity: 0; transform: scale(0.8); }
-  100% { opacity: 1; transform: scale(1); }
-}
-
-=======
 @keyframes pop-in {
   0%   { opacity: 0; transform: scale(0.82); }
   70%  { transform: scale(1.04); }
   100% { opacity: 1; transform: scale(1); }
 }
->>>>>>> 70a68ce (fix:331666133166613316661331666133888)
 @keyframes slide-up {
   from { opacity: 0; transform: translateY(100%); }
   to   { opacity: 1; transform: translateY(0); }
 }
-<<<<<<< HEAD
-
-@keyframes shimmer {
-  0%   { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
-}
-
-@keyframes pulse-soft {
-  0%, 100% { opacity: 1; }
-  50%      { opacity: 0.5; }
-}
-
-@keyframes heartbeat {
-  0%, 100% { transform: scale(1); }
-  15%      { transform: scale(1.3); }
-  30%      { transform: scale(1); }
-}
-
-/* ── Animation Utility Classes ──────────────── */
-.animate-fade-in {
-  animation: fade-in 0.3s ease forwards;
-}
-.animate-pop {
-  animation: pop-in 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
-}
-.animate-slide-up {
-  animation: slide-up 0.3s ease forwards;
-}
-.animate-shimmer {
-  background: linear-gradient(90deg, var(--surface-2) 25%, var(--surface-1) 50%, var(--surface-2) 75%);
-  background-size: 200% 100%;
-  animation: shimmer 1.5s infinite;
-}
-.animate-heartbeat {
-  animation: heartbeat 0.3s ease;
-}
-
-/* Staggered card entrance for the feed */
-@keyframes card-enter {
-  from { opacity: 0; transform: translateY(16px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-
-.feed-card {
-  animation: card-enter 0.4s ease forwards;
-  opacity: 0;
-}
-.feed-card:nth-child(1)  { animation-delay: 0.00s; }
-.feed-card:nth-child(2)  { animation-delay: 0.05s; }
-.feed-card:nth-child(3)  { animation-delay: 0.10s; }
-.feed-card:nth-child(4)  { animation-delay: 0.15s; }
-.feed-card:nth-child(5)  { animation-delay: 0.20s; }
-.feed-card:nth-child(6)  { animation-delay: 0.25s; }
-.feed-card:nth-child(n+7) { animation-delay: 0.30s; }
-
-/* ── Scrollbar ──────────────────────────────── */
-::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 3px;
-}
-::-webkit-scrollbar-thumb:hover { background: var(--text-tertiary); }
-
-/* ── Selection ──────────────────────────────── */
-::selection {
-  background: rgba(139, 92, 246, 0.2);
-  color: var(--text-primary);
-}
-=======
 @keyframes shimmer {
   0%   { background-position: -200% 0; }
   100% { background-position:  200% 0; }
@@ -952,4 +822,3 @@ body {
 
 /* ── Selection ─────────────────────────────────────── */
 ::selection { background: rgba(139, 92, 246, 0.2); color: var(--text-primary); }
->>>>>>> 70a68ce (fix:331666133166613316661331666133888)

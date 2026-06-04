@@ -15,7 +15,7 @@ import {
   MicOff,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { createClient } from '@/utils/supabase/client';
+import { createClient } from '@/lib/supabase/client';
 
 interface MediaItem {
   file: File;
@@ -50,7 +50,7 @@ const AFRICAN_LANGUAGES: LanguageOption[] = [
   { code: 'afrikaans', label: 'Afrikaans', emoji: '🇿🇦' },
 ];
 
-const MAX_MEDIA = 2;
+const MAX_MEDIA = 5;
 const MAX_CHARS = 500;
 const MAX_VIDEO_MB = 10;
 const MAX_VIDEO_SEC = 60;
@@ -453,9 +453,336 @@ export default function CreatePost({
   const initials =
     profile?.username?.[0]?.toUpperCase() ?? '?';
 
+  const mediaCount = mediaItems.length;
+  let mediaGridClass = '';
+  if (mediaCount === 1) mediaGridClass = 'single';
+  else if (mediaCount === 2) mediaGridClass = 'dual';
+  else if (mediaCount === 3) mediaGridClass = 'triple';
+  else if (mediaCount === 4) mediaGridClass = 'quad';
+  else if (mediaCount === 5) mediaGridClass = 'penta';
+
   return (
-    <div>
-      {/* your existing JSX unchanged */}
+    <div className="compose-root">
+      {/* ── Compose row ─────────────────────────── */}
+      <div className="compose-row">
+        <div className="compose-left">
+          <div className="post-avatar">
+            {profile?.avatar_url ? (
+              <img
+                src={profile.avatar_url}
+                alt={profile.username ?? 'Your avatar'}
+              />
+            ) : (
+              <div className="post-avatar-inner">{initials}</div>
+            )}
+          </div>
+        </div>
+        <div className="compose-body">
+          <textarea
+            ref={textRef}
+            className="compose-textarea"
+            placeholder="What's happening?"
+            value={content}
+            onChange={e => {
+              setContent(e.target.value);
+              grow();
+            }}
+            rows={1}
+            maxLength={MAX_CHARS * 2}
+          />
+          <button
+            className="btn-post"
+            disabled={!canPost || loading}
+            onClick={handlePost}
+          >
+            {loading ? (
+              <Loader2 className="animate-spin" size={16} />
+            ) : (
+              'Post'
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* ── Error ───────────────────────────────── */}
+      {error && (
+        <div className="compose-toolbar" style={{ borderBottom: 'none', paddingTop: 0 }}>
+          <p style={{ color: 'var(--nia-coral)', fontSize: 13, margin: 0 }}>{error}</p>
+        </div>
+      )}
+
+      {/* ── Poll UI ─────────────────────────────── */}
+      {showPoll && (
+        <div style={{ padding: '0 16px 12px', borderBottom: '1px solid var(--divider)' }}>
+          <input
+            className="input"
+            placeholder="Ask a question…"
+            value={pollQ}
+            onChange={e => setPollQ(e.target.value)}
+            style={{ marginBottom: 8 }}
+          />
+          {pollOpts.map((opt, i) => (
+            <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
+              <input
+                className="input"
+                placeholder={`Option ${i + 1}`}
+                value={opt}
+                onChange={e => {
+                  const next = [...pollOpts];
+                  next[i] = e.target.value;
+                  setPollOpts(next);
+                }}
+                style={{ flex: 1 }}
+              />
+              {pollOpts.length > 2 && (
+                <button
+                  className="btn-ghost"
+                  onClick={() => setPollOpts(prev => prev.filter((_, j) => j !== i))}
+                  style={{ padding: '8px 10px' }}
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+          ))}
+          {pollOpts.length < 5 && (
+            <button
+              className="btn-ghost"
+              onClick={() => setPollOpts(prev => [...prev, ''])}
+              style={{ fontSize: 13, padding: '6px 14px', marginTop: 4 }}
+            >
+              <Plus size={14} style={{ marginRight: 4 }} /> Add option
+            </button>
+          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+            <label style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+              Poll duration:
+            </label>
+            <select
+              value={pollDur}
+              onChange={e => setPollDur(e.target.value)}
+              style={{
+                background: 'var(--surface-2)',
+                border: '1px solid var(--border)',
+                borderRadius: 8,
+                padding: '4px 10px',
+                fontSize: 13,
+                color: 'var(--text-primary)',
+              }}
+            >
+              <option value="1">1 hour</option>
+              <option value="6">6 hours</option>
+              <option value="12">12 hours</option>
+              <option value="24">24 hours</option>
+              <option value="48">48 hours</option>
+              <option value="72">3 days</option>
+              <option value="168">7 days</option>
+            </select>
+          </div>
+        </div>
+      )}
+
+      {/* ── Media preview grid ──────────────────── */}
+      {mediaItems.length > 0 && (
+        <div style={{ padding: '0 16px 12px' }}>
+          <div className={`post-media ${mediaGridClass}`}>
+            {mediaItems.map((item, idx) => (
+              <div key={idx} style={{ position: 'relative' }}>
+                {item.type === 'image' ? (
+                  <img src={item.preview} alt={`Upload ${idx}`} />
+                ) : (
+                  <video src={item.preview} />
+                )}
+                <button
+                  onClick={() => removeMedia(idx)}
+                  style={{
+                    position: 'absolute',
+                    top: 6,
+                    right: 6,
+                    background: 'rgba(0,0,0,0.6)',
+                    border: 'none',
+                    borderRadius: '50%',
+                    width: 26,
+                    height: 26,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    color: '#fff',
+                  }}
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Voice recording UI ──────────────────── */}
+      {voiceBlob && (
+        <div style={{ padding: '0 16px 12px' }}>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              padding: '10px 14px',
+              background: 'var(--surface-2)',
+              borderRadius: 12,
+            }}
+          >
+            <Mic size={18} style={{ color: 'var(--nia-violet)' }} />
+            <span style={{ fontSize: 14, color: 'var(--text-secondary)' }}>
+              Voice note attached
+            </span>
+            <button
+              onClick={() => setVoiceBlob(null)}
+              className="btn-ghost"
+              style={{
+                marginLeft: 'auto',
+                padding: '4px 10px',
+                fontSize: 12,
+              }}
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Language selector ───────────────────── */}
+      {showLang && (
+        <div
+          style={{
+            padding: '0 16px 12px',
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 6,
+          }}
+        >
+          {AFRICAN_LANGUAGES.map(l => (
+            <button
+              key={l.code}
+              className={language === l.code ? 'btn-primary' : 'btn-ghost'}
+              style={{ fontSize: 13, padding: '4px 12px' }}
+              onClick={() => {
+                setLanguage(l.code);
+                setShowLang(false);
+              }}
+            >
+              {l.emoji} {l.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* ── Toolbar ─────────────────────────────── */}
+      <div className="compose-toolbar">
+        <div className="compose-icons">
+          {/* Image picker */}
+          {canAddMore && (
+            <>
+              <button
+                className="compose-icon-btn"
+                onClick={() => imageRef.current?.click()}
+                title="Add image"
+              >
+                <ImagePlus size={20} />
+              </button>
+              <input
+                ref={imageRef}
+                type="file"
+                accept="image/*"
+                onChange={handleImagePick}
+                style={{ display: 'none' }}
+                multiple
+              />
+            </>
+          )}
+
+          {/* Video picker */}
+          {canAddMore && (
+            <>
+              <button
+                className="compose-icon-btn"
+                onClick={() => videoRef.current?.click()}
+                title="Add video"
+              >
+                <Video size={20} />
+              </button>
+              <input
+                ref={videoRef}
+                type="file"
+                accept="video/*"
+                onChange={handleVideoPick}
+                style={{ display: 'none' }}
+              />
+            </>
+          )}
+
+          {/* Voice recording */}
+          <button
+            className="compose-icon-btn"
+            onClick={toggleRecording}
+            title={recording ? 'Stop recording' : 'Record voice'}
+            style={{ color: recording ? 'var(--nia-coral)' : undefined }}
+          >
+            {recording ? <MicOff size={20} /> : <Mic size={20} />}
+          </button>
+
+          {/* AI caption */}
+          <button
+            className="compose-icon-btn"
+            onClick={generateCaption}
+            disabled={captionLoad}
+            title="Generate AI caption"
+          >
+            {captionLoad ? (
+              <Loader2 size={20} className="animate-spin" />
+            ) : (
+              <Sparkles size={20} />
+            )}
+          </button>
+
+          {/* Poll */}
+          <button
+            className="compose-icon-btn"
+            onClick={() => setShowPoll(prev => !prev)}
+            title="Add poll"
+            style={{ color: showPoll ? 'var(--nia-violet)' : undefined }}
+          >
+            <BarChart2 size={20} />
+          </button>
+
+          {/* Language */}
+          <button
+            className="compose-icon-btn"
+            onClick={() => setShowLang(prev => !prev)}
+            title="Select language"
+            style={{ color: showLang ? 'var(--nia-violet)' : undefined }}
+          >
+            <span style={{ fontSize: 18 }}>
+              {AFRICAN_LANGUAGES.find(l => l.code === language)?.emoji ?? '🌍'}
+            </span>
+          </button>
+        </div>
+
+        {/* Character counter */}
+        <span
+          style={{
+            fontSize: 13,
+            fontWeight: 600,
+            color: isOver
+              ? 'var(--nia-coral)'
+              : charsLeft <= 20
+              ? 'var(--nia-amber)'
+              : 'var(--text-tertiary)',
+          }}
+        >
+          {content.length > 0 ? charsLeft : ''}
+        </span>
+      </div>
     </div>
   );
 }

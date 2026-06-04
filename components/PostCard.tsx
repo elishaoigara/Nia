@@ -1,277 +1,622 @@
 // components/PostCard.tsx
 'use client';
 
-import { useState, useCallback } from 'react'
-import Link from 'next/link'
-import { Heart, MessageCircle, Repeat2, Send, MoreHorizontal } from 'lucide-react'
-import { createClient } from '@/lib/supabase/client'
-import MediaLightbox from '@/components/MediaLightbox'
-import VideoPlayer from '@/components/VideoPlayer'
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import {
+  Heart,
+  MessageCircle,
+  Repeat2,
+  Share,
+  MoreHorizontal,
+  Image,
+  Play,
+} from 'lucide-react';
+import { createClient } from '@/lib/supabase/client';
+import { createClient as createClientLocal } from '@/lib/supabase/client';
+import MediaLightbox from './MediaLightbox';
+import FollowButton from './FollowButton';
+
+/* ── Types ──────────────────────────────────── */
+
+interface Profile {
+  id: string;
+  username: string;
+  full_name: string | null;
+  avatar_url: string | null;
+}
+
+interface PostMedia {
+  url: string;
+  type: 'image' | 'video';
+}
+
+interface CircleInfo {
+  id: string;
+  name: string;
+}
+
+interface PollOption {
+  id: string;
+  text: string;
+  votes: number;
+}
+
+interface PollInfo {
+  id: string;
+  question: string;
+  options: PollOption[];
+  ends_at: string;
+}
 
 interface PostCardProps {
-  post: any
-  currentUserId: string
-  showLine?: boolean  // draw the vertical connector to comments below
+  post: {
+    id: string;
+    content: string | null;
+    media_url: string | null;
+    media_type: string | null;
+    extra_media: PostMedia[] | null;
+    language: string | null;
+    created_at: string;
+    user_id: string;
+    profiles: Profile | null;
+    circles: CircleInfo | null;
+    likes_count?: number;
+    comments_count?: number;
+    lomi_count?: number;
+    reposts_count?: number;
+    polls: PollInfo[] | null;
+  };
+  currentUserId?: string | null;
+  onDelete?: (postId: string) => void;
 }
 
-function timeAgo(date: string) {
-  const s = Math.floor((Date.now() - new Date(date).getTime()) / 1000)
-  if (s < 60)     return `${s}s`
-  if (s < 3600)   return `${Math.floor(s / 60)}m`
-  if (s < 86400)  return `${Math.floor(s / 3600)}h`
-  if (s < 604800) return `${Math.floor(s / 86400)}d`
-  return new Date(date).toLocaleDateString('en', { month: 'short', day: 'numeric' })
+/* ── HTML-escape helper (XSS-safe) ────────────── */
+function escapeHtml(text: string): string {
+  const map: Record<string, string> = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  };
+  return text.replace(/[&<>"']/g, char => map[char] || char);
 }
 
-/** Wrap #hashtags and @mentions with a coloured span */
-function richText(text: string) {
-  return text.replace(/(#\w+|@\w+)/g, '<span class="tag-hl">$1</span>')
+/* ── Rich-text renderer (XSS-safe) ─────────────── */
+function RichText({ text }: { text: string }) {
+  const escaped = escapeHtml(text);
+  const html = escaped
+    .replace(/\n/g, '<br>')
+    .replace(
+      /(#[\w\u00C0-\u024F\u1E00-\u1EFF]+)/g,
+      '<span class="tag-hl">$1</span>'
+    )
+    .replace(
+      /(@[\w]+)/g,
+      '<span class="tag-hl">$1</span>'
+    );
+
+  return (
+    <p
+      className="post-text"
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
+  );
 }
 
-export default function PostCard({ post, currentUserId, showLine = false }: PostCardProps) {
-  const supabase    = createClient()
-  const profile     = post.profiles
-  const likesList   = (post.likes    ?? []) as any[]
-  const commentList = (post.comments ?? []) as any[]
-  const repostList  = (post.reposts  ?? []) as any[]
+/* ── Time helper ──────────────────────────────── */
+function timeAgo(date: string): string {
+  const now = Date.now();
+  const then = new Date(date).getTime();
+  const diff = now - then;
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `${days}d`;
+  return new Date(date).toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+  });
+}
 
-  const [liked,       setLiked]      = useState(() => likesList.some((l) => l.user_id === currentUserId))
-  const [likeCount,   setLikeCount]  = useState(likesList.length)
-  const [reposted,    setReposted]   = useState(() => repostList.some((r) => r.user_id === currentUserId))
-  const [lightboxIdx, setLightbox]   = useState<number | null>(null)
+/* ── Media grid class helper ─────────────────── */
+function mediaGridClass(count: number): string {
+  if (count === 1) return 'single';
+  if (count === 2) return 'dual';
+  if (count === 3) return 'triple';
+  if (count === 4) return 'quad';
+  if (count === 5) return 'penta';
+  return 'single';
+}
 
-  const commentCount = commentList.length
+/* ── Component ───────────────────────────────── */
+export default function PostCard({ post, currentUserId, onDelete }: PostCardProps) {
+  const supabase = createClient();
+  const router = useRouter();
 
-  /* ── Build media items array ─────────────────────────────── */
-  // CreatePost stores: media_url (string) + media_type ('image'|'video'|'audio')
-  // and extra_media (array of {url, type}) for the 2nd slot.
-  type MediaItem = { url: string; type: 'image' | 'video' }
-  const mediaItems: MediaItem[] = []
+  const [liked, setLiked] = useState(false);
+  const [likesCount, setLikesCount] = useState(post.likes_count ?? 0);
+  const [commentsCount, setCommentsCount] = useState(post.comments_count ?? 0);
+  const [repostsCount, setRepostsCount] = useState(post.reposts_count ?? 0);
+  const [showMenu, setShowMenu] = useState(false);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
 
-  if (post.media_url && (post.media_type === 'image' || post.media_type === 'video')) {
-    mediaItems.push({ url: post.media_url, type: post.media_type as 'image' | 'video' })
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  const profile = post.profiles;
+  const circle = post.circles;
+
+  const allMedia: PostMedia[] = [];
+
+  if (post.media_url && post.media_type) {
+    allMedia.push({ url: post.media_url, type: post.media_type as 'image' | 'video' });
   }
-  if (Array.isArray(post.extra_media)) {
-    for (const em of post.extra_media) {
-      if (em?.url && (em.type === 'image' || em.type === 'video')) {
-        mediaItems.push({ url: em.url, type: em.type })
+
+  if (post.extra_media && Array.isArray(post.extra_media)) {
+    allMedia.push(...post.extra_media);
+  }
+
+  /* Check if current user liked this post */
+  useEffect(() => {
+    if (!currentUserId) return;
+    supabase
+      .from('likes')
+      .select('id')
+      .eq('post_id', post.id)
+      .eq('user_id', currentUserId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) setLiked(true);
+      });
+  }, [currentUserId, post.id]); // eslint-disable-line
+
+  /* Close menu on outside click */
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setShowMenu(false);
       }
     }
-  }
+    if (showMenu) {
+      document.addEventListener('mousedown', handleClick);
+    }
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [showMenu]);
 
-  /* ── Like toggle ─────────────────────────────────────────── */
-  const toggleLike = useCallback(async () => {
+  const handleLike = useCallback(async () => {
+    if (!currentUserId) return;
+    setLiked(prev => !prev);
+    setLikesCount(prev => (liked ? prev - 1 : prev + 1));
+
     if (liked) {
-      setLiked(false); setLikeCount((c) => c - 1)
-      await supabase.from('likes').delete().eq('post_id', post.id).eq('user_id', currentUserId)
+      await supabase
+        .from('likes')
+        .delete()
+        .eq('post_id', post.id)
+        .eq('user_id', currentUserId);
     } else {
-      setLiked(true); setLikeCount((c) => c + 1)
-      await supabase.from('likes').insert({ post_id: post.id, user_id: currentUserId })
+      await supabase.from('likes').insert({
+        post_id: post.id,
+        user_id: currentUserId,
+      });
     }
-  }, [liked, post.id, currentUserId, supabase])
+  }, [currentUserId, liked, post.id]); // eslint-disable-line
 
-  /* ── Repost toggle ───────────────────────────────────────── */
-  const toggleRepost = useCallback(async () => {
-    if (reposted) {
-      setReposted(false)
-      await supabase.from('reposts').delete().eq('post_id', post.id).eq('user_id', currentUserId)
-    } else {
-      setReposted(true)
-      await supabase.from('reposts').insert({ post_id: post.id, user_id: currentUserId })
+  const initials = profile?.username?.[0]?.toUpperCase() ?? '?';
+
+  const handlePostClick = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    if (
+      target.closest('.post-action-btn') ||
+      target.closest('.btn-follow') ||
+      target.closest('a')
+    ) {
+      return;
     }
-  }, [reposted, post.id, currentUserId, supabase])
-
-  /* ── Avatar fallback ─────────────────────────────────────── */
-  const initials = profile?.username?.[0]?.toUpperCase() ?? '?'
-  const hasLine  = showLine || commentCount > 0
+    router.push(`/posts/${post.id}`);
+  };
 
   return (
     <>
-      <article className="post-row">
-
-        {/* ── Left column ───────────────────────────────── */}
+      <article className="post-row" onClick={handlePostClick} style={{ cursor: 'pointer' }}>
+        {/* ── Left column ───────────────────── */}
         <div className="post-left">
-          <Link href={`/profile/${profile?.id}`} className="post-avatar">
-            <div className="post-avatar-inner">
-              {profile?.avatar_url
-                ? <img src={profile.avatar_url} alt={profile.username} />
-                : initials
-              }
-            </div>
+          <Link
+            href={`/profile/${profile?.id ?? '#'}`}
+            onClick={e => e.stopPropagation()}
+            className="post-avatar"
+          >
+            {profile?.avatar_url ? (
+              <img src={profile.avatar_url} alt={profile.username ?? ''} />
+            ) : (
+              <div className="post-avatar-inner">{initials}</div>
+            )}
           </Link>
-
-          {hasLine && <div className="post-line" />}
-
-          {/* Mini reply faces below line */}
-          {commentCount > 0 && (
-            <div className="post-reply-faces">
-              {commentList.slice(0, 2).map((c: any, i: number) => (
-                <div key={c.id ?? i} className="post-reply-face">
-                  {c.profiles?.avatar_url
-                    ? <img src={c.profiles.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    : c.profiles?.username?.[0]?.toUpperCase() ?? '?'
-                  }
-                </div>
-              ))}
-            </div>
-          )}
+          <div className="post-line" />
         </div>
 
-        {/* ── Right column ──────────────────────────────── */}
+        {/* ── Body ──────────────────────────── */}
         <div className="post-body">
-
           {/* Header */}
           <div className="post-header">
-            <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
-              <Link href={`/profile/${profile?.id}`} className="post-username">
-                {profile?.username ?? 'unknown'}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+              <Link
+                href={`/profile/${profile?.id ?? '#'}`}
+                className="post-username"
+                onClick={e => e.stopPropagation()}
+              >
+                {profile?.full_name ?? profile?.username ?? 'unknown'}
               </Link>
-              {post.circles?.name && (
-                <span className="post-circle-tag">{post.circles.name}</span>
+              {profile?.username && (
+                <span style={{ fontSize: 13, color: 'var(--text-tertiary)', marginLeft: 2 }}>
+                  @{profile.username}
+                </span>
               )}
               <span className="post-time">{timeAgo(post.created_at)}</span>
+              {circle && (
+                <span className="post-circle-tag">{circle.name}</span>
+              )}
             </div>
-            <button
-              className="tap-sm"
-              style={{
-                flexShrink: 0,
-                width: 30, height: 30,
-                borderRadius: '50%',
-                border: 'none',
-                background: 'none',
-                cursor: 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                color: 'var(--text-tertiary)',
-              }}
-              aria-label="More"
-            >
-              <MoreHorizontal size={17} />
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              {currentUserId && currentUserId !== profile?.id && profile && (
+                <FollowButton
+                  targetUserId={profile.id}
+                  currentUserId={currentUserId}
+                />
+              )}
+              <div style={{ position: 'relative' }} ref={menuRef}>
+                <button
+                  className="post-action-btn"
+                  onClick={e => {
+                    e.stopPropagation();
+                    setShowMenu(prev => !prev);
+                  }}
+                  style={{ marginRight: -8 }}
+                >
+                  <MoreHorizontal size={18} />
+                </button>
+                {showMenu && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      right: 0,
+                      top: '100%',
+                      background: 'var(--surface-1)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 12,
+                      boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+                      zIndex: 30,
+                      minWidth: 160,
+                      overflow: 'hidden',
+                    }}
+                  >
+                    {currentUserId === profile?.id && (
+                      <button
+                        onClick={async e => {
+                          e.stopPropagation();
+                          setShowMenu(false);
+                          await supabase.from('posts').delete().eq('id', post.id);
+                          onDelete?.(post.id);
+                          router.refresh();
+                        }}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                          width: '100%',
+                          padding: '10px 16px',
+                          border: 'none',
+                          background: 'none',
+                          cursor: 'pointer',
+                          fontSize: 14,
+                          color: '#f43f5e',
+                          fontFamily: 'inherit',
+                        }}
+                      >
+                        Delete post
+                      </button>
+                    )}
+                    <button
+                      onClick={e => {
+                        e.stopPropagation();
+                        setShowMenu(false);
+                        navigator.clipboard.writeText(
+                          `${window.location.origin}/posts/${post.id}`
+                        );
+                      }}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        width: '100%',
+                        padding: '10px 16px',
+                        border: 'none',
+                        background: 'none',
+                        cursor: 'pointer',
+                        fontSize: 14,
+                        color: 'var(--text-primary)',
+                        fontFamily: 'inherit',
+                      }}
+                    >
+                      Copy link
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
 
-          {/* Text */}
-          {post.content && (
-            <div
-              className="post-text"
-              dangerouslySetInnerHTML={{ __html: richText(post.content) }}
-            />
-          )}
+          {/* Content */}
+          {post.content && <RichText text={post.content} />}
 
-          {/* ── Media ──────────────────────────────────── */}
-          {mediaItems.length > 0 && (
-            <div className={`post-media ${mediaItems.length === 1 ? 'single' : 'dual'}`}>
-              {mediaItems.map((item, i) => (
+          {/* Media grid */}
+          {allMedia.length > 0 && (
+            <div
+              className={`post-media ${mediaGridClass(allMedia.length)}`}
+              onClick={e => e.stopPropagation()}
+            >
+              {allMedia.map((m, i) => (
                 <div
                   key={i}
+                  onClick={() => {
+                    setLightboxIndex(i);
+                    setLightboxOpen(true);
+                  }}
                   style={{ position: 'relative', cursor: 'pointer' }}
-                  onClick={() => setLightbox(i)}
                 >
-                  {item.type === 'image' ? (
-                    <img
-                      src={item.url}
-                      alt="Post media"
-                      loading="lazy"
-                      style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                    />
+                  {m.type === 'video' ? (
+                    <>
+                      <video src={m.url} />
+                      <div
+                        style={{
+                          position: 'absolute',
+                          inset: 0,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          background: 'rgba(0,0,0,0.3)',
+                        }}
+                      >
+                        <Play size={32} fill="#fff" color="#fff" />
+                      </div>
+                    </>
                   ) : (
-                    <VideoPlayer src={item.url} />
+                    <img src={m.url} alt={`Post media ${i + 1}`} loading="lazy" />
                   )}
                 </div>
               ))}
             </div>
           )}
 
-          {/* Audio post */}
-          {post.media_type === 'audio' && post.media_url && (
-            <audio
-              src={post.media_url}
-              controls
-              style={{
-                width: '100%',
-                marginBottom: 10,
-                borderRadius: 12,
-                accentColor: 'var(--nia-violet)',
-              }}
-            />
-          )}
-
-          {/* Poll */}
-          {post.poll && (
-            <div style={{
-              border: '1px solid var(--border)',
-              borderRadius: 14,
-              overflow: 'hidden',
-              marginBottom: 10,
-            }}>
-              {post.poll.options?.map((opt: any, i: number) => (
-                <div key={i} style={{
-                  padding: '11px 14px',
-                  borderTop: i > 0 ? '1px solid var(--border)' : 'none',
-                  fontSize: 14,
-                  cursor: 'pointer',
-                }}>
-                  {typeof opt === 'string' ? opt : opt.text}
-                </div>
+          {/* Poll (if any) */}
+          {post.polls && post.polls.length > 0 && (
+            <div style={{ marginBottom: 10 }}>
+              {post.polls.map(poll => (
+                <PollCard
+                  key={poll.id}
+                  poll={poll}
+                  postId={post.id}
+                  currentUserId={currentUserId}
+                />
               ))}
             </div>
           )}
 
-          {/* ── Action bar ─────────────────────────────── */}
+          {/* Language label */}
+          {post.language && post.language !== 'english' && (
+            <div
+              style={{
+                fontSize: 11,
+                color: 'var(--text-tertiary)',
+                marginBottom: 4,
+                fontWeight: 600,
+                textTransform: 'uppercase',
+                letterSpacing: '0.3px',
+              }}
+            >
+              {post.language}
+            </div>
+          )}
+
+          {/* Stats */}
+          {(likesCount > 0 || commentsCount > 0) && (
+            <div className="post-stat">
+              {likesCount > 0 && (
+                <span>
+                  {likesCount}{' '}
+                  {likesCount === 1 ? 'like' : 'likes'}
+                </span>
+              )}
+              {commentsCount > 0 && likesCount > 0 && ' · '}
+              {commentsCount > 0 && (
+                <Link
+                  href={`/posts/${post.id}`}
+                  onClick={e => e.stopPropagation()}
+                >
+                  {commentsCount}{' '}
+                  {commentsCount === 1 ? 'reply' : 'replies'}
+                </Link>
+              )}
+            </div>
+          )}
+
+          {/* Action bar */}
           <div className="post-actions">
             <button
-              className={`post-action-btn${liked ? ' liked' : ''}`}
-              onClick={toggleLike}
-              aria-label="Like"
+              className={`post-action-btn ${liked ? 'liked' : ''}`}
+              onClick={handleLike}
             >
-              <Heart size={20} strokeWidth={liked ? 0 : 1.75} fill={liked ? '#f43f5e' : 'none'} />
+              <Heart size={18} />
+              {likesCount > 0 && (
+                <span className="post-action-count">{likesCount}</span>
+              )}
             </button>
 
             <Link
               href={`/posts/${post.id}`}
               className="post-action-btn"
-              aria-label="Reply"
+              onClick={e => e.stopPropagation()}
             >
-              <MessageCircle size={20} strokeWidth={1.75} />
+              <MessageCircle size={18} />
+              {commentsCount > 0 && (
+                <span className="post-action-count">{commentsCount}</span>
+              )}
             </Link>
 
-            <button
-              className={`post-action-btn${reposted ? ' reposted' : ''}`}
-              onClick={toggleRepost}
-              aria-label="Repost"
-            >
-              <Repeat2 size={20} strokeWidth={1.75} />
+            <button className="post-action-btn">
+              <Repeat2 size={18} />
+              {repostsCount > 0 && (
+                <span className="post-action-count">{repostsCount}</span>
+              )}
             </button>
 
-            <button className="post-action-btn" aria-label="Share">
-              <Send size={19} strokeWidth={1.75} />
+            <button className="post-action-btn">
+              <Share size={18} />
             </button>
           </div>
-
-          {/* Stat text */}
-          {(likeCount > 0 || commentCount > 0) && (
-            <div className="post-stat">
-              {commentCount > 0 && (
-                <Link href={`/posts/${post.id}`}>
-                  {commentCount} {commentCount === 1 ? 'reply' : 'replies'}
-                </Link>
-              )}
-              {commentCount > 0 && likeCount > 0 && <span> · </span>}
-              {likeCount > 0 && (
-                <span>{likeCount} {likeCount === 1 ? 'like' : 'likes'}</span>
-              )}
-            </div>
-          )}
         </div>
       </article>
 
       {/* Lightbox */}
-      {lightboxIdx !== null && mediaItems.length > 0 && (
+      {lightboxOpen && (
         <MediaLightbox
-          items={mediaItems}
-          startIndex={lightboxIdx}
-          onClose={() => setLightbox(null)}
+          media={allMedia}
+          index={lightboxIndex}
+          onClose={() => setLightboxOpen(false)}
         />
       )}
     </>
-  )
+  );
+}
+
+/* ── Poll Card sub-component ─────────────────── */
+function PollCard({
+  poll,
+  postId,
+  currentUserId,
+}: {
+  poll: PollInfo;
+  postId: string;
+  currentUserId?: string | null;
+}) {
+  const supabase = createClientLocal();
+  const [voted, setVoted] = useState(false);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [results, setResults] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    if (!currentUserId) return;
+    supabase
+      .from('poll_votes')
+      .select('option_id')
+      .eq('poll_id', poll.id)
+      .eq('user_id', currentUserId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) {
+          setVoted(true);
+          setSelected(data.option_id);
+          loadResults();
+        }
+      });
+  }, [currentUserId, poll.id]); // eslint-disable-line
+
+  async function loadResults() {
+    const { data } = await supabase
+      .from('poll_votes')
+      .select('option_id');
+    if (data) {
+      const counts: Record<string, number> = {};
+      data.forEach(v => {
+        counts[v.option_id] = (counts[v.option_id] ?? 0) + 1;
+      });
+      setResults(counts);
+    }
+  }
+
+  async function handleVote(optionId: string) {
+    if (!currentUserId || voted) return;
+    setVoted(true);
+    setSelected(optionId);
+    await supabase.from('poll_votes').insert({
+      poll_id: poll.id,
+      post_id: postId,
+      user_id: currentUserId,
+      option_id: optionId,
+    });
+    loadResults();
+  }
+
+  const total = Object.values(results).reduce((a, b) => a + b, 0);
+
+  return (
+    <div
+      style={{
+        background: 'var(--surface-2)',
+        borderRadius: 12,
+        padding: 12,
+        marginBottom: 8,
+      }}
+    >
+      <p style={{ fontWeight: 700, fontSize: 14, margin: '0 0 10px', color: 'var(--text-primary)' }}>
+        {poll.question}
+      </p>
+      {poll.options.map(opt => {
+        const count = results[opt.id] ?? 0;
+        const pct = total > 0 ? (count / total) * 100 : 0;
+        const isSelected = selected === opt.id;
+        return (
+          <button
+            key={opt.id}
+            onClick={() => handleVote(opt.id)}
+            disabled={voted && !isSelected}
+            style={{
+              display: 'block',
+              width: '100%',
+              marginBottom: 6,
+              padding: '8px 12px',
+              borderRadius: 10,
+              border: `2px solid ${isSelected ? 'var(--nia-violet)' : 'var(--border)'}`,
+              background: 'var(--surface-1)',
+              cursor: voted ? 'default' : 'pointer',
+              color: 'var(--text-primary)',
+              fontFamily: 'inherit',
+              fontSize: 13,
+              textAlign: 'left',
+              position: 'relative',
+              overflow: 'hidden',
+            }}
+          >
+            {voted && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  height: '100%',
+                  width: `${pct}%`,
+                  background: 'rgba(139, 92, 246, 0.1)',
+                  transition: 'width 0.3s ease',
+                  borderRadius: 8,
+                }}
+              />
+            )}
+            <span style={{ position: 'relative', zIndex: 1, display: 'flex', justifyContent: 'space-between' }}>
+              <span>{opt.text}</span>
+              {voted && <span style={{ fontWeight: 700 }}>{Math.round(pct)}%</span>}
+            </span>
+          </button>
+        );
+      })}
+      <p style={{ fontSize: 11, color: 'var(--text-tertiary)', margin: '4px 0 0' }}>
+        {total} vote{total !== 1 ? 's' : ''}
+      </p>
+    </div>
+  );
 }
