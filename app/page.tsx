@@ -126,12 +126,11 @@ export default async function FeedPage({
       )}
 
       {/* Posts — flat rows, NO wrapping div with margin/padding */}
-      {(posts as ScorerPost[]).map((post: ScorerPost, i: number) => (
+      {(posts as ScorerPost[]).map((post: ScorerPost) => (
         <PostCard
           key={post.id}
           post={post as any}
           currentUserId={user.id}
-          showLine={i < posts.length - 1}
         />
       ))}
 
