@@ -117,7 +117,7 @@ export default function ReplyBar({ postId, currentUserId }: ReplyBarProps) {
       const { error: insertErr } = await supabase.from('comments').insert({
         post_id:     postId,
         user_id:     currentUserId,
-        content:     text.trim() || null,
+        content:     text.trim() || '',
         media_url,
         media_type,
         extra_media: extra_media.length ? extra_media : null,
