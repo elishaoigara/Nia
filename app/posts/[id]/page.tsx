@@ -8,6 +8,7 @@ import Link from 'next/link'
 
 interface Props { params: Promise<{ id: string }> }
 
+// Full select — includes all optional relations (polls, reactions, comment likes)
 const FULL_SELECT = `
   *,
   profiles:user_id (id, username, full_name, avatar_url, country),
@@ -24,20 +25,27 @@ const FULL_SELECT = `
   )
 `
 
+// Safe select — only core relations guaranteed to exist; no reactions/polls/comment_likes
 const SAFE_SELECT = `
   *,
   profiles:user_id (id, username, full_name, avatar_url, country),
   circles:circle_id (id, name, slug),
   likes (user_id),
   reposts (user_id),
-  reactions (user_id, emoji),
-  polls (id, question, options, ends_at),
   comments (
     id, content, created_at, user_id,
     media_url, media_type, extra_media,
-    profiles:user_id (id, username, avatar_url),
-    likes:comment_likes (user_id)
+    profiles:user_id (id, username, avatar_url)
   )
+`
+
+// Bare select — absolute minimum; used if safe select also fails
+const BARE_SELECT = `
+  *,
+  profiles:user_id (id, username, full_name, avatar_url, country),
+  circles:circle_id (id, name, slug),
+  likes (user_id),
+  reposts (user_id)
 `
 
 export default async function PostDetailPage({ params }: Props) {
@@ -47,17 +55,33 @@ export default async function PostDetailPage({ params }: Props) {
   if (!user) redirect('/login')
 
   let post: any = null
+
+  // Try full select first
   const { data: fullData, error: fullErr } = await supabase
     .from('posts').select(FULL_SELECT).eq('id', id).single()
 
-  if (!fullErr) {
+  if (!fullErr && fullData) {
     post = fullData
   } else {
-    if (fullErr.code === 'PGRST116') notFound()
+    // Genuine "row not found" — no point trying fallbacks
+    if (fullErr?.code === 'PGRST116') notFound()
+
+    // Some join failed — try without optional relations
     const { data: safeData, error: safeErr } = await supabase
       .from('posts').select(SAFE_SELECT).eq('id', id).single()
-    if (safeErr || !safeData) notFound()
-    post = safeData
+
+    if (!safeErr && safeData) {
+      post = safeData
+    } else {
+      if (safeErr?.code === 'PGRST116') notFound()
+
+      // Last resort — bare minimum
+      const { data: bareData, error: bareErr } = await supabase
+        .from('posts').select(BARE_SELECT).eq('id', id).single()
+
+      if (bareErr || !bareData) notFound()
+      post = bareData
+    }
   }
 
   if (!post) notFound()
