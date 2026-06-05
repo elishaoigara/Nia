@@ -178,7 +178,7 @@ function CommentRow({
           </div>
         </div>
 
-        {comment.content && <p className="comment-text">{comment.content}</p>}
+        {comment.content !== '' && comment.content && <p className="comment-text">{comment.content}</p>}
 
         {/* Reply media */}
         {media.length > 0 && <CommentMediaGrid media={media} />}

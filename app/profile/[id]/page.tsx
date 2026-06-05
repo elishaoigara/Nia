@@ -349,6 +349,24 @@ export default function ProfilePage() {
                     <p style={{ fontSize: 14, color: 'var(--text-primary)', margin: 0, lineHeight: 1.5 }}>
                       {reply.content}
                     </p>
+                    {/* Reply media */}
+                    {reply.media_url && (
+                      <div style={{ marginTop: 8, borderRadius: 12, overflow: 'hidden', maxWidth: 280, border: '1px solid var(--border)' }}>
+                        {reply.media_type === 'video'
+                          ? <video src={reply.media_url} controls style={{ width: '100%', display: 'block', maxHeight: 200, objectFit: 'cover' }} />
+                          : <img src={reply.media_url} alt="" style={{ width: '100%', display: 'block', maxHeight: 200, objectFit: 'cover' }} />
+                        }
+                      </div>
+                    )}
+                    {Array.isArray(reply.extra_media) && reply.extra_media.length > 0 && (
+                      <div style={{ marginTop: 6, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, maxWidth: 280, borderRadius: 12, overflow: 'hidden', border: '1px solid var(--border)' }}>
+                        {reply.extra_media.slice(0, 3).map((m: any, i: number) => (
+                          m.type === 'video'
+                            ? <video key={i} src={m.url} style={{ width: '100%', aspectRatio: '1', objectFit: 'cover', display: 'block' }} />
+                            : <img key={i} src={m.url} alt="" style={{ width: '100%', aspectRatio: '1', objectFit: 'cover', display: 'block' }} />
+                        ))}
+                      </div>
+                    )}
                     <span style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 4, display: 'block' }}>
                       {new Date(reply.created_at).toLocaleDateString('en-GB', {
                         day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
