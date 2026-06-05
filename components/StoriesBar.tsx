@@ -213,13 +213,13 @@ function ViewersPanel({
       setLoading(true);
       const { data } = await supabase
         .from('story_views')
-        .select('user_id, viewed_at, profiles:user_id(username, avatar_url)')
+        .select('viewer_id, viewed_at, profiles:viewer_id(username, avatar_url)')
         .eq('story_id', storyId)
         .order('viewed_at', { ascending: false });
 
       setViewers(
         (data ?? []).map((v: any) => ({
-          user_id:    v.user_id,
+          user_id:    v.viewer_id,
           username:   v.profiles?.username ?? 'unknown',
           avatar_url: v.profiles?.avatar_url ?? null,
           viewed_at:  v.viewed_at,
@@ -333,7 +333,7 @@ function StoryViewer({
     if (!story || story.user_id === currentUserId) return;
     supabase
       .from('story_views')
-      .upsert({ story_id: story.id, user_id: currentUserId, viewed_at: new Date().toISOString() }, { onConflict: 'story_id,user_id' })
+      .upsert({ story_id: story.id, viewer_id: currentUserId, viewed_at: new Date().toISOString() }, { onConflict: 'story_id,viewer_id' })
       .then(() => {});
   }, [story?.id]); // eslint-disable-line
 
@@ -574,7 +574,7 @@ const StoriesBar: React.FC<StoriesBarProps> = ({ currentUserId }) => {
     const { data: views } = await supabase
       .from('story_views')
       .select('story_id')
-      .eq('user_id', currentUserId);
+      .eq('viewer_id', currentUserId);
 
     const viewedSet = new Set((views ?? []).map((v: any) => v.story_id));
 
