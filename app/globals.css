@@ -4,8 +4,6 @@
 
 /* ── Tailwind v4 ──────────────────────────────────── */
 @import "tailwindcss";
-@import "../components/**/*.tsx";
-@import "../app/**/*.tsx";
 
 /* ── Color Tokens ──────────────────────────────────── */
 :root {
