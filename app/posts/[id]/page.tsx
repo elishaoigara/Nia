@@ -17,6 +17,7 @@ const FULL_SELECT = `
   reactions (user_id, emoji),
   comments (
     id, content, created_at, user_id,
+    media_url, media_type, extra_media,
     profiles:user_id (id, username, avatar_url),
     likes:comment_likes (user_id)
   )
@@ -31,6 +32,7 @@ const SAFE_SELECT = `
   reactions (user_id, emoji),
   comments (
     id, content, created_at, user_id,
+    media_url, media_type, extra_media,
     profiles:user_id (id, username, avatar_url)
   )
 `

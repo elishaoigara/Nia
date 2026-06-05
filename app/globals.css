@@ -594,6 +594,7 @@ body {
   padding: 10px 16px;
   border-top: 1px solid var(--divider);
   background: var(--surface-0);
+  backdrop-filter: blur(12px);
 }
 .reply-input {
   flex: 1;
@@ -894,11 +895,4 @@ body {
   background: var(--surface-0);
 }
 
-/* ════════════════════════════════════════════════════
-   REPLY BAR — expanded (flex-col)
-   ════════════════════════════════════════════════════ */
-.reply-bar {
-  background: var(--surface-0);
-  border-top: 1px solid var(--divider);
-  backdrop-filter: blur(12px);
-}
+/* reply-bar expanded styles handled in component via inline flexDirection: column */

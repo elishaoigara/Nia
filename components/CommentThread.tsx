@@ -1,14 +1,14 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
 import { Heart, MoreHorizontal, Play, Trash2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 
 interface CommentMedia {
-  url: string;
-  type: 'image' | 'video';
+  url: string
+  type: 'image' | 'video' | 'gif'
 }
 
 interface CommentThreadProps {
@@ -25,6 +25,22 @@ function timeAgo(date: string) {
   return `${Math.floor(s / 86400)}d`
 }
 
+/** Normalise whatever the DB returns into a typed CommentMedia array */
+function buildMedia(comment: any): CommentMedia[] {
+  const out: CommentMedia[] = []
+  if (comment.media_url && comment.media_type) {
+    out.push({ url: comment.media_url, type: comment.media_type as CommentMedia['type'] })
+  }
+  if (Array.isArray(comment.extra_media)) {
+    for (const m of comment.extra_media) {
+      if (m && typeof m.url === 'string' && typeof m.type === 'string') {
+        out.push({ url: m.url, type: m.type as CommentMedia['type'] })
+      }
+    }
+  }
+  return out
+}
+
 function CommentMediaGrid({ media }: { media: CommentMedia[] }) {
   if (media.length === 0) return null
 
@@ -33,11 +49,10 @@ function CommentMediaGrid({ media }: { media: CommentMedia[] }) {
     return (
       <div className="comment-media">
         {m.type === 'video' ? (
-          <div style={{ position: 'relative' }}>
-            <video src={m.url} controls style={{ width: '100%', display: 'block', maxHeight: 240, objectFit: 'cover' }} />
-          </div>
+          <video src={m.url} controls style={{ width: '100%', display: 'block', maxHeight: 240, objectFit: 'cover' }} />
         ) : (
-          <img src={m.url} alt="" loading="lazy" />
+          // gif and image both render as <img>
+          <img src={m.url} alt={m.type === 'gif' ? 'GIF' : ''} loading="lazy" />
         )}
       </div>
     )
@@ -84,16 +99,29 @@ function CommentRow({
   const [showMenu,  setShowMenu]  = useState(false)
   const [deleted,   setDeleted]   = useState(false)
 
+  const menuRef = useRef<HTMLDivElement>(null)
   const isOwner = currentUserId === comment.user_id
 
-  // Build media list from comment
-  const media: CommentMedia[] = []
-  if (comment.media_url && comment.media_type) {
-    media.push({ url: comment.media_url, type: comment.media_type })
-  }
-  if (Array.isArray(comment.extra_media)) {
-    media.push(...comment.extra_media)
-  }
+  // Click-outside to close the ⋯ menu
+  useEffect(() => {
+    if (!showMenu) return
+    function handleClick(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setShowMenu(false)
+      }
+    }
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') setShowMenu(false)
+    }
+    document.addEventListener('mousedown', handleClick)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', handleClick)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [showMenu])
+
+  const media = buildMedia(comment)
 
   async function toggleLike() {
     if (liked) {
@@ -138,28 +166,28 @@ function CommentRow({
           </Link>
           <span className="comment-time">{timeAgo(comment.created_at)}</span>
 
-          {/* ⋯ menu */}
-          <div style={{ marginLeft: 'auto', position: 'relative' }}>
-            <button
-              onClick={() => setShowMenu(p => !p)}
-              style={{
-                width: 26, height: 26, borderRadius: '50%',
-                border: 'none', background: 'none', cursor: 'pointer',
-                color: 'var(--text-tertiary)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}
-              aria-label="More"
-            >
-              <MoreHorizontal size={14} />
-            </button>
-            {showMenu && (
-              <div style={{
-                position: 'absolute', right: 0, top: '100%',
-                background: 'var(--surface-1)', border: '1px solid var(--border)',
-                borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
-                zIndex: 30, minWidth: 140, overflow: 'hidden',
-              }}>
-                {isOwner && (
+          {/* ⋯ menu — only render if there are actions available */}
+          {isOwner && (
+            <div ref={menuRef} style={{ marginLeft: 'auto', position: 'relative' }}>
+              <button
+                onClick={() => setShowMenu(p => !p)}
+                style={{
+                  width: 26, height: 26, borderRadius: '50%',
+                  border: 'none', background: 'none', cursor: 'pointer',
+                  color: 'var(--text-tertiary)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}
+                aria-label="More"
+              >
+                <MoreHorizontal size={14} />
+              </button>
+              {showMenu && (
+                <div style={{
+                  position: 'absolute', right: 0, top: '100%',
+                  background: 'var(--surface-1)', border: '1px solid var(--border)',
+                  borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+                  zIndex: 30, minWidth: 140, overflow: 'hidden',
+                }}>
                   <button
                     onClick={deleteComment}
                     style={{
@@ -172,15 +200,16 @@ function CommentRow({
                     <Trash2 size={13} />
                     Delete reply
                   </button>
-                )}
-              </div>
-            )}
-          </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
-        {comment.content !== '' && comment.content && <p className="comment-text">{comment.content}</p>}
+        {comment.content && comment.content !== '' && (
+          <p className="comment-text">{comment.content}</p>
+        )}
 
-        {/* Reply media */}
         {media.length > 0 && <CommentMediaGrid media={media} />}
 
         <div className="comment-actions">
