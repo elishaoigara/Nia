@@ -16,6 +16,9 @@ const BASE_SELECT = `
   *,
   profiles:user_id (id, username, full_name, avatar_url, country, city),
   circles:circle_id (id, name, slug),
+  likes (user_id),
+  comments (id),
+  reposts (user_id),
   polls (id, question, options, ends_at)
 `
 
@@ -103,6 +106,9 @@ export default function ProfilePage() {
         *,
         profiles:user_id (id, username, full_name, avatar_url, country, city),
         circles:circle_id (id, name, slug),
+        likes (user_id),
+        comments (id),
+        reposts (user_id),
         polls (id, question, options, ends_at)
       )
     `).eq('user_id', currentUserId!).order('created_at', { ascending: false }).limit(30)

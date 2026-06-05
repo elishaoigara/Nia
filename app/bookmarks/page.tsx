@@ -18,6 +18,9 @@ export default async function BookmarksPage() {
         *,
         profiles:user_id (id, username, full_name, avatar_url, country),
         circles:circle_id (id, name, slug),
+        likes (user_id),
+        comments (id),
+        reposts (user_id),
         polls (id, question, options, ends_at)
       )
     `)

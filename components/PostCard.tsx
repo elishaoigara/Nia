@@ -131,9 +131,15 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
   const router   = useRouter();
 
   const [liked,              setLiked]              = useState(false);
-  const [likesCount,         setLikesCount]         = useState(post.likes_count ?? 0);
-  const [commentsCount,      setCommentsCount]      = useState(post.comments_count ?? 0);
-  const [repostsCount,       setRepostsCount]       = useState(post.reposts_count ?? 0);
+  const [likesCount,         setLikesCount]         = useState(
+    post.likes_count ?? (Array.isArray((post as any).likes) ? (post as any).likes.length : 0)
+  );
+  const [commentsCount,      setCommentsCount]      = useState(
+    post.comments_count ?? (Array.isArray((post as any).comments) ? (post as any).comments.length : 0)
+  );
+  const [repostsCount,       setRepostsCount]       = useState(
+    post.reposts_count ?? (Array.isArray((post as any).reposts) ? (post as any).reposts.length : 0)
+  );
   const [reposted,           setReposted]           = useState(false);
   const [bookmarked,         setBookmarked]         = useState(false);
   const [showMenu,           setShowMenu]           = useState(false);
@@ -215,8 +221,10 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
   /* ── Actions ── */
   const handleLike = useCallback(async () => {
     if (!currentUserId) return;
-    setLiked(prev => !prev);
-    setLikesCount(prev => liked ? prev - 1 : prev + 1);
+    // Use functional updaters to avoid stale closure on rapid taps
+    let isNowLiked = false;
+    setLiked(prev => { isNowLiked = !prev; return !prev; });
+    setLikesCount((prev: number) => isNowLiked ? prev + 1 : prev - 1);
     if (liked) {
       await supabase.from('likes').delete().eq('post_id', post.id).eq('user_id', currentUserId);
     } else {
@@ -228,7 +236,7 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
     if (!currentUserId) return;
     setShowRepostMenu(false);
     setReposted(prev => !prev);
-    setRepostsCount(prev => reposted ? prev - 1 : prev + 1);
+    setRepostsCount((prev: number) => reposted ? prev - 1 : prev + 1);
     if (reposted) {
       await supabase.from('reposts').delete().eq('post_id', post.id).eq('user_id', currentUserId);
     } else {
@@ -606,7 +614,7 @@ function PollCard({
   }, [currentUserId, poll.id]); // eslint-disable-line
 
   async function loadResults() {
-    const { data } = await supabase.from('poll_votes').select('option_id');
+    const { data } = await supabase.from('poll_votes').select('option_id').eq('poll_id', poll.id);
     if (data) {
       const counts: Record<string, number> = {};
       data.forEach(v => { counts[v.option_id] = (counts[v.option_id] ?? 0) + 1; });

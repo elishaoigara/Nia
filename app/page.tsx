@@ -9,18 +9,18 @@ import { Suspense }       from 'react'
 import { scorePosts }     from '@/lib/feed-scorer'
 import type { UserContext, ScorerPost } from '@/lib/feed-scorer'
 
-const PAGE_SIZE     = 15
-const CANDIDATE_POOL = PAGE_SIZE * 6
+const PAGE_SIZE      = 15
+const POOL_MULTIPLIER = 6
 
 const BASE_SELECT = `
   *,
-  profiles:user_id (id, username, avatar_url, country, city),
+  profiles:user_id (id, username, full_name, avatar_url, country, city),
   circles:circle_id (id, name, slug),
   likes (user_id),
   comments (id, profiles:user_id (id, username, avatar_url)),
   reactions (user_id, emoji),
   reposts (user_id),
-  poll:polls (*)
+  polls:polls (*)
 `
 
 export default async function FeedPage({
@@ -58,6 +58,7 @@ export default async function FeedPage({
     language:     myProfile?.language ?? null,
   }
 
+  const candidatePool = PAGE_SIZE * POOL_MULTIPLIER * currentPage
   let candidates: ScorerPost[] = []
 
   if (currentTab === 'following') {
@@ -66,7 +67,7 @@ export default async function FeedPage({
         .from('posts').select(BASE_SELECT)
         .in('user_id', [...ctx.followingIds])
         .order('created_at', { ascending: false })
-        .limit(CANDIDATE_POOL)
+        .limit(candidatePool)
       candidates = (data ?? []) as ScorerPost[]
     }
   } else if (currentTab === 'local' && myProfile?.country) {
@@ -78,20 +79,20 @@ export default async function FeedPage({
         .from('posts').select(BASE_SELECT)
         .in('user_id', countryIds)
         .order('created_at', { ascending: false })
-        .limit(CANDIDATE_POOL)
+        .limit(candidatePool)
       candidates = (data ?? []) as ScorerPost[]
     }
   } else {
     const { data } = await supabase
       .from('posts').select(BASE_SELECT)
       .order('created_at', { ascending: false })
-      .limit(CANDIDATE_POOL)
+      .limit(candidatePool)
     candidates = (data ?? []) as ScorerPost[]
   }
 
   const ranked = scorePosts(candidates, ctx)
   const posts   = ranked.slice(offset, offset + PAGE_SIZE)
-  const hasMore = ranked.length > offset + PAGE_SIZE
+  const hasMore = ranked.length > offset + PAGE_SIZE || candidates.length === candidatePool
 
   const EMPTY: Record<string, { emoji: string; title: string; body: string }> = {
     africa:    { emoji: '🌍', title: 'Be the first!',      body: 'Start the conversation for all of Africa.' },

@@ -4,17 +4,20 @@ import { scorePosts } from '@/lib/feed-scorer'
 import type { UserContext, ScorerPost } from '@/lib/feed-scorer'
 
 const PAGE_SIZE = 15
-const CANDIDATE_POOL = PAGE_SIZE * 6
+// Fetch a larger pool per page so the scorer has enough candidates to fill
+// a full ranked page after filtering blocked/muted/own posts.
+// We multiply by page number so later pages still reach further back in time.
+const POOL_MULTIPLIER = 6
 
 const BASE_SELECT = `
   *,
-  profiles:user_id (id, username, avatar_url, country, city),
+  profiles:user_id (id, username, full_name, avatar_url, country, city),
   circles:circle_id (id, name, slug),
   likes (user_id),
   comments (id),
   reactions (user_id, emoji),
   reposts (user_id),
-  poll:polls (*)
+  polls:polls (*)
 `
 
 export async function GET(req: NextRequest) {
@@ -22,7 +25,6 @@ export async function GET(req: NextRequest) {
     const { searchParams } = req.nextUrl
     const tab  = searchParams.get('tab')  ?? 'africa'
     const page = parseInt(searchParams.get('page') ?? '1')
-    const offset = (page - 1) * PAGE_SIZE
 
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
@@ -47,6 +49,10 @@ export async function GET(req: NextRequest) {
     }
 
     // ── 2. Candidate fetch ─────────────────────────────────────────────────
+    // Fetch enough candidates to cover all pages up to and including `page`.
+    // This means page 2 sees a pool that extends further back in time than
+    // page 1, so we don't hit an artificial ceiling at 90 posts.
+    const candidatePool = PAGE_SIZE * POOL_MULTIPLIER * page
     let candidates: ScorerPost[] = []
 
     if (tab === 'following') {
@@ -57,7 +63,7 @@ export async function GET(req: NextRequest) {
         .from('posts').select(BASE_SELECT)
         .in('user_id', [...ctx.followingIds])
         .order('created_at', { ascending: false })
-        .limit(CANDIDATE_POOL)
+        .limit(candidatePool)
       candidates = (data ?? []) as ScorerPost[]
 
     } else if (tab === 'local' && myProfile?.country) {
@@ -71,21 +77,24 @@ export async function GET(req: NextRequest) {
         .from('posts').select(BASE_SELECT)
         .in('user_id', countryIds)
         .order('created_at', { ascending: false })
-        .limit(CANDIDATE_POOL)
+        .limit(candidatePool)
       candidates = (data ?? []) as ScorerPost[]
 
     } else {
       const { data } = await supabase
         .from('posts').select(BASE_SELECT)
         .order('created_at', { ascending: false })
-        .limit(CANDIDATE_POOL)
+        .limit(candidatePool)
       candidates = (data ?? []) as ScorerPost[]
     }
 
     // ── 3. Score + rank ────────────────────────────────────────────────────
-    const ranked   = scorePosts(candidates, ctx)
-    const posts    = ranked.slice(offset, offset + PAGE_SIZE)
-    const hasMore  = ranked.length > offset + PAGE_SIZE
+    const ranked  = scorePosts(candidates, ctx)
+    const offset  = (page - 1) * PAGE_SIZE
+    const posts   = ranked.slice(offset, offset + PAGE_SIZE)
+    // hasMore is true if there are more ranked posts beyond this page,
+    // OR if we hit the candidate pool ceiling (more DB rows likely exist).
+    const hasMore = ranked.length > offset + PAGE_SIZE || candidates.length === candidatePool
 
     return NextResponse.json({ posts, hasMore })
 

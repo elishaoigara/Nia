@@ -26,10 +26,12 @@ export default async function TagPage({
         .from('posts')
         .select(`
           *,
-          profiles:user_id (id, username, avatar_url, country, city),
+          profiles:user_id (id, username, full_name, avatar_url, country, city),
           circles:circle_id (id, name, slug),
           likes (user_id),
-          comments (id)
+          comments (id),
+          reposts (user_id),
+          polls (id, question, options, ends_at)
         `)
         .in('id', postIds)
         .order('created_at', { ascending: false })

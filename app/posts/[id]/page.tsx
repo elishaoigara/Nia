@@ -10,11 +10,12 @@ interface Props { params: Promise<{ id: string }> }
 
 const FULL_SELECT = `
   *,
-  profiles:user_id (id, username, avatar_url, country),
+  profiles:user_id (id, username, full_name, avatar_url, country),
   circles:circle_id (id, name, slug),
   likes (user_id),
   reposts (user_id),
   reactions (user_id, emoji),
+  polls (id, question, options, ends_at),
   comments (
     id, content, created_at, user_id,
     media_url, media_type, extra_media,
@@ -25,15 +26,17 @@ const FULL_SELECT = `
 
 const SAFE_SELECT = `
   *,
-  profiles:user_id (id, username, avatar_url, country),
+  profiles:user_id (id, username, full_name, avatar_url, country),
   circles:circle_id (id, name, slug),
   likes (user_id),
   reposts (user_id),
   reactions (user_id, emoji),
+  polls (id, question, options, ends_at),
   comments (
     id, content, created_at, user_id,
     media_url, media_type, extra_media,
-    profiles:user_id (id, username, avatar_url)
+    profiles:user_id (id, username, avatar_url),
+    likes:comment_likes (user_id)
   )
 `
 
