@@ -4,8 +4,8 @@
 
 /* ── Tailwind v4 ──────────────────────────────────── */
 @import "tailwindcss";
-@source "../components/**/*.tsx";
-@source "../app/**/*.tsx";
+@import "../components/**/*.tsx";
+@import "../app/**/*.tsx";
 
 /* ── Color Tokens ──────────────────────────────────── */
 :root {
@@ -380,6 +380,8 @@ body {
 .post-action-btn.liked  { color: #f43f5e; }
 .post-action-btn.liked svg { fill: #f43f5e; }
 .post-action-btn.reposted { color: var(--nia-mint); }
+.post-action-btn.bookmarked { color: var(--nia-violet); }
+.post-action-btn.bookmarked svg { fill: var(--nia-violet); }
 
 .post-action-count {
   font-size: 13px;
@@ -838,3 +840,67 @@ body {
 
 /* ── Selection ─────────────────────────────────────── */
 ::selection { background: rgba(139, 92, 246, 0.2); color: var(--text-primary); }
+
+/* ════════════════════════════════════════════════════
+   BOOKMARKS
+   ════════════════════════════════════════════════════ */
+.post-action-btn.bookmarked { color: var(--nia-amber); }
+.post-action-btn.bookmarked svg { fill: var(--nia-amber); }
+
+/* ════════════════════════════════════════════════════
+   POST EDIT AREA
+   ════════════════════════════════════════════════════ */
+.post-edit-area {
+  margin-bottom: 10px;
+}
+
+/* ════════════════════════════════════════════════════
+   COMMENT MEDIA (replies with images/video)
+   ════════════════════════════════════════════════════ */
+.comment-media {
+  margin-top: 8px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  max-width: 320px;
+}
+.comment-media img,
+.comment-media video {
+  width: 100%;
+  display: block;
+  max-height: 240px;
+  object-fit: cover;
+}
+.comment-media-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+}
+.comment-media-grid > * {
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+}
+.comment-media-grid img,
+.comment-media-grid video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* ════════════════════════════════════════════════════
+   STORIES BAR
+   ════════════════════════════════════════════════════ */
+.stories-bar {
+  border-bottom: 1px solid var(--divider);
+  background: var(--surface-0);
+}
+
+/* ════════════════════════════════════════════════════
+   REPLY BAR — expanded (flex-col)
+   ════════════════════════════════════════════════════ */
+.reply-bar {
+  background: var(--surface-0);
+  border-top: 1px solid var(--divider);
+  backdrop-filter: blur(12px);
+}
