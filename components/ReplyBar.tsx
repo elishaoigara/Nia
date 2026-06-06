@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Send, Loader2, ImagePlus, Video, X, Play, Smile } from 'lucide-react'
+import { Send, Loader2, ImagePlus, Video, X, Play } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 
 interface ReplyBarProps {
@@ -14,14 +14,13 @@ const MAX_TEXT     = 500
 const MAX_IMAGES   = 4
 const MAX_VIDEO_MB = 50
 
-// Tenor GIF search — same key as FlicksClient
 const TENOR_KEY = process.env.NEXT_PUBLIC_TENOR_API_KEY ?? ''
 
 interface MediaItem {
-  file?:    File          // undefined for GIF URLs (no file upload needed)
-  preview:  string
-  type:     'image' | 'video' | 'gif'
-  gifUrl?:  string        // original URL for GIFs picked from Tenor
+  file?:   File
+  preview: string
+  type:    'image' | 'video' | 'gif'
+  gifUrl?: string
 }
 
 interface GifResult {
@@ -40,21 +39,19 @@ export default function ReplyBar({ postId, currentUserId }: ReplyBarProps) {
   const supabase = createClient()
   const router   = useRouter()
 
-  const [text,       setText]       = useState('')
-  const [loading,    setLoading]    = useState(false)
-  const [profile,    setProfile]    = useState<any>(null)
-  const [media,      setMedia]      = useState<MediaItem[]>([])
-  const [error,      setError]      = useState('')
+  const [text,      setText]      = useState('')
+  const [loading,   setLoading]   = useState(false)
+  const [profile,   setProfile]   = useState<any>(null)
+  const [media,     setMedia]     = useState<MediaItem[]>([])
+  const [error,     setError]     = useState('')
+  const [showGifs,  setShowGifs]  = useState(false)
+  const [gifQuery,  setGifQuery]  = useState('')
+  const [gifResults,setGifResults]= useState<GifResult[]>([])
+  const [gifLoading,setGifLoading]= useState(false)
 
-  // GIF picker state
-  const [showGifs,    setShowGifs]    = useState(false)
-  const [gifQuery,    setGifQuery]    = useState('')
-  const [gifResults,  setGifResults]  = useState<GifResult[]>([])
-  const [gifLoading,  setGifLoading]  = useState(false)
-
-  const imageRef  = useRef<HTMLInputElement>(null)
-  const videoRef  = useRef<HTMLInputElement>(null)
-  const textRef   = useRef<HTMLTextAreaElement>(null)
+  const imageRef    = useRef<HTMLInputElement>(null)
+  const videoRef    = useRef<HTMLInputElement>(null)
+  const textRef     = useRef<HTMLTextAreaElement>(null)
   const gifPanelRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -62,13 +59,11 @@ export default function ReplyBar({ postId, currentUserId }: ReplyBarProps) {
       .then(({ data }) => setProfile(data))
   }, [currentUserId]) // eslint-disable-line
 
-  // Load GIFs on open / query change
   useEffect(() => {
     if (!showGifs) return
     searchGifs(gifQuery)
   }, [showGifs, gifQuery]) // eslint-disable-line
 
-  // Click-outside to close GIF picker
   useEffect(() => {
     if (!showGifs) return
     function handle(e: MouseEvent) {
@@ -102,7 +97,6 @@ export default function ReplyBar({ postId, currentUserId }: ReplyBarProps) {
   }
 
   function pickGif(gif: GifResult) {
-    // Replace any existing GIF, keep other media
     setMedia(prev => [
       ...prev.filter(m => m.type !== 'gif'),
       { preview: gif.preview, type: 'gif', gifUrl: gif.url },
@@ -124,15 +118,11 @@ export default function ReplyBar({ postId, currentUserId }: ReplyBarProps) {
   function addImages(files: FileList | null) {
     if (!files) return
     setError('')
-    const canAdd  = MAX_IMAGES - media.filter(m => m.type === 'image').length
-    const items   = Array.from(files).slice(0, canAdd)
-    const newItems: MediaItem[] = items.map(file => ({
-      file,
-      preview: URL.createObjectURL(file),
-      type: 'image',
-    }))
-    setMedia(prev => [...prev, ...newItems])
-    // Reset input so same file can be re-selected
+    const canAdd = MAX_IMAGES - media.filter(m => m.type === 'image').length
+    const items  = Array.from(files).slice(0, canAdd)
+    setMedia(prev => [...prev, ...items.map(file => ({
+      file, preview: URL.createObjectURL(file), type: 'image' as const,
+    }))])
     if (imageRef.current) imageRef.current.value = ''
   }
 
@@ -140,32 +130,24 @@ export default function ReplyBar({ postId, currentUserId }: ReplyBarProps) {
     if (!files || !files[0]) return
     setError('')
     const file = files[0]
-    if (file.size > MAX_VIDEO_MB * 1024 * 1024) {
-      setError(`Video must be under ${MAX_VIDEO_MB}MB`)
-      return
-    }
+    if (file.size > MAX_VIDEO_MB * 1024 * 1024) { setError(`Video must be under ${MAX_VIDEO_MB}MB`); return }
     setMedia(prev => [...prev.filter(m => m.type !== 'video'), {
-      file,
-      preview: URL.createObjectURL(file),
-      type: 'video',
+      file, preview: URL.createObjectURL(file), type: 'video' as const,
     }])
-    // Reset input so same file can be re-selected
     if (videoRef.current) videoRef.current.value = ''
   }
 
   function removeMedia(idx: number) {
     setMedia(prev => {
       const item = prev[idx]
-      if (item.preview && item.file) URL.revokeObjectURL(item.preview) // only revoke blob URLs
+      if (item.preview && item.file) URL.revokeObjectURL(item.preview)
       return prev.filter((_, i) => i !== idx)
     })
   }
 
   async function submit() {
     if (!canSend) return
-    setLoading(true)
-    setError('')
-
+    setLoading(true); setError('')
     try {
       let media_url:   string | null = null
       let media_type:  string | null = null
@@ -173,17 +155,14 @@ export default function ReplyBar({ postId, currentUserId }: ReplyBarProps) {
 
       if (media.length > 0) {
         const uploaded: { url: string; type: string }[] = []
-
         for (const item of media) {
           if (item.type === 'gif' && item.gifUrl) {
-            // GIF from Tenor — use URL directly, no upload needed
             uploaded.push({ url: item.gifUrl, type: 'gif' })
           } else if (item.file) {
             const ext  = item.file.name.split('.').pop() ?? (item.type === 'video' ? 'mp4' : 'jpg')
             const path = `${currentUserId}/reply_${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`
             const { error: upErr } = await supabase.storage
-              .from('post-media')
-              .upload(path, item.file, { contentType: item.file.type })
+              .from('post-media').upload(path, item.file, { contentType: item.file.type })
             if (upErr) { setError('Upload failed: ' + upErr.message); setLoading(false); return }
             uploaded.push({
               url:  supabase.storage.from('post-media').getPublicUrl(path).data.publicUrl,
@@ -191,7 +170,6 @@ export default function ReplyBar({ postId, currentUserId }: ReplyBarProps) {
             })
           }
         }
-
         if (uploaded.length > 0) {
           media_url   = uploaded[0].url
           media_type  = uploaded[0].type
@@ -207,7 +185,6 @@ export default function ReplyBar({ postId, currentUserId }: ReplyBarProps) {
         media_type,
         extra_media: extra_media.length ? extra_media : null,
       })
-
       if (insertErr) { setError(insertErr.message); setLoading(false); return }
 
       media.forEach(m => { if (m.file && m.preview) URL.revokeObjectURL(m.preview) })
@@ -223,10 +200,10 @@ export default function ReplyBar({ postId, currentUserId }: ReplyBarProps) {
     }
   }
 
-  const initials     = profile?.username?.[0]?.toUpperCase() ?? '?'
-  const imageCount   = media.filter(m => m.type === 'image').length
-  const hasVideo     = media.some(m => m.type === 'video')
-  const hasGif       = media.some(m => m.type === 'gif')
+  const initials   = profile?.username?.[0]?.toUpperCase() ?? '?'
+  const imageCount = media.filter(m => m.type === 'image').length
+  const hasVideo   = media.some(m => m.type === 'video')
+  const hasGif     = media.some(m => m.type === 'gif')
 
   return (
     <div
@@ -234,12 +211,10 @@ export default function ReplyBar({ postId, currentUserId }: ReplyBarProps) {
       style={{
         position: 'fixed',
         bottom: 'var(--nav-bottom)',
-        left: 0, right: 0,
+        left: 0,
+        right: 0,
         maxWidth: 620,
         margin: '0 auto',
-        flexDirection: 'column',
-        padding: '8px 12px',
-        gap: 8,
         zIndex: 40,
       }}
     >
@@ -250,14 +225,14 @@ export default function ReplyBar({ postId, currentUserId }: ReplyBarProps) {
           style={{
             position: 'absolute',
             bottom: '100%',
-            left: 12, right: 12,
+            left: 0, right: 0,
+            marginBottom: 6,
             background: 'var(--surface-1)',
             border: '1px solid var(--border)',
             borderRadius: 16,
             padding: 12,
             boxShadow: '0 -8px 32px rgba(0,0,0,0.18)',
             zIndex: 50,
-            marginBottom: 4,
           }}
         >
           <input
@@ -266,17 +241,11 @@ export default function ReplyBar({ postId, currentUserId }: ReplyBarProps) {
             value={gifQuery}
             onChange={e => setGifQuery(e.target.value)}
             style={{
-              width: '100%',
-              background: 'var(--surface-2)',
-              border: 'none',
-              borderRadius: 20,
-              padding: '8px 14px',
-              fontSize: 13,
-              color: 'var(--text-primary)',
-              outline: 'none',
-              marginBottom: 10,
-              boxSizing: 'border-box',
-              fontFamily: 'inherit',
+              width: '100%', boxSizing: 'border-box',
+              background: 'var(--surface-2)', border: 'none',
+              borderRadius: 20, padding: '8px 14px',
+              fontSize: 13, color: 'var(--text-primary)',
+              outline: 'none', marginBottom: 10, fontFamily: 'inherit',
             }}
           />
           {gifLoading ? (
@@ -284,22 +253,21 @@ export default function ReplyBar({ postId, currentUserId }: ReplyBarProps) {
               <Loader2 size={20} className="animate-spin" style={{ color: 'var(--text-tertiary)' }} />
             </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 4, maxHeight: 200, overflowY: 'auto' }}>
+            <div style={{
+              display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)',
+              gap: 4, maxHeight: 200, overflowY: 'auto',
+            }}>
               {gifResults.map((g, i) => (
                 <button
-                  key={i}
-                  onClick={() => pickGif(g)}
+                  key={i} onClick={() => pickGif(g)}
                   style={{
                     border: 'none', padding: 0, cursor: 'pointer',
                     borderRadius: 8, overflow: 'hidden',
                     aspectRatio: '1', background: 'var(--surface-2)',
                   }}
                 >
-                  <img
-                    src={g.preview}
-                    alt="GIF"
-                    style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                  />
+                  <img src={g.preview} alt="GIF"
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
                 </button>
               ))}
             </div>
@@ -309,12 +277,12 @@ export default function ReplyBar({ postId, currentUserId }: ReplyBarProps) {
 
       {/* Error */}
       {error && (
-        <div style={{ fontSize: 12, color: '#f43f5e', paddingLeft: 42 }}>{error}</div>
+        <div style={{ fontSize: 12, color: '#f43f5e', paddingLeft: 44, paddingBottom: 4 }}>{error}</div>
       )}
 
       {/* Media previews */}
       {media.length > 0 && (
-        <div style={{ display: 'flex', gap: 6, paddingLeft: 42, overflowX: 'auto' }}>
+        <div style={{ display: 'flex', gap: 6, paddingLeft: 44, paddingBottom: 6, overflowX: 'auto' }}>
           {media.map((m, i) => (
             <div key={i} style={{ position: 'relative', flexShrink: 0 }}>
               {m.type === 'video' ? (
@@ -327,8 +295,8 @@ export default function ReplyBar({ postId, currentUserId }: ReplyBarProps) {
                 </div>
               ) : (
                 <img src={m.preview} alt="" style={{
-                  width: 64, height: 64, borderRadius: 10, objectFit: 'cover',
-                  border: '1px solid var(--border)',
+                  width: 64, height: 64, borderRadius: 10,
+                  objectFit: 'cover', border: '1px solid var(--border)',
                 }} />
               )}
               <button
@@ -337,8 +305,8 @@ export default function ReplyBar({ postId, currentUserId }: ReplyBarProps) {
                   position: 'absolute', top: -4, right: -4,
                   width: 18, height: 18, borderRadius: '50%',
                   background: '#0f172a', border: '1.5px solid #fff',
-                  cursor: 'pointer', display: 'flex', alignItems: 'center',
-                  justifyContent: 'center', padding: 0,
+                  cursor: 'pointer', display: 'flex',
+                  alignItems: 'center', justifyContent: 'center', padding: 0,
                 }}
               >
                 <X size={10} color="#fff" />
@@ -350,13 +318,13 @@ export default function ReplyBar({ postId, currentUserId }: ReplyBarProps) {
 
       {/* Input row */}
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
+
         {/* Avatar */}
         <div style={{
-          width: 32, height: 32, borderRadius: '50%',
-          background: 'var(--grad-brand)',
+          width: 34, height: 34, borderRadius: '50%',
+          background: 'var(--grad-brand)', flexShrink: 0,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          color: '#fff', fontWeight: 700, fontSize: 12,
-          overflow: 'hidden', flexShrink: 0,
+          color: '#fff', fontWeight: 700, fontSize: 12, overflow: 'hidden',
         }}>
           {profile?.avatar_url
             ? <img src={profile.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -364,7 +332,7 @@ export default function ReplyBar({ postId, currentUserId }: ReplyBarProps) {
           }
         </div>
 
-        {/* Text area */}
+        {/* Textarea */}
         <textarea
           ref={textRef}
           className="reply-input"
@@ -374,22 +342,20 @@ export default function ReplyBar({ postId, currentUserId }: ReplyBarProps) {
           onChange={e => { setText(e.target.value); autoGrow() }}
           onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit() } }}
           disabled={loading}
-          style={{ resize: 'none', overflow: 'hidden', minHeight: 40, maxHeight: 120 }}
         />
 
-        {/* Hidden file inputs */}
+        {/* Hidden inputs */}
         <input ref={imageRef} type="file" accept="image/*" multiple hidden
           onChange={e => addImages(e.target.files)} />
         <input ref={videoRef} type="file" accept="video/*" hidden
           onChange={e => addVideo(e.target.files)} />
 
-        {/* Image button */}
-        <button
-          onClick={() => imageRef.current?.click()}
+        {/* Image */}
+        <button onClick={() => imageRef.current?.click()}
           disabled={loading || imageCount >= MAX_IMAGES || hasVideo || hasGif}
           style={{
-            background: 'none', border: 'none', cursor: 'pointer',
-            color: 'var(--text-tertiary)', padding: 4, flexShrink: 0,
+            background: 'none', border: 'none', cursor: 'pointer', padding: 4, flexShrink: 0,
+            color: 'var(--text-tertiary)',
             opacity: (imageCount >= MAX_IMAGES || hasVideo || hasGif) ? 0.4 : 1,
           }}
           aria-label="Add image"
@@ -397,13 +363,12 @@ export default function ReplyBar({ postId, currentUserId }: ReplyBarProps) {
           <ImagePlus size={18} />
         </button>
 
-        {/* Video button */}
-        <button
-          onClick={() => videoRef.current?.click()}
+        {/* Video */}
+        <button onClick={() => videoRef.current?.click()}
           disabled={loading || hasVideo || imageCount > 0 || hasGif}
           style={{
-            background: 'none', border: 'none', cursor: 'pointer',
-            color: 'var(--text-tertiary)', padding: 4, flexShrink: 0,
+            background: 'none', border: 'none', cursor: 'pointer', padding: 4, flexShrink: 0,
+            color: 'var(--text-tertiary)',
             opacity: (hasVideo || imageCount > 0 || hasGif) ? 0.4 : 1,
           }}
           aria-label="Add video"
@@ -411,14 +376,13 @@ export default function ReplyBar({ postId, currentUserId }: ReplyBarProps) {
           <Video size={18} />
         </button>
 
-        {/* GIF button */}
-        <button
-          onClick={() => setShowGifs(p => !p)}
+        {/* GIF */}
+        <button onClick={() => setShowGifs(p => !p)}
           disabled={loading || hasGif || imageCount > 0 || hasVideo}
           style={{
-            background: 'none', border: 'none', cursor: 'pointer',
+            background: 'none', border: 'none', cursor: 'pointer', padding: 4, flexShrink: 0,
             color: showGifs ? 'var(--nia-violet)' : 'var(--text-tertiary)',
-            padding: 4, flexShrink: 0, fontSize: 11, fontWeight: 800,
+            fontSize: 11, fontWeight: 800,
             opacity: (hasGif || imageCount > 0 || hasVideo) ? 0.4 : 1,
           }}
           aria-label="Add GIF"
@@ -426,7 +390,7 @@ export default function ReplyBar({ postId, currentUserId }: ReplyBarProps) {
           GIF
         </button>
 
-        {/* Char count */}
+        {/* Char counter */}
         {text.length > 400 && (
           <span style={{
             fontSize: 11, flexShrink: 0, fontWeight: 600,
@@ -440,13 +404,14 @@ export default function ReplyBar({ postId, currentUserId }: ReplyBarProps) {
         <button
           onClick={submit}
           disabled={!canSend}
+          aria-label="Send reply"
           style={{
-            background: 'none', border: 'none', cursor: canSend ? 'pointer' : 'default',
+            background: 'none', border: 'none', padding: 4, flexShrink: 0,
+            cursor: canSend ? 'pointer' : 'default',
             color: canSend ? 'var(--nia-violet)' : 'var(--text-tertiary)',
-            display: 'flex', alignItems: 'center', padding: 4, flexShrink: 0,
+            display: 'flex', alignItems: 'center',
             transition: 'color 0.15s',
           }}
-          aria-label="Send reply"
         >
           {loading
             ? <Loader2 size={18} className="animate-spin" />

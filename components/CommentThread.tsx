@@ -230,9 +230,6 @@ function CommentRow({
 export default function CommentThread({ comments, currentUserId, postId }: CommentThreadProps) {
   return (
     <div className="comment-section">
-      <div className="comment-section-label">
-        {comments.length} {comments.length === 1 ? 'reply' : 'replies'}
-      </div>
       {comments.map((comment, i) => (
         <CommentRow
           key={comment.id}
