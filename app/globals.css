@@ -7,37 +7,37 @@
 
 /* ── Color Tokens ──────────────────────────────────── */
 :root {
-  /* Single signature accent — deep indigo */
-  --nia-accent:  #4F46E5;
-  --nia-accent-2: #6366F1; /* slightly lighter for hover/glow */
+  /* ── One accent: deep violet, two shades ── */
+  --nia-accent:      #5B21B6;
+  --nia-accent-soft: #7C3AED;
 
-  /* Kept for semantic use only */
-  --nia-violet: #4F46E5;   /* alias → accent */
-  --nia-coral:  #E84B5A;   /* like/destructive only */
-  --nia-sky:    #4F46E5;   /* alias → accent */
-  --nia-pink:   #4F46E5;   /* alias → accent */
-  --nia-mint:   #4F46E5;   /* alias → accent */
-  --nia-amber:  #F59E0B;   /* bookmark only */
+  /* ── Semantic aliases — never decorative ── */
+  --nia-violet: #5B21B6;
+  --nia-coral:  #DC2626;   /* likes & destructive only */
+  --nia-sky:    #5B21B6;
+  --nia-pink:   #5B21B6;
+  --nia-mint:   #5B21B6;
+  --nia-amber:  #5B21B6;   /* bookmarks → violet, not amber */
 
-  /* Surfaces — light: warm white instead of cold */
-  --surface-0: #FAFAF9;
-  --surface-1: #F5F5F4;
-  --surface-2: #EEEEEC;
-  --surface-3: #E4E4E0;
+  /* ── Surfaces: warm parchment ── */
+  --surface-0: #F9F8F6;
+  --surface-1: #F3F2EF;
+  --surface-2: #EBEAE6;
+  --surface-3: #DDDBD5;
 
-  /* Text */
-  --text-primary:   #111110;
-  --text-secondary: #3D3D3A;
-  --text-tertiary:  #8C8C87;
+  /* ── Text: warm charcoal ── */
+  --text-primary:   #1A1916;
+  --text-secondary: #44433E;
+  --text-tertiary:  #908E87;
 
-  /* Borders */
-  --border:   #E4E4E0;
-  --divider:  rgba(0, 0, 0, 0.06);
+  /* ── Borders ── */
+  --border:   #E0DED9;
+  --divider:  rgba(26, 25, 22, 0.07);
 
-  /* Gradients — single direction, no rainbow */
-  --grad-brand: linear-gradient(135deg, #4F46E5, #6366F1);
-  --grad-cool:  linear-gradient(135deg, #4F46E5, #818CF8);
-  --grad-warm:  linear-gradient(135deg, #6366F1, #4F46E5);
+  /* ── Gradients: monochromatic violet ── */
+  --grad-brand: linear-gradient(135deg, #5B21B6, #7C3AED);
+  --grad-cool:  linear-gradient(135deg, #4C1D95, #7C3AED);
+  --grad-warm:  linear-gradient(135deg, #5B21B6, #6D28D9);
 
   /* Layout */
   --nav-top:    3.5rem;   /* 56px */
@@ -50,16 +50,16 @@
 
 /* ── Dark Mode ─────────────────────────────────────── */
 .dark {
-  --surface-0: #0C0C0B;
-  --surface-1: #161614;
-  --surface-2: #222220;
-  --surface-3: #2E2E2B;
+  --surface-0: #0D0C0B;
+  --surface-1: #171614;
+  --surface-2: #232220;
+  --surface-3: #2F2E2B;
 
-  --text-primary:   #EEEEE9;
-  --text-secondary: #A8A89F;
-  --text-tertiary:  #6B6B64;
+  --text-primary:   #EDECEA;
+  --text-secondary: #A09E98;
+  --text-tertiary:  #635F59;
 
-  --border:  #2E2E2B;
+  --border:  #2F2E2B;
   --divider: rgba(255, 255, 255, 0.05);
 }
 
@@ -917,7 +917,7 @@ body {
 }
 .card-hover:hover {
   border-color: var(--nia-accent);
-  box-shadow: 0 4px 24px rgba(79, 70, 229, 0.08);
+  box-shadow: 0 4px 24px rgba(91, 33, 182, 0.08);
   transform: translateY(-1px);
 }
 
@@ -1030,7 +1030,7 @@ body {
 ::-webkit-scrollbar-thumb:hover { background: var(--text-tertiary); }
 
 /* ── Selection ─────────────────────────────────────── */
-::selection { background: rgba(79, 70, 229, 0.15); color: var(--text-primary); }
+::selection { background: rgba(91, 33, 182, 0.12); color: var(--text-primary); }
 
 /* ════════════════════════════════════════════════════
    BOOKMARKS
