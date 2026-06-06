@@ -313,25 +313,32 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
         <div className="post-body">
           {/* Header */}
           <div className="post-header">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
-              <Link href={`/profile/${profile?.id ?? '#'}`} className="post-username" onClick={e => e.stopPropagation()}>
-                {profile?.full_name ?? profile?.username ?? 'unknown'}
-              </Link>
-              {profile?.username && (
-                <span style={{ fontSize: 13, color: 'var(--text-tertiary)', marginLeft: 2 }}>
-                  @{profile.username}
-                </span>
-              )}
-              <span className="post-time">{timeAgo(post.created_at)}</span>
-              {canEdit && (
-                <span style={{ fontSize: 11, color: 'var(--nia-violet)', fontWeight: 600 }}>
-                  · editable
-                </span>
-              )}
-              {circle && <span className="post-circle-tag">{circle.name}</span>}
+            {/* Left: name + handle on one line, time + badges on second line */}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              {/* Row 1: display name + @handle */}
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
+                <Link href={`/profile/${profile?.id ?? '#'}`} className="post-username" onClick={e => e.stopPropagation()}>
+                  {profile?.full_name ?? profile?.username ?? 'unknown'}
+                </Link>
+                {profile?.username && (
+                  <span style={{ fontSize: 13, color: 'var(--text-tertiary)', fontWeight: 400 }}>
+                    @{profile.username}
+                  </span>
+                )}
+              </div>
+              {/* Row 2: time + optional badges */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                <span className="post-time">{timeAgo(post.created_at)}</span>
+                {canEdit && (
+                  <span style={{ fontSize: 11, color: 'var(--nia-violet)', fontWeight: 600, background: 'rgba(91,33,182,0.08)', borderRadius: 4, padding: '1px 5px' }}>
+                    editable
+                  </span>
+                )}
+                {circle && <span className="post-circle-tag">{circle.name}</span>}
+              </div>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
               {currentUserId && currentUserId !== profile?.id && profile && (
                 <FollowButton
                   targetUserId={profile.id}
@@ -496,33 +503,42 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
             </div>
           )}
 
-          {/* Stats */}
+          {/* Stats row — only visible when counts exist */}
           {(likesCount > 0 || commentsCount > 0 || repostsCount > 0) && (
             <div className="post-stat">
-              {likesCount > 0 && <span>{likesCount} {likesCount === 1 ? 'like' : 'likes'}</span>}
-              {commentsCount > 0 && likesCount > 0 && ' · '}
+              {likesCount > 0 && (
+                <span className="post-stat-pill">
+                  <Heart size={11} fill="currentColor" />
+                  {likesCount}
+                </span>
+              )}
               {commentsCount > 0 && (
-                <Link href={`/posts/${post.id}`} onClick={e => e.stopPropagation()}>
-                  {commentsCount} {commentsCount === 1 ? 'reply' : 'replies'}
+                <Link href={`/posts/${post.id}`} className="post-stat-pill" onClick={e => e.stopPropagation()}>
+                  <MessageCircle size={11} />
+                  {commentsCount}
                 </Link>
               )}
-              {repostsCount > 0 && (likesCount > 0 || commentsCount > 0) && ' · '}
-              {repostsCount > 0 && <span>{repostsCount} {repostsCount === 1 ? 'repost' : 'reposts'}</span>}
+              {repostsCount > 0 && (
+                <span className="post-stat-pill">
+                  <Repeat2 size={11} />
+                  {repostsCount}
+                </span>
+              )}
             </div>
           )}
 
           {/* Action bar */}
           <div className="post-actions">
             {/* Like */}
-            <button className={`post-action-btn ${liked ? 'liked' : ''}`} onClick={handleLike}>
-              <Heart size={18} />
-              {likesCount > 0 && <span className="post-action-count">{likesCount}</span>}
+            <button className={`post-action-btn ${liked ? 'liked' : ''}`} onClick={handleLike} title="Like">
+              <Heart size={17} />
+              <span className="post-action-label">{likesCount > 0 ? likesCount : ''}</span>
             </button>
 
             {/* Comment */}
-            <Link href={`/posts/${post.id}`} className="post-action-btn" onClick={e => e.stopPropagation()}>
-              <MessageCircle size={18} />
-              {commentsCount > 0 && <span className="post-action-count">{commentsCount}</span>}
+            <Link href={`/posts/${post.id}`} className="post-action-btn" onClick={e => e.stopPropagation()} title="Reply">
+              <MessageCircle size={17} />
+              <span className="post-action-label">{commentsCount > 0 ? commentsCount : ''}</span>
             </Link>
 
             {/* Repost */}
@@ -530,9 +546,10 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
               <button
                 className={`post-action-btn ${reposted ? 'reposted' : ''}`}
                 onClick={e => { e.stopPropagation(); setShowRepostMenu(prev => !prev); }}
+                title="Repost"
               >
-                <Repeat2 size={18} />
-                {repostsCount > 0 && <span className="post-action-count">{repostsCount}</span>}
+                <Repeat2 size={17} />
+                <span className="post-action-label">{repostsCount > 0 ? repostsCount : ''}</span>
               </button>
               {showRepostMenu && (
                 <div style={{
@@ -552,12 +569,16 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
               )}
             </div>
 
+            {/* Spacer pushes bookmark+share to right */}
+            <div style={{ flex: 1 }} />
+
             {/* Bookmark */}
             <button
               className={`post-action-btn ${bookmarked ? 'bookmarked' : ''}`}
               onClick={e => { e.stopPropagation(); handleBookmark(); }}
+              title={bookmarked ? 'Bookmarked' : 'Bookmark'}
             >
-              {bookmarked ? <BookmarkCheck size={18} /> : <Bookmark size={18} />}
+              {bookmarked ? <BookmarkCheck size={17} /> : <Bookmark size={17} />}
             </button>
 
             {/* Share / copy link */}
@@ -569,8 +590,9 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
                 setCopied(true);
                 setTimeout(() => setCopied(false), 2000);
               }}
+              title="Copy link"
             >
-              {copied ? <Check size={18} /> : <Share size={18} />}
+              {copied ? <Check size={17} /> : <Share size={17} />}
             </button>
           </div>
         </div>
