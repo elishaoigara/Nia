@@ -102,12 +102,14 @@ body {
   position: relative;
   display: flex;
   gap: 0;
-  padding: 14px 16px 0;
+  padding: 16px 16px 0;           /* consistent 16px top/sides */
   background: var(--surface-0);
   border-bottom: 1px solid var(--divider);
+  transition: background 0.12s;
 }
+.post-row:active { background: var(--surface-1); }
 
-/* Left column: avatar + connecting line */
+/* Left column: avatar + thread line */
 .post-left {
   display: flex;
   flex-direction: column;
@@ -116,18 +118,20 @@ body {
   flex-shrink: 0;
 }
 
-/* Avatar wrapper — gradient ring */
+/* Avatar — gradient ring */
 .post-avatar {
-  width: var(--post-avatar);
+  width: var(--post-avatar);      /* 40px */
   height: var(--post-avatar);
   border-radius: 50%;
   overflow: hidden;
   flex-shrink: 0;
   position: relative;
-  box-shadow: 0 0 0 2px var(--surface-0), 0 0 0 4px transparent;
+  box-shadow: 0 0 0 2px var(--surface-0), 0 0 0 3.5px var(--nia-accent);
   background: var(--grad-brand);
   padding: 2px;
+  transition: opacity 0.15s;
 }
+.post-avatar:hover { opacity: 0.88; }
 .post-avatar img,
 .post-avatar .post-avatar-inner {
   width: 100%;
@@ -143,7 +147,7 @@ body {
   font-size: 15px;
 }
 
-/* The vertical connecting line */
+/* Thread line */
 .post-line {
   width: 2px;
   flex: 1;
@@ -153,7 +157,7 @@ body {
   min-height: 20px;
 }
 
-/* Mini reply-avatar cluster at bottom of line */
+/* Reply faces */
 .post-reply-faces {
   display: flex;
   position: relative;
@@ -177,53 +181,51 @@ body {
 .post-reply-face:nth-child(1) { width: 16px; height: 16px; left: 2px;  top: 0; }
 .post-reply-face:nth-child(2) { width: 13px; height: 13px; right: 2px; bottom: 0; }
 
-/* Right column: everything else */
+/* Right column */
 .post-body {
   flex: 1;
   min-width: 0;
   padding-left: 12px;
-  padding-bottom: 14px;
+  padding-bottom: 12px;
 }
 
-/* Header row inside post body */
+/* Header — managed by inline JSX, this just resets legacy class */
 .post-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  margin-bottom: 2px;
+  margin-bottom: 0;
 }
+
+/* Username */
 .post-username {
   font-weight: 700;
   font-size: 14.5px;
+  line-height: 1.3;
   color: var(--text-primary);
   text-decoration: none;
+  display: block;
 }
 .post-username:hover { text-decoration: underline; }
 
-.post-time {
-  font-size: 12px;
-  color: var(--text-tertiary);
-  margin-left: 6px;
-  flex-shrink: 0;
-}
-
 /* Circle tag badge */
 .post-circle-tag {
+  display: inline-flex;
+  align-items: center;
   font-size: 11px;
   font-weight: 600;
   color: var(--nia-violet);
-  background: rgba(139, 92, 246, 0.1);
+  background: rgba(91, 33, 182, 0.08);
   border-radius: 6px;
-  padding: 1px 7px;
-  margin-left: 6px;
+  padding: 2px 7px;
 }
 
-/* Post text content */
+/* Post text */
 .post-text {
   font-size: 15px;
-  line-height: 1.55;
+  line-height: 1.6;
   color: var(--text-primary);
-  margin-bottom: 10px;
+  margin: 0 0 10px;
   white-space: pre-wrap;
   word-break: break-word;
 }
