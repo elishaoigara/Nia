@@ -379,7 +379,6 @@ body {
   margin-right: -8px;
   margin-top: 6px;
   padding-bottom: 6px;
-  border-top: 1px solid var(--divider);
 }
 .post-action-btn {
   display: flex;
