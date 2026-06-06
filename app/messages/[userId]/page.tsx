@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useParams, useRouter } from 'next/navigation'
 import {
@@ -18,6 +18,10 @@ function timeAgo(date: string) {
   return new Date(date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
 }
 
+function formatDuration(s: number) {
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+}
+
 type Message = {
   id: string
   sender_id: string
@@ -33,18 +37,16 @@ type Message = {
   created_at: string
 }
 
-type Profile = { id: string; username: string; avatar_url: string | null; full_name: string }
+type Profile = { id: string; username: string; avatar_url: string | null; full_name: string | null }
 
 export default function DirectMessagePage() {
   const supabase = createClient()
   const { userId } = useParams() as { userId?: string }
   const router = useRouter()
 
-  if (!userId) {
-    return <div className="text-center py-8">Invalid conversation</div>
-  }
-  const recipientId = userId
+  if (!userId) return <div style={{ textAlign: 'center', padding: 32 }}>Invalid conversation</div>
 
+  const recipientId = userId
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [recipient, setRecipient] = useState<Profile | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
@@ -52,11 +54,11 @@ export default function DirectMessagePage() {
   const [sending, setSending] = useState(false)
   const [loading, setLoading] = useState(true)
   const [replyTo, setReplyTo] = useState<Message | null>(null)
-  const [viewOnce, setViewOnce] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [isRecording, setIsRecording] = useState(false)
   const [recordDuration, setRecordDuration] = useState(0)
   const [playingAudio, setPlayingAudio] = useState<string | null>(null)
+  const [revealedMedia, setRevealedMedia] = useState<Set<string>>(new Set())
 
   const bottomRef = useRef<HTMLDivElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -67,32 +69,45 @@ export default function DirectMessagePage() {
   const timerRef = useRef<NodeJS.Timeout | null>(null)
   const audioRefs = useRef<Record<string, HTMLAudioElement>>({})
 
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current)
+      Object.values(audioRefs.current).forEach(a => { a.pause(); a.src = '' })
+    }
+  }, [])
+
   useEffect(() => {
     async function init() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/login'); return }
       setCurrentUserId(user.id)
 
-      const { data: profile } = await supabase
-        .from('profiles').select('id, username, avatar_url, full_name')
-        .eq('id', recipientId).single()
-      setRecipient(profile as Profile)
+      const [{ data: profile }, { data: msgs }] = await Promise.all([
+        supabase.from('profiles').select('id, username, avatar_url, full_name').eq('id', recipientId).single(),
+        supabase.from('messages').select('*')
+          .or(`and(sender_id.eq.${user.id},recipient_id.eq.${recipientId}),and(sender_id.eq.${recipientId},recipient_id.eq.${user.id})`)
+          .order('created_at', { ascending: true }),
+      ])
 
-      const { data: msgs } = await supabase
-        .from('messages').select('*')
-        .or(`and(sender_id.eq.${user.id},recipient_id.eq.${recipientId}),and(sender_id.eq.${recipientId},recipient_id.eq.${user.id})`)
-        .order('created_at', { ascending: true })
+      setRecipient(profile as Profile)
       setMessages((msgs as Message[]) ?? [])
       setLoading(false)
 
+      // Mark received messages as read
       await supabase.from('messages').update({ is_read: true })
         .eq('recipient_id', user.id).eq('sender_id', recipientId).eq('is_read', false)
 
+      // Real-time subscription
       const channel = supabase.channel(`dm-${user.id}-${recipientId}`)
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `recipient_id=eq.${user.id}` }, payload => {
           const msg = payload.new as Message
           if (msg.sender_id === recipientId) {
-            setMessages(prev => [...prev, msg])
+            setMessages(prev => {
+              // Avoid duplicates
+              if (prev.some(m => m.id === msg.id)) return prev
+              return [...prev, msg]
+            })
             supabase.from('messages').update({ is_read: true }).eq('id', msg.id)
           }
         })
@@ -100,12 +115,15 @@ export default function DirectMessagePage() {
           setMessages(prev => prev.map(m => m.id === payload.new.id ? (payload.new as Message) : m))
         })
         .subscribe()
+
       return () => { supabase.removeChannel(channel) }
     }
     init()
-  }, [recipientId, router, supabase])
+  }, [recipientId, router]) // eslint-disable-line
 
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
 
   async function uploadFile(file: File) {
     setUploading(true)
@@ -113,9 +131,8 @@ export default function DirectMessagePage() {
     const path = `${currentUserId}/${Date.now()}.${ext}`
     const { error } = await supabase.storage.from('message-media').upload(path, file)
     if (error) {
-      console.error('[uploadFile] Storage error:', error.message)
       setUploading(false)
-      alert(`Upload failed: ${error.message}\n\nMake sure the "message-media" storage bucket exists in Supabase with public access enabled.`)
+      alert(`Upload failed: ${error.message}`)
       return null
     }
     const { data } = supabase.storage.from('message-media').getPublicUrl(path)
@@ -155,6 +172,13 @@ export default function DirectMessagePage() {
     mrRef.current?.stop(); setIsRecording(false); setRecordDuration(0)
   }
 
+  function cancelRecording() {
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null }
+    mrRef.current?.stream?.getTracks().forEach(t => t.stop())
+    mrRef.current = null; chunksRef.current = []
+    setIsRecording(false); setRecordDuration(0)
+  }
+
   async function sendMessage(
     text?: string | null, media_url?: string | null,
     media_type?: string | null, file_name?: string | null,
@@ -165,108 +189,241 @@ export default function DirectMessagePage() {
       sender_id: currentUserId, recipient_id: recipientId,
       content: text?.trim() ?? null, media_url: media_url ?? null,
       media_type: media_type ?? null, file_name: file_name ?? null,
-      view_once: viewOnce && !!media_url, reply_to: replyTo?.id ?? null, is_read: false,
+      view_once: false, reply_to: replyTo?.id ?? null, is_read: false,
     }
-    const optimistic: Message = { id: `temp-${Date.now()}`, ...payload, viewed_at: null, created_at: new Date().toISOString() }
+    // Optimistic
+    const tempId = `temp-${Date.now()}`
+    const optimistic: Message = { id: tempId, ...payload, viewed_at: null, created_at: new Date().toISOString() }
     setMessages(prev => [...prev, optimistic])
-    setNewMessage(''); setReplyTo(null); setViewOnce(false)
+    setNewMessage(''); setReplyTo(null)
+
     const { data, error } = await supabase.from('messages').insert(payload).select().single()
-    if (!error && data) setMessages(prev => prev.map(m => m.id === optimistic.id ? (data as Message) : m))
+    if (!error && data) {
+      // Replace optimistic with real
+      setMessages(prev => prev.map(m => m.id === tempId ? (data as Message) : m))
+    } else if (error) {
+      // Remove optimistic on failure
+      setMessages(prev => prev.filter(m => m.id !== tempId))
+    }
     setSending(false)
   }
 
   function toggleAudio(msgId: string, url: string) {
-    if (playingAudio === msgId) { audioRefs.current[msgId]?.pause(); setPlayingAudio(null); return }
-    if (playingAudio && audioRefs.current[playingAudio]) audioRefs.current[playingAudio].pause()
+    if (playingAudio === msgId) {
+      audioRefs.current[msgId]?.pause()
+      setPlayingAudio(null)
+      return
+    }
+    if (playingAudio && audioRefs.current[playingAudio]) {
+      audioRefs.current[playingAudio].pause()
+    }
     if (!audioRefs.current[msgId]) {
       audioRefs.current[msgId] = new Audio(url)
       audioRefs.current[msgId].onended = () => setPlayingAudio(null)
     }
-    audioRefs.current[msgId].play(); setPlayingAudio(msgId)
+    audioRefs.current[msgId].play()
+    setPlayingAudio(msgId)
   }
-
-  const fmt = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 
   function renderBubble(msg: Message) {
     const isOwn = msg.sender_id === currentUserId
     const replyMsg = messages.find(m => m.id === msg.reply_to)
     const isTemp = msg.id.startsWith('temp-')
+    const isViewOnceRevealed = revealedMedia.has(msg.id)
 
     return (
-      <div key={msg.id} className={`flex ${isOwn ? 'justify-end' : 'justify-start'} mb-2 group`}>
-        <div className="max-w-[80%] space-y-1">
+      <div
+        key={msg.id}
+        style={{
+          display: 'flex',
+          justifyContent: isOwn ? 'flex-end' : 'flex-start',
+          marginBottom: 6,
+          alignItems: 'flex-end',
+          gap: 6,
+        }}
+        className="group"
+      >
+        {/* Recipient avatar */}
+        {!isOwn && (
+          <Link href={`/profile/${recipient?.id}`} style={{ flexShrink: 0, marginBottom: 2 }}>
+            <div style={{
+              width: 26, height: 26, borderRadius: '50%', overflow: 'hidden',
+              background: 'var(--grad-brand)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: 'white', fontWeight: 700, fontSize: 10,
+            }}>
+              {recipient?.avatar_url
+                ? <img src={recipient.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                : recipient?.username?.[0]?.toUpperCase()
+              }
+            </div>
+          </Link>
+        )}
+
+        <div style={{ maxWidth: '78%', display: 'flex', flexDirection: 'column', gap: 3, alignItems: isOwn ? 'flex-end' : 'flex-start' }}>
+          {/* Reply preview */}
           {msg.reply_to && replyMsg && (
-            <div
-              className={`text-xs px-3 py-1.5 rounded-xl opacity-70 ${isOwn ? 'ml-auto' : ''}`}
-              style={{ background: 'var(--surface-3)', borderLeft: '3px solid var(--nia-violet)', maxWidth: '100%' }}
-            >
-              <p className="font-bold" style={{ color: 'var(--nia-violet)' }}>
+            <div style={{
+              fontSize: 12, padding: '6px 10px', borderRadius: 10,
+              background: 'var(--surface-3)',
+              borderLeft: '3px solid var(--nia-violet)',
+              maxWidth: '100%', opacity: 0.75,
+            }}>
+              <p style={{ fontWeight: 700, color: 'var(--nia-violet)', margin: '0 0 2px' }}>
                 {replyMsg.sender_id === currentUserId ? 'You' : `@${recipient?.username}`}
               </p>
-              <p className="truncate" style={{ color: 'var(--text-secondary)' }}>
+              <p style={{ color: 'var(--text-secondary)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {replyMsg.content ?? replyMsg.file_name ?? 'Media'}
               </p>
             </div>
           )}
-          <div className="flex items-end gap-1.5">
+
+          {/* Bubble */}
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6 }}>
+            {/* Reply button — shown on hover for received */}
             {!isOwn && (
               <button
                 onClick={() => setReplyTo(msg)}
-                className="tap-sm opacity-0 group-hover:opacity-100 transition-opacity w-8 h-8 flex items-center justify-center rounded-xl shrink-0"
-                style={{ background: 'var(--surface-2)', color: 'var(--text-tertiary)' }}
+                className="opacity-0 group-hover:opacity-100 tap-sm"
+                style={{
+                  width: 28, height: 28, borderRadius: 8, border: 'none',
+                  background: 'var(--surface-2)', color: 'var(--text-tertiary)',
+                  cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  transition: 'opacity 0.15s',
+                  flexShrink: 0,
+                }}
               >
                 <Reply size={13} />
               </button>
             )}
+
             <div
-              className="rounded-2xl overflow-hidden"
-              style={isOwn
-                ? { background: 'var(--grad-brand)', color: '#fff', borderBottomRightRadius: '6px' }
-                : { background: 'var(--surface-2)', color: 'var(--text-primary)', borderBottomLeftRadius: '6px' }
-              }
+              style={{
+                borderRadius: 18,
+                overflow: 'hidden',
+                ...(isOwn
+                  ? { background: 'var(--grad-brand)', color: '#fff', borderBottomRightRadius: 5 }
+                  : { background: 'var(--surface-2)', color: 'var(--text-primary)', borderBottomLeftRadius: 5 }
+                ),
+              }}
             >
-              {msg.media_url && msg.media_type === 'image' && (
-                <img src={msg.media_url} alt="" className="block w-full max-h-80 object-cover" style={{ maxWidth: '16.25rem' }} />
+              {/* Image */}
+              {msg.media_url && (msg.media_type === 'image' || msg.media_type === 'gif') && (
+                msg.view_once && !isViewOnceRevealed ? (
+                  <button
+                    onClick={() => setRevealedMedia(prev => new Set([...prev, msg.id]))}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      padding: '12px 16px', border: 'none',
+                      background: 'transparent', cursor: 'pointer',
+                      color: isOwn ? 'rgba(255,255,255,0.85)' : 'var(--text-secondary)',
+                    }}
+                  >
+                    <Eye size={16} />
+                    <span style={{ fontSize: 13, fontWeight: 600 }}>Tap to view · disappears after</span>
+                  </button>
+                ) : (
+                  <img
+                    src={msg.media_url} alt=""
+                    style={{ display: 'block', width: '100%', maxHeight: 300, objectFit: 'cover', maxWidth: 260 }}
+                  />
+                )
               )}
-              {msg.media_url && msg.media_type === 'gif' && (
-                <img src={msg.media_url} alt="GIF" className="block w-full max-h-80" style={{ maxWidth: '16.25rem', objectFit: 'contain' }} />
-              )}
+
+              {/* Video */}
               {msg.media_url && msg.media_type === 'video' && (
-                <video src={msg.media_url} controls className="block w-full max-h-80" style={{ maxWidth: '16.25rem' }} />
+                <video src={msg.media_url} controls style={{ display: 'block', width: '100%', maxHeight: 300, maxWidth: 260 }} />
               )}
+
+              {/* Audio */}
               {msg.media_url && msg.media_type === 'audio' && (
-                <div className="flex items-center gap-3 px-4 py-3 min-w-45">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', minWidth: 160 }}>
                   <button
                     onClick={() => toggleAudio(msg.id, msg.media_url!)}
-                    className="tap-sm w-9 h-9 rounded-full flex items-center justify-center shrink-0"
-                    style={{ background: isOwn ? 'rgba(255,255,255,0.25)' : 'var(--grad-brand)' }}
+                    style={{
+                      width: 34, height: 34, borderRadius: '50%', border: 'none',
+                      cursor: 'pointer', flexShrink: 0,
+                      background: isOwn ? 'rgba(255,255,255,0.25)' : 'var(--grad-brand)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}
                   >
-                    {playingAudio === msg.id ? <Pause size={14} className="text-white" /> : <Play size={14} className="text-white" />}
+                    {playingAudio === msg.id
+                      ? <Pause size={14} color="white" />
+                      : <Play size={14} color="white" style={{ marginLeft: 2 }} />
+                    }
                   </button>
-                  <span className="text-sm">Voice message</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{
+                      height: 3, borderRadius: 2,
+                      background: isOwn ? 'rgba(255,255,255,0.3)' : 'var(--surface-3)',
+                      marginBottom: 4,
+                    }} />
+                    <span style={{ fontSize: 11, opacity: 0.65 }}>Voice message</span>
+                  </div>
                 </div>
               )}
+
+              {/* File */}
               {msg.media_url && msg.media_type === 'file' && (
-                <a href={msg.media_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 px-4 py-3 min-w-45">
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: isOwn ? 'rgba(255,255,255,0.2)' : 'rgba(168,85,247,0.1)' }}>
-                    <FileIcon size={18} style={{ color: isOwn ? '#fff' : 'var(--nia-violet)' }} />
+                <a
+                  href={msg.media_url} target="_blank" rel="noopener noreferrer"
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', textDecoration: 'none', minWidth: 160 }}
+                >
+                  <div style={{
+                    width: 38, height: 38, borderRadius: 10, flexShrink: 0,
+                    background: isOwn ? 'rgba(255,255,255,0.2)' : 'rgba(91,33,182,0.1)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    <FileIcon size={17} color={isOwn ? '#fff' : 'var(--nia-violet)'} />
                   </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold truncate max-w-35">{msg.file_name}</p>
-                    <p className="text-xs opacity-60">Tap to open</p>
+                  <div style={{ minWidth: 0 }}>
+                    <p style={{ fontSize: 13, fontWeight: 600, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 140 }}>
+                      {msg.file_name}
+                    </p>
+                    <p style={{ fontSize: 11, opacity: 0.55, margin: 0 }}>Tap to open</p>
                   </div>
                 </a>
               )}
-              {msg.content && <p className="px-4 py-2.5 text-[15px] leading-relaxed">{msg.content}</p>}
-              <div className="flex items-center gap-1 px-4 pb-2" style={{ justifyContent: isOwn ? 'flex-end' : 'flex-start' }}>
-                {msg.view_once && <Eye size={11} style={{ opacity: 0.6 }} />}
-                <span style={{ fontSize: '10px', opacity: 0.6 }}>{timeAgo(msg.created_at)}</span>
-                {isOwn && (isTemp
-                  ? <Check size={12} style={{ opacity: 0.5 }} />
-                  : msg.is_read ? <CheckCheck size={12} /> : <Check size={12} style={{ opacity: 0.6 }} />
+
+              {/* Text */}
+              {msg.content && (
+                <p style={{ padding: '9px 14px', fontSize: 14, lineHeight: 1.55, margin: 0 }}>{msg.content}</p>
+              )}
+
+              {/* Meta row */}
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 4,
+                padding: '2px 12px 8px',
+                justifyContent: isOwn ? 'flex-end' : 'flex-start',
+              }}>
+                {msg.view_once && <Eye size={10} style={{ opacity: 0.5 }} />}
+                <span style={{ fontSize: 10, opacity: 0.55 }}>{timeAgo(msg.created_at)}</span>
+                {isOwn && (
+                  isTemp
+                    ? <Check size={11} style={{ opacity: 0.4 }} />
+                    : msg.is_read
+                      ? <CheckCheck size={11} color={isOwn ? 'rgba(255,255,255,0.8)' : 'var(--nia-violet)'} />
+                      : <Check size={11} style={{ opacity: 0.55 }} />
                 )}
               </div>
             </div>
+
+            {/* Reply button for own messages */}
+            {isOwn && (
+              <button
+                onClick={() => setReplyTo(msg)}
+                className="opacity-0 group-hover:opacity-100 tap-sm"
+                style={{
+                  width: 28, height: 28, borderRadius: 8, border: 'none',
+                  background: 'var(--surface-2)', color: 'var(--text-tertiary)',
+                  cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  transition: 'opacity 0.15s',
+                  flexShrink: 0,
+                }}
+              >
+                <Reply size={13} />
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -274,49 +431,66 @@ export default function DirectMessagePage() {
   }
 
   return (
-    <div className="dm-page flex flex-col" style={{ height: 'calc(100dvh - var(--nav-top))', maxWidth: '42rem', marginTop: 'var(--nav-top)' }}>
-
+    <div style={{
+      display: 'flex', flexDirection: 'column',
+      height: 'calc(100dvh - var(--nav-top))',
+      maxWidth: '42rem', width: '100%', margin: '0 auto',
+    }}>
       {/* HEADER */}
-      <header
-        className="flex items-center gap-3 px-4 py-3 sticky top-0 z-10 shrink-0"
-        style={{ background: 'var(--surface-0)', borderBottom: '1px solid var(--border)' }}
-      >
+      <header style={{
+        display: 'flex', alignItems: 'center', gap: 12,
+        padding: '10px 14px',
+        background: 'var(--surface-0)',
+        borderBottom: '1px solid var(--border)',
+        flexShrink: 0,
+      }}>
         <button
           onClick={() => router.back()}
-          className="tap-sm w-10 h-10 flex items-center justify-center rounded-xl transition-all active:scale-90"
-          style={{ background: 'var(--surface-2)', color: 'var(--text-secondary)' }}
+          className="tap-sm"
+          style={{
+            width: 36, height: 36, borderRadius: 10, border: 'none',
+            background: 'var(--surface-2)', color: 'var(--text-secondary)',
+            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            flexShrink: 0,
+          }}
         >
-          <ArrowLeft size={18} />
+          <ArrowLeft size={17} />
         </button>
+
         {recipient && (
-          <Link href={`/profile/${recipient.id}`} className="flex items-center gap-2.5 flex-1 min-w-0">
-            <div
-              className="w-9 h-9 rounded-full overflow-hidden flex items-center justify-center text-white font-bold text-sm shrink-0"
-              style={{ background: 'var(--grad-brand)' }}
-            >
+          <Link href={`/profile/${recipient.id}`} style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, textDecoration: 'none' }}>
+            <div style={{
+              width: 36, height: 36, borderRadius: '50%', overflow: 'hidden', flexShrink: 0,
+              background: 'var(--grad-brand)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: 'white', fontWeight: 700, fontSize: 13,
+            }}>
               {recipient.avatar_url
-                ? <img src={recipient.avatar_url} alt="" className="w-full h-full object-cover" />
-                : recipient.username?.[0]?.toUpperCase()}
+                ? <img src={recipient.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                : recipient.username?.[0]?.toUpperCase()
+              }
             </div>
-            <div className="min-w-0">
-              <p className="font-bold text-sm truncate">{recipient.full_name}</p>
-              <p className="text-xs truncate" style={{ color: 'var(--text-tertiary)' }}>@{recipient.username}</p>
+            <div style={{ minWidth: 0 }}>
+              <p style={{ fontWeight: 700, fontSize: 14, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-primary)' }}>
+                {recipient.full_name || recipient.username}
+              </p>
+              <p style={{ fontSize: 12, margin: 0, color: 'var(--text-tertiary)' }}>@{recipient.username}</p>
             </div>
           </Link>
         )}
       </header>
 
       {/* MESSAGES */}
-      <div className="flex-1 overflow-y-auto px-4 py-4">
+      <div style={{ flex: 1, overflowY: 'auto', padding: '16px 14px' }}>
         {loading && (
-          <div className="flex justify-center py-8">
-            <Loader2 className="animate-spin" style={{ color: 'var(--text-tertiary)' }} />
+          <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 32 }}>
+            <Loader2 size={22} className="animate-spin" style={{ color: 'var(--text-tertiary)' }} />
           </div>
         )}
         {!loading && messages.length === 0 && (
-          <div className="text-center py-20">
-            <p className="font-bold text-lg">Say hi 👋</p>
-            <p className="text-sm mt-1" style={{ color: 'var(--text-tertiary)' }}>Start the conversation</p>
+          <div style={{ textAlign: 'center', paddingTop: 64 }}>
+            <p style={{ fontWeight: 700, fontSize: 17 }}>Say hi 👋</p>
+            <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 4 }}>Start the conversation</p>
           </div>
         )}
         {messages.map(renderBubble)}
@@ -325,106 +499,154 @@ export default function DirectMessagePage() {
 
       {/* REPLY PREVIEW */}
       {replyTo && (
-        <div
-          className="flex items-center gap-3 px-4 py-2 shrink-0"
-          style={{ background: 'var(--surface-2)', borderTop: '1px solid var(--border)' }}
-        >
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-bold" style={{ color: 'var(--nia-violet)' }}>Replying to</p>
-            <p className="text-xs truncate" style={{ color: 'var(--text-secondary)' }}>
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 10,
+          padding: '8px 14px',
+          background: 'var(--surface-2)',
+          borderTop: '1px solid var(--border)',
+          flexShrink: 0,
+        }}>
+          <div style={{
+            width: 3, borderRadius: 2, alignSelf: 'stretch',
+            background: 'var(--nia-violet)', flexShrink: 0,
+          }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--nia-violet)', margin: '0 0 2px' }}>
+              Replying to {replyTo.sender_id === currentUserId ? 'yourself' : `@${recipient?.username}`}
+            </p>
+            <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {replyTo.content ?? replyTo.file_name ?? 'Media'}
             </p>
           </div>
           <button
             onClick={() => setReplyTo(null)}
-            className="tap-sm w-7 h-7 flex items-center justify-center rounded-lg"
-            style={{ color: 'var(--text-tertiary)' }}
+            style={{
+              width: 24, height: 24, borderRadius: 6, border: 'none',
+              background: 'var(--surface-3)', color: 'var(--text-tertiary)',
+              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              flexShrink: 0,
+            }}
           >
-            <X size={15} />
+            <X size={13} />
           </button>
         </div>
       )}
 
       {/* INPUT BAR */}
-      <div className="px-3 py-3 shrink-0" style={{ borderTop: '1px solid var(--border)' }}>
+      <div style={{
+        padding: '10px 12px',
+        borderTop: '1px solid var(--border)',
+        flexShrink: 0,
+        paddingBottom: 'calc(10px + env(safe-area-inset-bottom, 0px))',
+      }}>
         {isRecording ? (
-          <div className="flex items-center gap-3 px-3 py-2 rounded-2xl" style={{ background: 'rgba(239,68,68,0.08)' }}>
-            <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-            <span className="text-red-500 font-bold font-mono flex-1">{fmt(recordDuration)}</span>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            padding: '10px 14px', borderRadius: 16,
+            background: 'rgba(239,68,68,0.07)',
+            border: '1px solid rgba(239,68,68,0.15)',
+          }}>
+            <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#ef4444', flexShrink: 0 }} className="animate-pulse" />
+            <span style={{ fontWeight: 700, fontFamily: 'monospace', color: '#ef4444', flex: 1, fontSize: 15 }}>
+              {formatDuration(recordDuration)}
+            </span>
+            <button
+              onClick={cancelRecording}
+              style={{
+                padding: '6px 14px', borderRadius: 10, border: 'none',
+                background: 'var(--surface-3)', color: 'var(--text-secondary)',
+                fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+              }}
+            >
+              Cancel
+            </button>
             <button
               onClick={stopRecording}
-              className="px-4 py-2 rounded-xl text-sm font-bold text-white"
-              style={{ background: '#ef4444' }}
+              style={{
+                padding: '6px 14px', borderRadius: 10, border: 'none',
+                background: '#ef4444', color: 'white',
+                fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+              }}
             >
               Send
             </button>
           </div>
         ) : (
-          <div className="flex items-end gap-2">
-            {/* Attachment buttons */}
-            <div className="flex gap-1 pb-0.5">
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
+            {/* Attachments */}
+            <div style={{ display: 'flex', gap: 4, paddingBottom: 2 }}>
               {[
-                { ref: fileRef, icon: ImagePlus, accept: 'image/*', type: 'image' },
-                { ref: videoRef, icon: Video, accept: 'video/*', type: 'video' },
-              ].map(({ ref, icon: Icon, accept, type }) => (
+                { ref: fileRef, Icon: ImagePlus, accept: 'image/*', type: 'image' },
+                { ref: videoRef, Icon: Video, accept: 'video/*', type: 'video' },
+              ].map(({ ref, Icon, accept, type }) => (
                 <button
                   key={type}
                   onClick={() => (ref as React.RefObject<HTMLInputElement>).current?.click()}
-                  className="tap-sm w-10 h-10 flex items-center justify-center rounded-xl transition-all active:scale-90"
-                  style={{ background: 'var(--surface-2)', color: 'var(--text-secondary)' }}
+                  className="tap-sm"
+                  style={{
+                    width: 38, height: 38, borderRadius: 10, border: 'none',
+                    background: 'var(--surface-2)', color: 'var(--text-secondary)',
+                    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}
                 >
-                  <Icon size={17} />
+                  <Icon size={16} />
                 </button>
               ))}
               <button
                 onClick={startRecording}
-                className="tap-sm w-10 h-10 flex items-center justify-center rounded-xl transition-all active:scale-90"
-                style={{ background: 'var(--surface-2)', color: 'var(--text-secondary)' }}
+                className="tap-sm"
+                style={{
+                  width: 38, height: 38, borderRadius: 10, border: 'none',
+                  background: 'var(--surface-2)', color: 'var(--text-secondary)',
+                  cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}
               >
-                <Mic size={17} />
+                <Mic size={16} />
               </button>
             </div>
 
-            {/* Text input (surface-2 bg works in both modes) */}
-            <div
-              className="flex-1 flex items-center gap-2 px-3 py-2.5 rounded-2xl"
-              style={{ background: 'var(--surface-2)' }}
-            >
+            {/* Text input */}
+            <div style={{
+              flex: 1, display: 'flex', alignItems: 'center', gap: 8,
+              background: 'var(--surface-2)', borderRadius: 20, padding: '0 14px',
+              minHeight: 40,
+            }}>
               <input
                 ref={inputRef}
                 value={newMessage}
                 onChange={e => setNewMessage(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(newMessage) } }}
                 placeholder="Message…"
-                className="flex-1 bg-transparent outline-none text-sm"
-                style={{ color: 'var(--text-primary)', fontSize: '16px' }}
+                style={{
+                  flex: 1, background: 'none', border: 'none', outline: 'none',
+                  fontSize: 14, color: 'var(--text-primary)', fontFamily: 'inherit',
+                }}
               />
-              <button
-                onClick={() => setViewOnce(v => !v)}
-                className="tap-sm shrink-0"
-                style={{ color: viewOnce ? 'var(--nia-violet)' : 'var(--text-tertiary)' }}
-                title="View once"
-              >
-                <Eye size={15} />
-              </button>
             </div>
 
             {/* Send */}
             <button
               onClick={() => sendMessage(newMessage)}
               disabled={!newMessage.trim() || sending || uploading}
-              className="tap-sm w-11 h-11 flex items-center justify-center rounded-2xl text-white transition-all active:scale-90 disabled:opacity-40"
-              style={{ background: 'var(--grad-brand)', flexShrink: 0 }}
+              className="tap-sm"
+              style={{
+                width: 40, height: 40, borderRadius: 12, border: 'none',
+                background: 'var(--grad-brand)', color: 'white', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                flexShrink: 0, opacity: !newMessage.trim() || sending || uploading ? 0.4 : 1,
+                transition: 'opacity 0.15s',
+              }}
             >
               {sending || uploading
-                ? <Loader2 size={16} className="animate-spin" />
-                : <Send size={16} />}
+                ? <Loader2 size={15} className="animate-spin" />
+                : <Send size={15} />
+              }
             </button>
           </div>
         )}
 
-        <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={e => handleFileSelect(e, 'image')} />
-        <input ref={videoRef} type="file" accept="video/*" className="hidden" onChange={e => handleFileSelect(e, 'video')} />
+        <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={e => handleFileSelect(e, 'image')} />
+        <input ref={videoRef} type="file" accept="video/*" style={{ display: 'none' }} onChange={e => handleFileSelect(e, 'video')} />
       </div>
     </div>
   )
