@@ -411,30 +411,8 @@ body {
   line-height: 1;
 }
 
-/* Stat pill strip — above actions, compact */
-.post-stat {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 0 10px;
-  border-top: 1px solid var(--divider);
-  margin-top: 12px;
-}
-.post-stat-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-tertiary);
-  background: var(--surface-2);
-  border-radius: 20px;
-  padding: 3px 9px;
-  text-decoration: none;
-  transition: background 0.12s, color 0.12s;
-  white-space: nowrap;
-}
-.post-stat-pill:hover { background: var(--surface-3); color: var(--text-primary); }
+/* Stat strip removed — counts live in action bar */
+.post-stat { display: none; }
 
 /* ════════════════════════════════════════════════════
    COMPOSE ROW

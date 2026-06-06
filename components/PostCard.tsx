@@ -503,40 +503,18 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
             </div>
           )}
 
-          {/* Stats row — only visible when counts exist */}
-          {(likesCount > 0 || commentsCount > 0 || repostsCount > 0) && (
-            <div className="post-stat">
-              {likesCount > 0 && (
-                <span className="post-stat-pill">
-                  <Heart size={11} fill="currentColor" />
-                  {likesCount}
-                </span>
-              )}
-              {commentsCount > 0 && (
-                <Link href={`/posts/${post.id}`} className="post-stat-pill" onClick={e => e.stopPropagation()}>
-                  <MessageCircle size={11} />
-                  {commentsCount}
-                </Link>
-              )}
-              {repostsCount > 0 && (
-                <span className="post-stat-pill">
-                  <Repeat2 size={11} />
-                  {repostsCount}
-                </span>
-              )}
-            </div>
-          )}
-
           {/* Action bar */}
           <div className="post-actions">
             {/* Like */}
             <button className={`post-action-btn ${liked ? 'liked' : ''}`} onClick={handleLike} title="Like">
               <Heart size={17} />
+              {likesCount > 0 && <span className="post-action-label">{likesCount}</span>}
             </button>
 
             {/* Comment */}
             <Link href={`/posts/${post.id}`} className="post-action-btn" onClick={e => e.stopPropagation()} title="Reply">
               <MessageCircle size={17} />
+              {commentsCount > 0 && <span className="post-action-label">{commentsCount}</span>}
             </Link>
 
             {/* Repost */}
@@ -547,6 +525,7 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
                 title="Repost"
               >
                 <Repeat2 size={17} />
+                {repostsCount > 0 && <span className="post-action-label">{repostsCount}</span>}
               </button>
               {showRepostMenu && (
                 <div style={{
