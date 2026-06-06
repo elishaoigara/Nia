@@ -324,11 +324,7 @@ export default function ProfilePage() {
           {/* Stats strip */}
           <div style={{
             display: 'flex', gap: 0,
-            borderRadius: 16,
-            overflow: 'hidden',
-            border: '1px solid var(--divider)',
-            marginBottom: 8,
-            margin: '0 16px',
+            margin: '0 16px 4px',
           }}>
             {[
               { label: 'Posts', value: postCount },
@@ -339,15 +335,14 @@ export default function ProfilePage() {
                 key={stat.label}
                 style={{
                   flex: 1, textAlign: 'center',
-                  padding: '12px 8px',
+                  padding: '10px 8px',
                   borderRight: i < 2 ? '1px solid var(--divider)' : 'none',
-                  background: 'var(--surface-1)',
                 }}
               >
-                <div style={{ fontWeight: 800, fontSize: 18, lineHeight: 1.1 }}>
+                <div style={{ fontWeight: 800, fontSize: 20, lineHeight: 1.1 }}>
                   {stat.value >= 1000 ? `${(stat.value / 1000).toFixed(1)}k` : stat.value}
                 </div>
-                <div style={{ fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 500, marginTop: 2 }}>
+                <div style={{ fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 500, marginTop: 3, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                   {stat.label}
                 </div>
               </div>
