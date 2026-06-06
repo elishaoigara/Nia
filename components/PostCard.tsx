@@ -532,13 +532,11 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
             {/* Like */}
             <button className={`post-action-btn ${liked ? 'liked' : ''}`} onClick={handleLike} title="Like">
               <Heart size={17} />
-              <span className="post-action-label">{likesCount > 0 ? likesCount : ''}</span>
             </button>
 
             {/* Comment */}
             <Link href={`/posts/${post.id}`} className="post-action-btn" onClick={e => e.stopPropagation()} title="Reply">
               <MessageCircle size={17} />
-              <span className="post-action-label">{commentsCount > 0 ? commentsCount : ''}</span>
             </Link>
 
             {/* Repost */}
@@ -549,7 +547,6 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
                 title="Repost"
               >
                 <Repeat2 size={17} />
-                <span className="post-action-label">{repostsCount > 0 ? repostsCount : ''}</span>
               </button>
               {showRepostMenu && (
                 <div style={{
