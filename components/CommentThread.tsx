@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import Link from 'next/link'
-import { Heart, MoreHorizontal, Play, Trash2, MessageCircle, Send, ImagePlus, X } from 'lucide-react'
+import { Heart, MoreHorizontal, Play, Trash2, MessageCircle, Send, ImagePlus, X, Loader2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 
@@ -17,6 +17,19 @@ interface CommentThreadProps {
   postId:        string
   currentUserProfile?: { avatar_url?: string | null; username?: string }
 }
+
+interface GifResult {
+  url:     string
+  preview: string
+}
+
+const TENOR_KEY = process.env.NEXT_PUBLIC_TENOR_API_KEY ?? ''
+const FALLBACK_GIFS: GifResult[] = [
+  { url: 'https://media.giphy.com/media/l0MYt5jPR6QX5pnqM/giphy.gif', preview: 'https://media.giphy.com/media/l0MYt5jPR6QX5pnqM/giphy_s.gif' },
+  { url: 'https://media.giphy.com/media/3o7TKSjRrfIPjeiVyM/giphy.gif', preview: 'https://media.giphy.com/media/3o7TKSjRrfIPjeiVyM/giphy_s.gif' },
+  { url: 'https://media.giphy.com/media/26ufdipQqU2lhNA4g/giphy.gif',  preview: 'https://media.giphy.com/media/26ufdipQqU2lhNA4g/giphy_s.gif' },
+  { url: 'https://media.giphy.com/media/l46CyJmS9KUbokzsI/giphy.gif',  preview: 'https://media.giphy.com/media/l46CyJmS9KUbokzsI/giphy_s.gif' },
+]
 
 function timeAgo(date: string) {
   const s = Math.floor((Date.now() - new Date(date).getTime()) / 1000)
@@ -72,13 +85,7 @@ function CommentMediaGrid({ media }: { media: CommentMedia[] }) {
 
 /* ── Inline reply composer ─────────────────────────── */
 function InlineReplyBox({
-  postId,
-  parentId,
-  replyingTo,
-  currentUserId,
-  currentUserProfile,
-  onCancel,
-  onSuccess,
+  postId, parentId, replyingTo, currentUserId, currentUserProfile, onCancel, onSuccess,
 }: {
   postId:              string
   parentId:            string
@@ -89,19 +96,67 @@ function InlineReplyBox({
   onSuccess:           () => void
 }) {
   const supabase  = createClient()
-  const [text,    setText]    = useState(`@${replyingTo} `)
-  const [loading, setLoading] = useState(false)
-  const [error,   setError]   = useState('')
-  const [media,   setMedia]   = useState<{ file: File; preview: string }[]>([])
-  const textRef  = useRef<HTMLTextAreaElement>(null)
-  const imageRef = useRef<HTMLInputElement>(null)
+  const [text,       setText]       = useState(`@${replyingTo} `)
+  const [loading,    setLoading]    = useState(false)
+  const [error,      setError]      = useState('')
+  const [media,      setMedia]      = useState<{ file?: File; preview: string; type: 'image' | 'gif'; gifUrl?: string }[]>([])
+  const [showGifs,   setShowGifs]   = useState(false)
+  const [gifQuery,   setGifQuery]   = useState('')
+  const [gifResults, setGifResults] = useState<GifResult[]>([])
+  const [gifLoading, setGifLoading] = useState(false)
+
+  const textRef     = useRef<HTMLTextAreaElement>(null)
+  const imageRef    = useRef<HTMLInputElement>(null)
+  const gifPanelRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     textRef.current?.focus()
-    // place cursor at end
     const len = textRef.current?.value.length ?? 0
     textRef.current?.setSelectionRange(len, len)
   }, [])
+
+  // Load GIFs when panel opens or query changes
+  useEffect(() => {
+    if (!showGifs) return
+    searchGifs(gifQuery)
+  }, [showGifs, gifQuery]) // eslint-disable-line
+
+  // Close GIF panel on outside click
+  useEffect(() => {
+    if (!showGifs) return
+    function handle(e: MouseEvent) {
+      if (gifPanelRef.current && !gifPanelRef.current.contains(e.target as Node)) setShowGifs(false)
+    }
+    document.addEventListener('mousedown', handle)
+    return () => document.removeEventListener('mousedown', handle)
+  }, [showGifs])
+
+  async function searchGifs(q: string) {
+    setGifLoading(true)
+    try {
+      const url = q
+        ? `https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(q)}&key=${TENOR_KEY}&limit=12&media_filter=gif,tinygif`
+        : `https://tenor.googleapis.com/v2/featured?key=${TENOR_KEY}&limit=12&media_filter=gif,tinygif`
+      const res = await fetch(url)
+      if (!res.ok) { setGifResults(FALLBACK_GIFS); return }
+      const json = await res.json()
+      const results: GifResult[] = (json.results ?? []).map((r: any) => ({
+        url:     r.media_formats?.gif?.url     ?? r.media_formats?.tinygif?.url ?? '',
+        preview: r.media_formats?.tinygif?.url ?? r.media_formats?.gif?.url     ?? '',
+      })).filter((r: GifResult) => r.url)
+      setGifResults(results.length ? results : FALLBACK_GIFS)
+    } catch {
+      setGifResults(FALLBACK_GIFS)
+    } finally {
+      setGifLoading(false)
+    }
+  }
+
+  function pickGif(gif: GifResult) {
+    // Only one GIF at a time, replaces any existing GIF
+    setMedia(prev => [...prev.filter(m => m.type !== 'gif'), { preview: gif.preview, type: 'gif', gifUrl: gif.url }])
+    setShowGifs(false)
+  }
 
   function autoGrow() {
     const el = textRef.current
@@ -112,52 +167,63 @@ function InlineReplyBox({
 
   function addImages(files: FileList | null) {
     if (!files) return
-    const items = Array.from(files).slice(0, 4 - media.length)
-    setMedia(prev => [...prev, ...items.map(f => ({ file: f, preview: URL.createObjectURL(f) }))])
+    const canAdd = 4 - media.filter(m => m.type === 'image').length
+    const items  = Array.from(files).slice(0, canAdd)
+    setMedia(prev => [...prev, ...items.map(f => ({ file: f, preview: URL.createObjectURL(f), type: 'image' as const }))])
     if (imageRef.current) imageRef.current.value = ''
   }
 
   function removeMedia(i: number) {
-    setMedia(prev => { URL.revokeObjectURL(prev[i].preview); return prev.filter((_, j) => j !== i) })
+    setMedia(prev => {
+      if (prev[i].file) URL.revokeObjectURL(prev[i].preview)
+      return prev.filter((_, j) => j !== i)
+    })
   }
 
-  const canSend = !loading && text.replace(`@${replyingTo}`, '').trim().length > 0 || media.length > 0
+  const hasGif     = media.some(m => m.type === 'gif')
+  const imageCount = media.filter(m => m.type === 'image').length
+  const canSend    = !loading && (text.replace(`@${replyingTo}`, '').trim().length > 0 || media.length > 0)
 
   async function submit() {
     if (!canSend) return
     setLoading(true); setError('')
     try {
-      let media_url: string | null = null
-      let media_type: string | null = null
+      let media_url:   string | null = null
+      let media_type:  string | null = null
       let extra_media: { url: string; type: string }[] = []
 
       if (media.length > 0) {
         const uploaded: { url: string; type: string }[] = []
         for (const item of media) {
-          const ext  = item.file.name.split('.').pop() ?? 'jpg'
-          const path = `${currentUserId}/reply_${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`
-          const { error: upErr } = await supabase.storage.from('post-media').upload(path, item.file, { contentType: item.file.type })
-          if (upErr) { setError('Upload failed'); setLoading(false); return }
-          uploaded.push({ url: supabase.storage.from('post-media').getPublicUrl(path).data.publicUrl, type: 'image' })
+          if (item.type === 'gif' && item.gifUrl) {
+            uploaded.push({ url: item.gifUrl, type: 'gif' })
+          } else if (item.file) {
+            const ext  = item.file.name.split('.').pop() ?? 'jpg'
+            const path = `${currentUserId}/reply_${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`
+            const { error: upErr } = await supabase.storage.from('post-media').upload(path, item.file, { contentType: item.file.type })
+            if (upErr) { setError('Upload failed'); setLoading(false); return }
+            uploaded.push({ url: supabase.storage.from('post-media').getPublicUrl(path).data.publicUrl, type: 'image' })
+          }
         }
-        media_url   = uploaded[0].url
-        media_type  = uploaded[0].type
-        extra_media = uploaded.slice(1)
+        if (uploaded.length > 0) {
+          media_url   = uploaded[0].url
+          media_type  = uploaded[0].type
+          extra_media = uploaded.slice(1)
+        }
       }
 
       const payload: any = {
-        post_id:    postId,
-        user_id:    currentUserId,
-        content:    text.trim(),
+        post_id:     postId,
+        user_id:     currentUserId,
+        content:     text.trim(),
         media_url,
         media_type,
         extra_media: extra_media.length ? extra_media : null,
-        parent_id:  parentId,
+        parent_id:   parentId,
       }
 
       const { error: insertErr } = await supabase.from('comments').insert(payload)
       if (insertErr) {
-        // If parent_id column doesn't exist yet, retry without it
         if (insertErr.code === '42703') {
           delete payload.parent_id
           const { error: retryErr } = await supabase.from('comments').insert(payload)
@@ -167,7 +233,7 @@ function InlineReplyBox({
         }
       }
 
-      media.forEach(m => URL.revokeObjectURL(m.preview))
+      media.forEach(m => { if (m.file) URL.revokeObjectURL(m.preview) })
       onSuccess()
     } catch (e) {
       console.error(e); setError('Something went wrong')
@@ -180,11 +246,10 @@ function InlineReplyBox({
 
   return (
     <div className="inline-reply-box">
-      {/* thread line on left */}
       <div className="inline-reply-line" />
 
       <div className="inline-reply-inner">
-        {/* avatar */}
+        {/* Avatar */}
         <div className="inline-reply-avatar">
           {currentUserProfile?.avatar_url
             ? <img src={currentUserProfile.avatar_url} alt="" />
@@ -192,7 +257,7 @@ function InlineReplyBox({
           }
         </div>
 
-        <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
           {error && <p style={{ fontSize: 12, color: '#f43f5e', margin: '0 0 4px' }}>{error}</p>}
 
           <textarea
@@ -206,13 +271,16 @@ function InlineReplyBox({
             placeholder={`Reply to @${replyingTo}…`}
           />
 
-          {/* media previews */}
+          {/* Media previews */}
           {media.length > 0 && (
-            <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
               {media.map((m, i) => (
                 <div key={i} style={{ position: 'relative' }}>
-                  <img src={m.preview} alt="" style={{ width: 56, height: 56, borderRadius: 8, objectFit: 'cover', border: '1px solid var(--border)' }} />
-                  <button onClick={() => removeMedia(i)} style={{ position: 'absolute', top: -4, right: -4, width: 16, height: 16, borderRadius: '50%', background: '#0f172a', border: '1.5px solid #fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>
+                  <img src={m.preview} alt="" style={{ width: 64, height: 64, borderRadius: 10, objectFit: 'cover', border: '1px solid var(--border)', display: 'block' }} />
+                  {m.type === 'gif' && (
+                    <span style={{ position: 'absolute', bottom: 3, left: 3, background: 'rgba(0,0,0,0.6)', color: '#fff', fontSize: 9, fontWeight: 800, borderRadius: 4, padding: '1px 4px', letterSpacing: 0.5 }}>GIF</span>
+                  )}
+                  <button onClick={() => removeMedia(i)} style={{ position: 'absolute', top: -4, right: -4, width: 17, height: 17, borderRadius: '50%', background: '#0f172a', border: '1.5px solid #fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>
                     <X size={9} color="#fff" />
                   </button>
                 </div>
@@ -220,21 +288,83 @@ function InlineReplyBox({
             </div>
           )}
 
+          {/* GIF picker panel */}
+          {showGifs && (
+            <div ref={gifPanelRef} style={{
+              position: 'absolute', bottom: '100%', left: 0, right: 0, marginBottom: 6,
+              background: 'var(--surface-1)', border: '1px solid var(--border)',
+              borderRadius: 14, padding: 10, boxShadow: '0 -8px 24px rgba(0,0,0,0.2)', zIndex: 60,
+            }}>
+              <input
+                type="text"
+                placeholder="Search GIFs…"
+                value={gifQuery}
+                onChange={e => setGifQuery(e.target.value)}
+                style={{
+                  width: '100%', boxSizing: 'border-box', background: 'var(--surface-2)',
+                  border: 'none', borderRadius: 20, padding: '7px 12px',
+                  fontSize: 13, color: 'var(--text-primary)', outline: 'none',
+                  marginBottom: 8, fontFamily: 'inherit',
+                }}
+              />
+              {gifLoading ? (
+                <div style={{ display: 'flex', justifyContent: 'center', padding: 12 }}>
+                  <Loader2 size={18} className="animate-spin" style={{ color: 'var(--text-tertiary)' }} />
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 3, maxHeight: 180, overflowY: 'auto' }}>
+                  {gifResults.map((g, i) => (
+                    <button key={i} onClick={() => pickGif(g)} style={{
+                      border: 'none', padding: 0, cursor: 'pointer', borderRadius: 8,
+                      overflow: 'hidden', aspectRatio: '1', background: 'var(--surface-2)',
+                    }}>
+                      <img src={g.preview} alt="GIF" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Action row */}
           <div className="inline-reply-actions">
             <input ref={imageRef} type="file" accept="image/*" multiple hidden onChange={e => addImages(e.target.files)} />
-            <button onClick={() => imageRef.current?.click()} className="inline-reply-btn" aria-label="Add image" title="Add image">
+
+            {/* Image button — disabled when GIF is attached */}
+            <button
+              onClick={() => imageRef.current?.click()}
+              disabled={hasGif || imageCount >= 4}
+              className="inline-reply-btn"
+              aria-label="Add image"
+              title={hasGif ? "Remove GIF to add images" : "Add image"}
+              style={{ opacity: (hasGif || imageCount >= 4) ? 0.4 : 1 }}
+            >
               <ImagePlus size={15} />
             </button>
+
+            {/* GIF button — disabled when images are attached */}
+            <button
+              onClick={() => setShowGifs(p => !p)}
+              disabled={imageCount > 0}
+              className="inline-reply-btn"
+              aria-label="Add GIF"
+              title={imageCount > 0 ? "Remove images to add a GIF" : "Add GIF"}
+              style={{
+                fontWeight: 800, fontSize: 11,
+                color: showGifs ? 'var(--nia-violet)' : 'var(--text-tertiary)',
+                opacity: imageCount > 0 ? 0.4 : 1,
+              }}
+            >
+              GIF
+            </button>
+
             <div style={{ flex: 1 }} />
+
             <button onClick={onCancel} className="inline-reply-btn" style={{ fontSize: 12, padding: '4px 10px', borderRadius: 20 }}>
               Cancel
             </button>
-            <button
-              onClick={submit}
-              disabled={!canSend}
-              className="inline-reply-send"
-            >
-              {loading ? '…' : 'Reply'}
+            <button onClick={submit} disabled={!canSend} className="inline-reply-send">
+              {loading ? <Loader2 size={13} className="animate-spin" /> : 'Reply'}
             </button>
           </div>
         </div>
