@@ -86,6 +86,13 @@ export default async function PostDetailPage({ params }: Props) {
 
   if (!post) notFound()
 
+  // Fetch current user's profile for the inline reply avatar
+  const { data: currentProfile } = await supabase
+    .from('profiles')
+    .select('username, avatar_url')
+    .eq('id', user.id)
+    .single()
+
   const comments = ((post.comments ?? []) as any[]).sort(
     (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
   )
@@ -131,6 +138,7 @@ export default async function PostDetailPage({ params }: Props) {
           comments={comments}
           currentUserId={user.id}
           postId={post.id}
+          currentUserProfile={currentProfile ?? undefined}
         />
       )}
 
