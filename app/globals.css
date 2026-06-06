@@ -7,32 +7,37 @@
 
 /* ── Color Tokens ──────────────────────────────────── */
 :root {
-  --nia-violet: #8B5CF6;
-  --nia-coral:  #FF6B6B;
-  --nia-sky:    #38BDF8;
-  --nia-pink:   #F472B6;
-  --nia-mint:   #4ECDC4;
-  --nia-amber:  #F59E0B;
+  /* Single signature accent — deep indigo */
+  --nia-accent:  #4F46E5;
+  --nia-accent-2: #6366F1; /* slightly lighter for hover/glow */
 
-  /* Surfaces — light */
-  --surface-0: #FFFFFF;
-  --surface-1: #F8FAFC;
-  --surface-2: #F1F5F9;
-  --surface-3: #E2E8F0;
+  /* Kept for semantic use only */
+  --nia-violet: #4F46E5;   /* alias → accent */
+  --nia-coral:  #E84B5A;   /* like/destructive only */
+  --nia-sky:    #4F46E5;   /* alias → accent */
+  --nia-pink:   #4F46E5;   /* alias → accent */
+  --nia-mint:   #4F46E5;   /* alias → accent */
+  --nia-amber:  #F59E0B;   /* bookmark only */
+
+  /* Surfaces — light: warm white instead of cold */
+  --surface-0: #FAFAF9;
+  --surface-1: #F5F5F4;
+  --surface-2: #EEEEEC;
+  --surface-3: #E4E4E0;
 
   /* Text */
-  --text-primary:   #0F172A;
-  --text-secondary: #475569;
-  --text-tertiary:  #94A3B8;
+  --text-primary:   #111110;
+  --text-secondary: #3D3D3A;
+  --text-tertiary:  #8C8C87;
 
   /* Borders */
-  --border:   #E2E8F0;
-  --divider:  rgba(0, 0, 0, 0.07);
+  --border:   #E4E4E0;
+  --divider:  rgba(0, 0, 0, 0.06);
 
-  /* Gradients */
-  --grad-brand: linear-gradient(135deg, #8B5CF6, #FF6B6B);
-  --grad-cool:  linear-gradient(135deg, #8B5CF6, #38BDF8);
-  --grad-warm:  linear-gradient(135deg, #FF6B6B, #F59E0B);
+  /* Gradients — single direction, no rainbow */
+  --grad-brand: linear-gradient(135deg, #4F46E5, #6366F1);
+  --grad-cool:  linear-gradient(135deg, #4F46E5, #818CF8);
+  --grad-warm:  linear-gradient(135deg, #6366F1, #4F46E5);
 
   /* Layout */
   --nav-top:    3.5rem;   /* 56px */
@@ -45,17 +50,17 @@
 
 /* ── Dark Mode ─────────────────────────────────────── */
 .dark {
-  --surface-0: #0B1120;
-  --surface-1: #1E293B;
-  --surface-2: #334155;
-  --surface-3: #475569;
+  --surface-0: #0C0C0B;
+  --surface-1: #161614;
+  --surface-2: #222220;
+  --surface-3: #2E2E2B;
 
-  --text-primary:   #F1F5F9;
-  --text-secondary: #94A3B8;
-  --text-tertiary:  #64748B;
+  --text-primary:   #EEEEE9;
+  --text-secondary: #A8A89F;
+  --text-tertiary:  #6B6B64;
 
-  --border:  #334155;
-  --divider: rgba(255, 255, 255, 0.06);
+  --border:  #2E2E2B;
+  --divider: rgba(255, 255, 255, 0.05);
 }
 
 /* ── Base Reset ────────────────────────────────────── */
@@ -911,8 +916,8 @@ body {
   cursor: pointer;
 }
 .card-hover:hover {
-  border-color: var(--nia-violet);
-  box-shadow: 0 4px 24px rgba(139, 92, 246, 0.08);
+  border-color: var(--nia-accent);
+  box-shadow: 0 4px 24px rgba(79, 70, 229, 0.08);
   transform: translateY(-1px);
 }
 
@@ -1025,7 +1030,7 @@ body {
 ::-webkit-scrollbar-thumb:hover { background: var(--text-tertiary); }
 
 /* ── Selection ─────────────────────────────────────── */
-::selection { background: rgba(139, 92, 246, 0.2); color: var(--text-primary); }
+::selection { background: rgba(79, 70, 229, 0.15); color: var(--text-primary); }
 
 /* ════════════════════════════════════════════════════
    BOOKMARKS
