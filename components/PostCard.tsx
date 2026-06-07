@@ -229,8 +229,19 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
       await supabase.from('likes').delete().eq('post_id', post.id).eq('user_id', currentUserId);
     } else {
       await supabase.from('likes').insert({ post_id: post.id, user_id: currentUserId });
+      // Notify post owner — skip self-like
+      if (post.user_id && post.user_id !== currentUserId) {
+        await supabase.from('notifications').insert({
+          user_id: post.user_id,
+          actor_id: currentUserId,
+          type: 'like',
+          post_id: post.id,
+          message: `${profile?.username ?? 'Someone'} liked your post`,
+          is_read: false,
+        });
+      }
     }
-  }, [currentUserId, liked, post.id]); // eslint-disable-line
+  }, [currentUserId, liked, post.id, post.user_id, profile?.username]); // eslint-disable-line
 
   const handleRepost = useCallback(async () => {
     if (!currentUserId) return;
@@ -241,8 +252,19 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
       await supabase.from('reposts').delete().eq('post_id', post.id).eq('user_id', currentUserId);
     } else {
       await supabase.from('reposts').insert({ post_id: post.id, user_id: currentUserId });
+      // Notify post owner — skip self-repost
+      if (post.user_id && post.user_id !== currentUserId) {
+        await supabase.from('notifications').insert({
+          user_id: post.user_id,
+          actor_id: currentUserId,
+          type: 'repost',
+          post_id: post.id,
+          message: `${profile?.username ?? 'Someone'} reposted your post`,
+          is_read: false,
+        });
+      }
     }
-  }, [currentUserId, reposted, post.id]); // eslint-disable-line
+  }, [currentUserId, reposted, post.id, post.user_id, profile?.username]); // eslint-disable-line
 
   const handleBookmark = useCallback(async () => {
     if (!currentUserId) return;

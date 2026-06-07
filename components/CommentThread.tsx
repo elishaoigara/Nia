@@ -15,6 +15,7 @@ interface CommentThreadProps {
   comments:      any[]
   currentUserId: string
   postId:        string
+  postOwnerId?:  string
   currentUserProfile?: { avatar_url?: string | null; username?: string }
 }
 
@@ -85,13 +86,14 @@ function CommentMediaGrid({ media }: { media: CommentMedia[] }) {
 
 /* ── Inline reply composer ─────────────────────────── */
 function InlineReplyBox({
-  postId, parentId, replyingTo, currentUserId, currentUserProfile, onCancel, onSuccess,
+  postId, parentId, replyingTo, currentUserId, currentUserProfile, postOwnerId, onCancel, onSuccess,
 }: {
   postId:              string
   parentId:            string
   replyingTo:          string
   currentUserId:       string
   currentUserProfile?: { avatar_url?: string | null; username?: string }
+  postOwnerId?:        string
   onCancel:            () => void
   onSuccess:           () => void
 }) {
@@ -231,6 +233,18 @@ function InlineReplyBox({
         } else {
           setError(insertErr.message); setLoading(false); return
         }
+      }
+
+      // Notify post owner — skip self-comment
+      if (postOwnerId && postOwnerId !== currentUserId) {
+        await supabase.from('notifications').insert({
+          user_id: postOwnerId,
+          actor_id: currentUserId,
+          type: 'comment',
+          post_id: postId,
+          message: `${currentUserProfile?.username ?? 'Someone'} commented on your post`,
+          is_read: false,
+        })
       }
 
       media.forEach(m => { if (m.file) URL.revokeObjectURL(m.preview) })
@@ -381,6 +395,7 @@ function CommentRow({
   currentUserId,
   currentUserProfile,
   postId,
+  postOwnerId,
   depth,
 }: {
   comment:             any
@@ -389,6 +404,7 @@ function CommentRow({
   currentUserId:       string
   currentUserProfile?: { avatar_url?: string | null; username?: string }
   postId:              string
+  postOwnerId?:        string
   depth:               number
 }) {
   const supabase  = createClient()
@@ -543,6 +559,7 @@ function CommentRow({
           replyingTo={profile?.username ?? 'user'}
           currentUserId={currentUserId}
           currentUserProfile={currentUserProfile}
+          postOwnerId={postOwnerId}
           onCancel={() => setReplying(false)}
           onSuccess={() => { setReplying(false); router.refresh() }}
         />
@@ -560,6 +577,7 @@ function CommentRow({
               currentUserId={currentUserId}
               currentUserProfile={currentUserProfile}
               postId={postId}
+              postOwnerId={postOwnerId}
               depth={canNestDeeper ? depth + 1 : depth}
             />
           ))}
@@ -593,7 +611,7 @@ function buildTree(comments: any[]): any[] {
 }
 
 /* ── Export ────────────────────────────────────────── */
-export default function CommentThread({ comments, currentUserId, postId, currentUserProfile }: CommentThreadProps) {
+export default function CommentThread({ comments, currentUserId, postId, postOwnerId, currentUserProfile }: CommentThreadProps) {
   const tree = buildTree(comments)
 
   return (
@@ -607,6 +625,7 @@ export default function CommentThread({ comments, currentUserId, postId, current
           currentUserId={currentUserId}
           currentUserProfile={currentUserProfile}
           postId={postId}
+          postOwnerId={postOwnerId}
           depth={0}
         />
       ))}

@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation'
 interface ReplyBarProps {
   postId:        string
   currentUserId: string
+  postOwnerId?:  string
 }
 
 const MAX_TEXT     = 500
@@ -35,7 +36,7 @@ const FALLBACK_GIFS: GifResult[] = [
   { url: 'https://media.giphy.com/media/l46CyJmS9KUbokzsI/giphy.gif',  preview: 'https://media.giphy.com/media/l46CyJmS9KUbokzsI/giphy_s.gif' },
 ]
 
-export default function ReplyBar({ postId, currentUserId }: ReplyBarProps) {
+export default function ReplyBar({ postId, currentUserId, postOwnerId }: ReplyBarProps) {
   const supabase = createClient()
   const router   = useRouter()
 
@@ -186,6 +187,18 @@ export default function ReplyBar({ postId, currentUserId }: ReplyBarProps) {
         extra_media: extra_media.length ? extra_media : null,
       })
       if (insertErr) { setError(insertErr.message); setLoading(false); return }
+
+      // Notify post owner — skip self-comment
+      if (postOwnerId && postOwnerId !== currentUserId) {
+        await supabase.from('notifications').insert({
+          user_id:  postOwnerId,
+          actor_id: currentUserId,
+          type:     'comment',
+          post_id:  postId,
+          message:  `${profile?.username ?? 'Someone'} commented on your post`,
+          is_read:  false,
+        })
+      }
 
       media.forEach(m => { if (m.file && m.preview) URL.revokeObjectURL(m.preview) })
       setText('')

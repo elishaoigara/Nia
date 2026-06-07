@@ -48,6 +48,21 @@ export default function FollowButton({
           })
           
         if (error) throw error
+
+        // Notify the followed user
+        const { data: actorProfile } = await supabase
+          .from('profiles')
+          .select('username')
+          .eq('id', currentUserId)
+          .single()
+        await supabase.from('notifications').insert({
+          user_id: targetUserId,
+          actor_id: currentUserId,
+          type: 'follow',
+          post_id: null,
+          message: `${actorProfile?.username ?? 'Someone'} started following you`,
+          is_read: false,
+        })
       }
     } catch (err) {
       console.error('Follow operation failed:', err)

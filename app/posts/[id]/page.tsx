@@ -138,6 +138,7 @@ export default async function PostDetailPage({ params }: Props) {
           comments={comments}
           currentUserId={user.id}
           postId={post.id}
+          postOwnerId={post.user_id}
           currentUserProfile={currentProfile ?? undefined}
         />
       )}
@@ -146,7 +147,7 @@ export default async function PostDetailPage({ params }: Props) {
       <div style={{ height: 80 }} />
 
       {/* Sticky reply input */}
-      <ReplyBar postId={post.id} currentUserId={user.id} />
+      <ReplyBar postId={post.id} currentUserId={user.id} postOwnerId={post.user_id} />
     </div>
   )
 }
