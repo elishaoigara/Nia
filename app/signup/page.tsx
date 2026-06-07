@@ -1,6 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { getAppUrl } from '@/lib/app-url'
 import Link from 'next/link'
 import { Loader2, ArrowRight, CheckCircle2 } from 'lucide-react'
 
@@ -30,7 +31,7 @@ export default function SignupPage() {
       email: email.trim(),
       password,
       options: {
-      emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL ?? window.location.origin}/auth/callback`,
+        emailRedirectTo: `${getAppUrl()}/auth/callback`,
       },
     })
 
