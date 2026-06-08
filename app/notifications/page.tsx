@@ -45,38 +45,93 @@ function NotifIcon({ type }: { type: string }) {
   }
 }
 
+// Three query strategies tried in order:
+// 1. Explicit FK hint  — works if the constraint name matches exactly
+// 2. Generic hint      — works when Supabase can infer the join unambiguously
+// 3. No join at all    — always works; actor data hydrated in a second query
+const SELECT_WITH_FK     = `id, type, message, is_read, created_at, actor_id, post_id, actor:profiles!notifications_actor_id_fkey(username, avatar_url, full_name)`;
+const SELECT_GENERIC_JOIN= `id, type, message, is_read, created_at, actor_id, post_id, actor:profiles(username, avatar_url, full_name)`;
+const SELECT_BASE        = `id, type, message, is_read, created_at, actor_id, post_id`;
+
 export default function Notifications() {
-  const supabase = createClient();
+  // Stable client — never recreated, preserves auth state across renders
+  const supabaseRef = useRef(createClient());
+  const supabase = supabaseRef.current;
+
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [userId, setUserId] = useState<string | null>(null);
+  const [loading, setLoading]             = useState(true);
+  const [fetchError, setFetchError]       = useState<string | null>(null);
+  const [userId, setUserId]               = useState<string | null>(null);
   const markedRef = useRef<Set<string>>(new Set());
 
+  // Hydrate actor data for notifications that came back without a join
+  const hydrateActors = useCallback(async (items: Notification[]): Promise<Notification[]> => {
+    const ids = [...new Set(items.map(n => n.actor_id).filter(Boolean))] as string[];
+    if (ids.length === 0) return items;
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, username, avatar_url, full_name')
+      .in('id', ids);
+    if (!profiles) return items;
+    const map = Object.fromEntries(profiles.map((p: any) => [p.id, p]));
+    return items.map(n => ({
+      ...n,
+      actor: n.actor_id ? map[n.actor_id] ?? n.actor : n.actor,
+    }));
+  }, [supabase]);
+
   const fetchNotifications = useCallback(async (uid: string) => {
-    const { data, error } = await supabase
+    setFetchError(null);
+
+    // Strategy 1 — explicit FK alias
+    const { data: d1, error: e1 } = await supabase
       .from('notifications')
-      .select(`
-        id, type, message, is_read, created_at, actor_id, post_id,
-        actor:profiles!notifications_actor_id_fkey(username, avatar_url, full_name)
-      `)
+      .select(SELECT_WITH_FK)
       .eq('user_id', uid)
       .order('created_at', { ascending: false })
       .limit(50);
 
-    if (error) {
-      // Fallback: select without join if FK alias fails (schema variance)
-      const { data: fallback } = await supabase
-        .from('notifications')
-        .select('id, type, message, is_read, created_at, actor_id, post_id')
-        .eq('user_id', uid)
-        .order('created_at', { ascending: false })
-        .limit(50);
-      setNotifications((fallback as Notification[]) ?? []);
-    } else {
-      setNotifications((data as unknown as Notification[]) ?? []);
+    if (!e1 && d1 && d1.length >= 0) {
+      setNotifications(d1 as unknown as Notification[]);
+      setLoading(false);
+      return;
     }
+
+    // Strategy 2 — generic join hint (no explicit FK name)
+    const { data: d2, error: e2 } = await supabase
+      .from('notifications')
+      .select(SELECT_GENERIC_JOIN)
+      .eq('user_id', uid)
+      .order('created_at', { ascending: false })
+      .limit(50);
+
+    if (!e2 && d2 && d2.length >= 0) {
+      setNotifications(d2 as unknown as Notification[]);
+      setLoading(false);
+      return;
+    }
+
+    // Strategy 3 — base columns only, then hydrate actors in a separate query
+    const { data: d3, error: e3 } = await supabase
+      .from('notifications')
+      .select(SELECT_BASE)
+      .eq('user_id', uid)
+      .order('created_at', { ascending: false })
+      .limit(50);
+
+    if (!e3 && d3) {
+      const hydrated = await hydrateActors(d3 as Notification[]);
+      setNotifications(hydrated);
+      setLoading(false);
+      return;
+    }
+
+    // All three strategies failed — surface the error
+    const msg = e3?.message ?? e2?.message ?? e1?.message ?? 'Unknown error';
+    console.error('[Notifications] All fetch strategies failed:', { e1, e2, e3 });
+    setFetchError(msg);
     setLoading(false);
-  }, [supabase]);
+  }, [supabase, hydrateActors]);
 
   // Mark all unread as read
   const markAllRead = useCallback(async (uid: string, items: Notification[]) => {
@@ -89,7 +144,6 @@ export default function Notifications() {
       .update({ is_read: true })
       .in('id', ids)
       .eq('user_id', uid);
-    // Optimistically update local state
     setNotifications(prev =>
       prev.map(n => ids.includes(n.id) ? { ...n, is_read: true } : n)
     );
@@ -99,8 +153,9 @@ export default function Notifications() {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) { setLoading(false); return; }
       setUserId(user.id);
+
       fetchNotifications(user.id).then(() => {
-        // Mark all as read after a brief delay so user sees the unread state first
+        // Show unread state briefly, then mark all read
         setTimeout(() => {
           setNotifications(prev => {
             markAllRead(user.id, prev);
@@ -109,15 +164,18 @@ export default function Notifications() {
         }, 1500);
       });
 
-      // Real-time: add new notifications to top of list
+      // Real-time: re-fetch the single inserted row with actor data
+      // (payload.new from postgres_changes never includes joined relations)
       const channel = supabase
         .channel(`notifs-page-${user.id}`)
         .on(
           'postgres_changes',
           { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` },
-          (payload) => {
-            const newNotif = payload.new as Notification;
-            setNotifications(prev => [newNotif, ...prev]);
+          async (payload) => {
+            const raw = payload.new as Notification;
+            // Try to hydrate actor, fall back to raw row
+            const [hydrated] = await hydrateActors([raw]);
+            setNotifications(prev => [hydrated, ...prev]);
           }
         )
         .subscribe();
@@ -126,6 +184,7 @@ export default function Notifications() {
     });
   }, []); // eslint-disable-line
 
+  /* ── Loading skeleton ── */
   if (loading) {
     return (
       <div className="max-w-xl mx-auto p-4">
@@ -139,6 +198,7 @@ export default function Notifications() {
     );
   }
 
+  /* ── Not logged in ── */
   if (!userId) {
     return (
       <div className="max-w-xl mx-auto p-4">
@@ -147,6 +207,26 @@ export default function Notifications() {
     );
   }
 
+  /* ── Fetch error ── */
+  if (fetchError) {
+    return (
+      <div className="max-w-xl mx-auto p-4">
+        <h1 className="text-2xl font-bold mb-4">Notifications</h1>
+        <div className="flex flex-col items-center gap-3 py-16 text-(--text-secondary)">
+          <Bell size={40} strokeWidth={1.5} />
+          <p className="text-sm">Could not load notifications</p>
+          <button
+            className="text-xs underline text-(--text-tertiary)"
+            onClick={() => { setLoading(true); fetchNotifications(userId); }}
+          >
+            Try again
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  /* ── Main render ── */
   return (
     <div className="max-w-xl mx-auto p-4">
       <h1 className="text-2xl font-bold mb-4">Notifications</h1>
@@ -165,7 +245,7 @@ export default function Notifications() {
               ? `/profile/${n.actor_id}`
               : '#';
 
-            const avatarUrl = n.actor?.avatar_url;
+            const avatarUrl  = n.actor?.avatar_url;
             const displayName = n.actor?.full_name || n.actor?.username || 'Someone';
 
             return (
@@ -175,7 +255,7 @@ export default function Notifications() {
                   className="flex items-start gap-3 p-3 rounded-xl transition-colors hover:bg-(--surface-2)"
                   style={!n.is_read ? { background: 'rgba(91,33,182,0.05)' } : {}}
                 >
-                  {/* Avatar or icon */}
+                  {/* Avatar or fallback initial */}
                   <div className="relative shrink-0">
                     {avatarUrl ? (
                       <img
@@ -199,9 +279,10 @@ export default function Notifications() {
                     </span>
                   </div>
 
-                  {/* Content */}
+                  {/* Message + timestamp */}
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm text-(--text-primary)ing-snug">
+                    {/* FIX: was "text-(--text-primary)ing-snug" — leading-snug was fused onto the color class */}
+                    <p className="text-sm text-(--text-primary) leading-snug">
                       {n.message}
                     </p>
                     <p className="text-xs text-(--text-tertiary) mt-0.5">
