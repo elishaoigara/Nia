@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import Link from 'next/link'
 import { Bell } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
@@ -16,7 +16,8 @@ export default function NotificationBell({ userId }: NotificationBellProps) {
 
   const [count, setCount] = useState(0)
 
-  const fetchUnreadCount = async () => {
+  // FIX (Bug 6): wrap in useCallback so useEffect dependency is stable
+  const fetchUnreadCount = useCallback(async () => {
     const { count: unreadCount, error } = await supabase
       .from('notifications')
       .select('*', { count: 'exact', head: true })
@@ -24,7 +25,7 @@ export default function NotificationBell({ userId }: NotificationBellProps) {
       .eq('is_read', false)
 
     if (!error) setCount(unreadCount ?? 0)
-  }
+  }, [supabase, userId])
 
   useEffect(() => {
     if (!userId) return
@@ -53,6 +54,8 @@ export default function NotificationBell({ userId }: NotificationBellProps) {
           table: 'notifications',
           filter: `user_id=eq.${userId}`,
         },
+        // FIX (Bug 5): listening to UPDATE means when the notifications page marks
+        // items read in the DB, the bell re-fetches and clears immediately
         () => fetchUnreadCount()
       )
       .subscribe()
@@ -60,7 +63,7 @@ export default function NotificationBell({ userId }: NotificationBellProps) {
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [userId]) // eslint-disable-line
+  }, [userId, fetchUnreadCount])
 
   const hasUnread = count > 0
 
@@ -81,7 +84,9 @@ export default function NotificationBell({ userId }: NotificationBellProps) {
         <span
           className="absolute -top-1 -right-1 min-w-4.5 h-4.5 flex items-center justify-center text-white text-[10px] font-black rounded-full px-1 anim-pop bg-(--grad-warm) shadow-sm"
         >
-          {count > 99 ? '99+' : count > 9 ? '9+' : count}
+          {/* FIX (Bug 4): was showing "9+" for counts 10-99, hiding the real number.
+              The 99+ cap is sufficient — show the real count below that. */}
+          {count > 99 ? '99+' : count}
         </span>
       )}
     </Link>
