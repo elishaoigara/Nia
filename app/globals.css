@@ -52,9 +52,9 @@
 /* ── Dark Mode ─────────────────────────────────────── */
 .dark {
   --surface-0: #0D0C0B;
-  --surface-1: #171614;
-  --surface-2: #232220;
-  --surface-3: #2F2E2B;
+  --surface-1: #1E1C1A;   /* was #171614 — +10 lightness, more separation */
+  --surface-2: #272523;   /* was #232220 — +5 lightness */
+  --surface-3: #333028;   /* was #2F2E2B — warmer, more contrast */
 
   --text-primary:   #EDECEA;
   --text-secondary: #A09E98;
@@ -817,31 +817,45 @@ body {
    ════════════════════════════════════════════════════ */
 .feed-tabs {
   display: flex;
+  align-items: center;
   border-bottom: 1px solid var(--divider);
   background: var(--surface-0);
   position: sticky;
   top: var(--nav-top);
   z-index: 20;
+  padding: 0 8px;
+  gap: 4px;
 }
 .feed-tab {
   flex: 1;
-  padding: 12px 0;
-  font-size: 14px;
+  padding: 8px 0;
+  font-size: 13.5px;
   font-weight: 600;
   color: var(--text-tertiary);
   text-align: center;
   text-decoration: none;
   border: none;
   background: none;
-  border-bottom: 2px solid transparent;
+  border-bottom: 2px solid transparent;   /* keep for layout — visually overridden below */
   cursor: pointer;
-  transition: color 0.15s, border-color 0.15s;
+  transition: color 0.15s, background 0.15s;
   display: block;
+  border-radius: 8px;
+  margin: 6px 0;
 }
-.feed-tab:hover { color: var(--text-primary); }
-.feed-tab.active {
+.feed-tab:hover {
   color: var(--text-primary);
-  border-bottom-color: var(--text-primary);
+  background: var(--surface-2);
+}
+.feed-tab.active {
+  color: var(--nia-violet);
+  background: rgba(91, 33, 182, 0.10);
+  border-bottom-color: transparent;       /* remove underline — pill is the signal */
+  font-weight: 700;
+}
+.dark .feed-tab.active {
+  background: rgba(124, 58, 237, 0.14);
+  color: #A78BFA;                         /* lighter violet readable on dark */
 }
 
 /* ════════════════════════════════════════════════════
