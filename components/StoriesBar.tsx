@@ -328,13 +328,18 @@ function StoryViewer({
   const DURATION = 5000;
   const isOwner = group?.userId === currentUserId;
 
-  // Mark viewed (skip own stories)
+  // Mark viewed (skip own stories) — fire immediately so view count updates instantly
   useEffect(() => {
     if (!story || story.user_id === currentUserId) return;
     supabase
       .from('story_views')
-      .upsert({ story_id: story.id, viewer_id: currentUserId, viewed_at: new Date().toISOString() }, { onConflict: 'story_id,viewer_id' })
-      .then(() => {});
+      .upsert(
+        { story_id: story.id, viewer_id: currentUserId, viewed_at: new Date().toISOString() },
+        { onConflict: 'story_id,viewer_id' }
+      )
+      .then(({ error }) => {
+        if (error) console.error('Failed to record story view:', error.message);
+      });
   }, [story?.id]); // eslint-disable-line
 
   const advance = useCallback(() => {
@@ -383,7 +388,7 @@ function StoryViewer({
       });
     }, 100);
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-  }, [story?.id, advance]); // eslint-disable-line
+  }, [story?.id, groupIdx, advance]); // eslint-disable-line
 
   // Keyboard navigation
   useEffect(() => {
@@ -401,11 +406,14 @@ function StoryViewer({
     setDeleting(true);
     await onDeleteStory(story.id);
     setDeleting(false);
-    // After delete, advance or close
+    // After delete, stay at same index (next story shifts into place) or go back
     const grp = groups[groupIdx];
     if (grp && grp.stories.length > 1) {
-      if (storyIdx < grp.stories.length - 1) setStoryIdx(storyIdx);
-      else setStoryIdx(Math.max(0, storyIdx - 1));
+      // If we were on the last story, step back one; otherwise the index is already correct
+      if (storyIdx >= grp.stories.length - 1) {
+        setStoryIdx(Math.max(0, storyIdx - 1));
+      }
+      // else: storyIdx stays, the story that was after this one slides into position
     } else {
       onClose();
     }
@@ -622,6 +630,13 @@ const StoriesBar: React.FC<StoriesBarProps> = ({ currentUserId }) => {
   function openViewer(idx: number) {
     setViewerGroupIdx(idx);
     setViewerOpen(true);
+    // Optimistically mark the group as read so the ring turns grey immediately
+    const grp = groups[idx];
+    if (grp && grp.userId !== currentUserId) {
+      setGroups(prev =>
+        prev.map((g, i) => i === idx ? { ...g, hasUnread: false } : g)
+      );
+    }
   }
 
   const myGroup = groups.find(g => g.userId === currentUserId);
