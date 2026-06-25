@@ -207,27 +207,47 @@ function ViewersPanel({
   const supabase = createClient();
   const [viewers,  setViewers]  = useState<ViewerProfile[]>([]);
   const [loading,  setLoading]  = useState(true);
+  const [dbError,  setDbError]  = useState<string | null>(null);
+
+  async function load() {
+    setLoading(true);
+    setDbError(null);
+    const { data, error } = await supabase
+      .from('story_views')
+      .select('viewer_id, viewed_at, profiles:viewer_id(username, avatar_url)')
+      .eq('story_id', storyId)
+      .order('viewed_at', { ascending: false });
+
+    if (error) {
+      console.error('ViewersPanel fetch error:', error);
+      setDbError(error.message);
+    }
+
+    setViewers(
+      (data ?? []).map((v: any) => ({
+        user_id:    v.viewer_id,
+        username:   v.profiles?.username ?? 'unknown',
+        avatar_url: v.profiles?.avatar_url ?? null,
+        viewed_at:  v.viewed_at,
+      }))
+    );
+    setLoading(false);
+  }
 
   useEffect(() => {
-    async function load() {
-      setLoading(true);
-      const { data } = await supabase
-        .from('story_views')
-        .select('viewer_id, viewed_at, profiles:viewer_id(username, avatar_url)')
-        .eq('story_id', storyId)
-        .order('viewed_at', { ascending: false });
-
-      setViewers(
-        (data ?? []).map((v: any) => ({
-          user_id:    v.viewer_id,
-          username:   v.profiles?.username ?? 'unknown',
-          avatar_url: v.profiles?.avatar_url ?? null,
-          viewed_at:  v.viewed_at,
-        }))
-      );
-      setLoading(false);
-    }
     load();
+
+    // Real-time: re-fetch whenever a view row is inserted/updated for this story
+    const channel = supabase
+      .channel(`story_views_${storyId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'story_views', filter: `story_id=eq.${storyId}` },
+        () => { load(); }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
   }, [storyId]); // eslint-disable-line
 
   function timeAgo(date: string) {
@@ -251,12 +271,23 @@ function ViewersPanel({
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px 12px' }}>
         <span style={{ color: '#fff', fontWeight: 700, fontSize: 15 }}>
-          Viewed by {viewers.length}
+          {loading ? 'Loading views…' : `Viewed by ${viewers.length}`}
         </span>
-        <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.6)' }}>
-          <X size={18} />
-        </button>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <button onClick={load} title="Refresh" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.6)' }}>
+            <Loader2 size={16} style={{ transform: 'rotate(0deg)' }} />
+          </button>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.6)' }}>
+            <X size={18} />
+          </button>
+        </div>
       </div>
+
+      {dbError && (
+        <p style={{ color: '#f43f5e', fontSize: 12, padding: '0 16px 8px', margin: 0 }}>
+          Error loading views: {dbError}
+        </p>
+      )}
 
       {loading ? (
         <div style={{ display: 'flex', justifyContent: 'center', padding: 24 }}>
@@ -328,18 +359,36 @@ function StoryViewer({
   const DURATION = 5000;
   const isOwner = group?.userId === currentUserId;
 
-  // Mark viewed (skip own stories) — fire immediately so view count updates instantly
+  // Mark viewed (skip own stories) — fire immediately and log any DB errors
   useEffect(() => {
     if (!story || story.user_id === currentUserId) return;
-    supabase
-      .from('story_views')
-      .upsert(
-        { story_id: story.id, viewer_id: currentUserId, viewed_at: new Date().toISOString() },
-        { onConflict: 'story_id,viewer_id' }
-      )
-      .then(({ error }) => {
-        if (error) console.error('Failed to record story view:', error.message);
-      });
+
+    async function recordView() {
+      // First try upsert
+      const { error } = await supabase
+        .from('story_views')
+        .upsert(
+          { story_id: story!.id, viewer_id: currentUserId, viewed_at: new Date().toISOString() },
+          { onConflict: 'story_id,viewer_id' }
+        );
+
+      if (error) {
+        console.error('[Nia] story_views upsert failed:', error.code, error.message, error.details, error.hint);
+        // Fallback: try plain insert in case upsert/conflict resolution is failing
+        try {
+          await supabase
+            .from('story_views')
+            .insert({ story_id: story!.id, viewer_id: currentUserId, viewed_at: new Date().toISOString() })
+            .throwOnError();
+        } catch (insertErr) {
+          console.error('[Nia] story_views insert fallback also failed:', insertErr);
+        }
+      } else {
+        console.log('[Nia] story view recorded for story:', story!.id);
+      }
+    }
+
+    recordView();
   }, [story?.id]); // eslint-disable-line
 
   const advance = useCallback(() => {
