@@ -1185,7 +1185,9 @@ body {
 }
 
 /* ── Text posts (default) ─────────────────────────── */
-/* Text posts use default post-row styles (no overrides needed). */
+/* Default post-row styles apply — no overrides needed.
+   Padding stays at 18px top, action icons at 17px.
+   This is the "rest" state in the visual rhythm. */
 
 /* ── Trending badge pill ──────────────────────────── */
 .post-badge {
@@ -1408,12 +1410,16 @@ body {
   z-index: 99;
 }
 
-/* ════════════════════════════════════════════════════
-   UPGRADED STORY RINGS
-   ════════════════════════════════════════════════════ */
+/* ── Upgraded story rings ─────────────────────────── */
 .story-ring-unread {
   background: linear-gradient(135deg, #f97316, #ec4899, #5B21B6) !important;
 }
 .story-ring-read {
   background: var(--border) !important;
+}
+
+/* Pulse glow behind unread story rings */
+@keyframes story-ring-pulse {
+  0%, 100% { transform: scale(1);    opacity: 0.55; }
+  50%       { transform: scale(1.12); opacity: 0.25; }
 }

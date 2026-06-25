@@ -761,30 +761,54 @@ const StoriesBar: React.FC<StoriesBarProps> = ({ currentUserId }) => {
 
   /* ── Bubble renderer ── */
   function Bubble({ g, idx, isMine }: { g: StoryGroup; idx: number; isMine?: boolean }) {
-    const unread   = isMine ? !!myGroup : g.hasUnread;
-    const ringStyle: React.CSSProperties = {
-      width: 64, height: 64, borderRadius: '50%', padding: 2.5, cursor: 'pointer',
-      background: unread ? 'var(--grad-brand)' : 'var(--surface-3)',
-      position: 'relative',
-    };
+    const unread = isMine ? !!myGroup : g.hasUnread;
+
+    /* Ring: 72px outer shell — 52px avatar inner + 2.5px gap + 3px ring */
+    const OUTER = 72;
+    const INNER = 52; /* avatar image area */
+
     return (
       <div
-        style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}
+        style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: 'pointer' }}
         onClick={() => isMine ? (myGroup ? openViewer(idx) : setShowUpload(true)) : openViewer(idx)}
       >
-        <div style={{ position: 'relative' }}>
-          <div style={ringStyle}>
+        <div style={{ position: 'relative', width: OUTER, height: OUTER }}>
+          {/* Pulse ring — only on unread non-mine bubbles */}
+          {unread && !isMine && (
             <div style={{
-              width: '100%', height: '100%', borderRadius: '50%',
+              position: 'absolute', inset: -3,
+              borderRadius: '50%',
+              background: 'var(--grad-brand)',
+              animation: 'story-ring-pulse 2s ease-in-out infinite',
+              opacity: 0.55,
+              zIndex: 0,
+            }} />
+          )}
+
+          {/* Outer ring shell */}
+          <div style={{
+            position: 'absolute', inset: 0,
+            borderRadius: '50%',
+            padding: 3,
+            background: unread ? 'var(--grad-brand)' : 'var(--surface-3)',
+            zIndex: 1,
+          }}>
+            {/* Gap between ring and avatar */}
+            <div style={{
+              width: '100%', height: '100%',
+              borderRadius: '50%',
               border: '2.5px solid var(--surface-0)',
-              background: 'var(--surface-2)', overflow: 'hidden',
+              background: 'var(--surface-2)',
+              overflow: 'hidden',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
               {g.avatar_url
                 ? <img src={g.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 : isMine && !myGroup
-                  ? <Plus size={22} color="var(--text-secondary)" />
-                  : <span style={{ color: unread ? '#fff' : 'var(--text-secondary)', fontWeight: 700, fontSize: 17 }}>{g.username[0]?.toUpperCase()}</span>
+                  ? <Plus size={24} color="var(--text-secondary)" />
+                  : <span style={{ color: unread ? '#fff' : 'var(--text-secondary)', fontWeight: 700, fontSize: 20 }}>
+                      {g.username[0]?.toUpperCase()}
+                    </span>
               }
             </div>
           </div>
@@ -794,39 +818,45 @@ const StoriesBar: React.FC<StoriesBarProps> = ({ currentUserId }) => {
             <div
               onClick={e => { e.stopPropagation(); setShowUpload(true); }}
               style={{
-                position: 'absolute', bottom: 0, right: 0,
+                position: 'absolute', bottom: 1, right: 1,
                 width: 22, height: 22, borderRadius: '50%',
                 background: 'var(--grad-brand)',
-                border: '2px solid var(--surface-0)',
+                border: '2.5px solid var(--surface-0)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                cursor: 'pointer', zIndex: 1,
+                cursor: 'pointer', zIndex: 2,
               }}
             >
               <Plus size={11} color="#fff" strokeWidth={3} />
             </div>
           )}
 
-          {/* Unread count pip (others only) */}
-          {!isMine && g.hasUnread && g.stories.filter(s => true).length > 1 && (
+          {/* Unread story-count pip (others only, >1 story) */}
+          {!isMine && g.hasUnread && g.stories.length > 1 && (
             <div style={{
-              position: 'absolute', bottom: 0, right: 0,
+              position: 'absolute', bottom: 1, right: 1,
               background: '#DC2626',
-              border: '2px solid var(--surface-0)',
+              border: '2.5px solid var(--surface-0)',
               borderRadius: 10, minWidth: 18, height: 18,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              padding: '0 4px',
+              padding: '0 4px', zIndex: 2,
             }}>
               <span style={{ color: '#fff', fontSize: 10, fontWeight: 800, lineHeight: 1 }}>{g.stories.length}</span>
             </div>
           )}
         </div>
 
+        {/* Username — 8 char cap, bolder when unread */}
         <span style={{
-          fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap',
-          maxWidth: 64, overflow: 'hidden', textOverflow: 'ellipsis',
+          fontSize: 11, fontWeight: unread ? 700 : 500,
+          whiteSpace: 'nowrap',
+          maxWidth: OUTER, overflow: 'hidden', textOverflow: 'ellipsis',
           color: unread ? 'var(--text-primary)' : 'var(--text-tertiary)',
+          letterSpacing: unread ? '0.01em' : '0',
         }}>
-          {isMine ? (myGroup ? 'My story' : 'Add story') : g.username}
+          {isMine
+            ? (myGroup ? 'My story' : 'Add story')
+            : g.username.length > 9 ? g.username.slice(0, 8) + '…' : g.username
+          }
         </span>
       </div>
     );
@@ -838,7 +868,7 @@ const StoriesBar: React.FC<StoriesBarProps> = ({ currentUserId }) => {
   return (
     <>
       <div style={{ width: '100%', overflowX: 'auto', paddingBottom: 4, scrollbarWidth: 'none' }}>
-        <div style={{ display: 'flex', gap: 12, padding: '12px 16px 8px', minWidth: 'max-content' }}>
+        <div style={{ display: 'flex', gap: 14, padding: '14px 16px 10px', minWidth: 'max-content' }}>
           <Bubble g={myGroup ?? placeholderGroup} idx={myGroup ? groups.indexOf(myGroup) : -1} isMine />
           {groups.filter(g => g.userId !== currentUserId).map(g => (
             <Bubble key={g.userId} g={g} idx={groups.indexOf(g)} />
