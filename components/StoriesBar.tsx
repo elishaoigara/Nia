@@ -212,24 +212,48 @@ function ViewersPanel({
   async function load() {
     setLoading(true);
     setDbError(null);
-    const { data, error } = await supabase
+
+    // Step 1: fetch views (no FK join — works even without FK constraints)
+    const { data: viewRows, error: viewErr } = await supabase
       .from('story_views')
-      .select('viewer_id, viewed_at, profiles:viewer_id(username, avatar_url)')
+      .select('viewer_id, viewed_at')
       .eq('story_id', storyId)
       .order('viewed_at', { ascending: false });
 
-    if (error) {
-      console.error('ViewersPanel fetch error:', error);
-      setDbError(error.message);
+    if (viewErr) {
+      console.error('[Nia] story_views fetch error:', viewErr);
+      setDbError(viewErr.message);
+      setLoading(false);
+      return;
     }
 
+    if (!viewRows || viewRows.length === 0) {
+      setViewers([]);
+      setLoading(false);
+      return;
+    }
+
+    // Step 2: fetch profiles for those viewer_ids separately
+    const viewerIds = viewRows.map((v: any) => v.viewer_id);
+    const { data: profileRows, error: profErr } = await supabase
+      .from('profiles')
+      .select('id, username, avatar_url')
+      .in('id', viewerIds);
+
+    if (profErr) console.error('[Nia] profiles fetch error:', profErr);
+
+    const profileMap = new Map((profileRows ?? []).map((p: any) => [p.id, p]));
+
     setViewers(
-      (data ?? []).map((v: any) => ({
-        user_id:    v.viewer_id,
-        username:   v.profiles?.username ?? 'unknown',
-        avatar_url: v.profiles?.avatar_url ?? null,
-        viewed_at:  v.viewed_at,
-      }))
+      viewRows.map((v: any) => {
+        const profile = profileMap.get(v.viewer_id);
+        return {
+          user_id:    v.viewer_id,
+          username:   profile?.username ?? 'unknown',
+          avatar_url: profile?.avatar_url ?? null,
+          viewed_at:  v.viewed_at,
+        };
+      })
     );
     setLoading(false);
   }
@@ -375,14 +399,10 @@ function StoryViewer({
       if (error) {
         console.error('[Nia] story_views upsert failed:', error.code, error.message, error.details, error.hint);
         // Fallback: try plain insert in case upsert/conflict resolution is failing
-        try {
-          await supabase
-            .from('story_views')
-            .insert({ story_id: story!.id, viewer_id: currentUserId, viewed_at: new Date().toISOString() })
-            .throwOnError();
-        } catch (insertErr) {
-          console.error('[Nia] story_views insert fallback also failed:', insertErr);
-        }
+        const { error: insertErr } = await supabase
+          .from('story_views')
+          .insert({ story_id: story!.id, viewer_id: currentUserId, viewed_at: new Date().toISOString() });
+        if (insertErr) console.error('[Nia] story_views insert fallback also failed:', insertErr.message);
       } else {
         console.log('[Nia] story view recorded for story:', story!.id);
       }
@@ -622,11 +642,23 @@ const StoriesBar: React.FC<StoriesBarProps> = ({ currentUserId }) => {
   const [viewerGroupIdx, setViewerGroupIdx]  = useState(0);
 
   async function loadStories() {
-    const { data: stories } = await supabase
+    // Fetch stories without FK join (works without FK constraints on user_id)
+    const { data: stories, error: storiesErr } = await supabase
       .from('stories')
-      .select('*, profiles:user_id(id, username, avatar_url)')
+      .select('*')
       .gte('expires_at', new Date().toISOString())
       .order('created_at', { ascending: false });
+
+    if (storiesErr) { console.error('[Nia] loadStories error:', storiesErr); return; }
+    if (!stories || stories.length === 0) { setGroups([]); return; }
+
+    // Fetch profiles for all story authors separately
+    const authorIds = [...new Set(stories.map((s: any) => s.user_id))];
+    const { data: profileRows } = await supabase
+      .from('profiles')
+      .select('id, username, avatar_url')
+      .in('id', authorIds);
+    const profileMap = new Map((profileRows ?? []).map((p: any) => [p.id, p]));
 
     const { data: views } = await supabase
       .from('story_views')
@@ -635,16 +667,15 @@ const StoriesBar: React.FC<StoriesBarProps> = ({ currentUserId }) => {
 
     const viewedSet = new Set((views ?? []).map((v: any) => v.story_id));
 
-    if (!stories) return;
-
     const map = new Map<string, StoryGroup>();
     for (const s of stories as any[]) {
       const uid = s.user_id;
+      const profile = profileMap.get(uid);
       if (!map.has(uid)) {
         map.set(uid, {
           userId:     uid,
-          username:   s.profiles?.username ?? 'unknown',
-          avatar_url: s.profiles?.avatar_url ?? null,
+          username:   profile?.username ?? 'unknown',
+          avatar_url: profile?.avatar_url ?? null,
           stories:    [],
           hasUnread:  false,
         });
