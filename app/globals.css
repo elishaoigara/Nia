@@ -4,6 +4,7 @@
 
 /* ── Tailwind v4 ──────────────────────────────────── */
 @import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
 
 /* ── Color Tokens ──────────────────────────────────── */
 :root {
@@ -41,7 +42,7 @@
 
   /* Layout */
   --nav-top:    3.5rem;   /* 56px */
-  --nav-bottom: 3.5rem;   /* 56px */
+  --nav-bottom: 4rem;     /* 64px */
   --sidebar-w:  15rem;    /* 240px */
 
   /* Post/feed */
@@ -76,7 +77,7 @@ html {
 body {
   background: var(--surface-0);
   color: var(--text-primary);
-  font-family: system-ui, -apple-system, sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
   font-size: 15px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
@@ -107,7 +108,8 @@ body {
   border-bottom: 1px solid var(--divider);
   transition: background 0.12s;
 }
-.post-row:active { background: var(--surface-1); }
+.post-row:hover  { background: var(--surface-1); }
+.post-row:active { background: var(--surface-2); }
 
 /* Left column: avatar + thread line */
 .post-left {
@@ -126,7 +128,8 @@ body {
   overflow: hidden;
   flex-shrink: 0;
   position: relative;
-  box-shadow: 0 0 0 2px var(--surface-0), 0 0 0 3.5px var(--nia-accent);
+  box-shadow: 0 0 0 2px var(--surface-0), 0 0 0 3px var(--nia-accent-soft);
+  transition: box-shadow 0.2s;
   background: var(--grad-brand);
   padding: 2px;
   transition: opacity 0.15s;
@@ -1095,3 +1098,211 @@ body {
 }
 
 /* reply-bar expanded styles handled in component via inline flexDirection: column */
+/* ════════════════════════════════════════════════════
+   EMOJI REACTIONS
+   ════════════════════════════════════════════════════ */
+.reactions-strip {
+  display: flex;
+  gap: 4px;
+  padding: 4px 0 8px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+}
+.reaction-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: var(--surface-1);
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+  font-family: inherit;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+.reaction-btn:hover  { background: var(--surface-2); border-color: var(--nia-violet); transform: scale(1.06); }
+.reaction-btn:active { transform: scale(0.94); }
+.reaction-btn.active { background: rgba(91,33,182,0.08); border-color: var(--nia-violet); color: var(--nia-violet); font-weight: 700; }
+
+/* ════════════════════════════════════════════════════
+   COMPOSE MOOD CHIPS
+   ════════════════════════════════════════════════════ */
+.mood-chips {
+  display: flex;
+  gap: 6px;
+  padding: 0 16px 10px;
+  overflow-x: auto;
+}
+.mood-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 12px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: var(--surface-1);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  color: var(--text-secondary);
+  transition: all 0.15s;
+  font-family: inherit;
+}
+.mood-chip:hover  { background: rgba(91,33,182,0.08); border-color: var(--nia-violet); color: var(--nia-violet); }
+.mood-chip:active { transform: scale(0.96); }
+.mood-chip.selected { background: rgba(91,33,182,0.1); border-color: var(--nia-violet); color: var(--nia-violet); }
+
+/* ════════════════════════════════════════════════════
+   TRENDING TAG PILL CLOUD
+   ════════════════════════════════════════════════════ */
+.tag-cloud {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 16px;
+}
+.tag-cloud-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: 20px;
+  border: 1px solid rgba(91,33,182,0.2);
+  background: rgba(91,33,182,0.06);
+  color: var(--nia-violet);
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 0.15s;
+}
+.tag-cloud-pill:hover { background: rgba(91,33,182,0.12); transform: translateY(-1px); }
+.tag-cloud-pill.size-lg { font-size: 14px; padding: 6px 14px; }
+.tag-cloud-pill.size-md { font-size: 13px; padding: 5px 12px; }
+.tag-cloud-pill.size-sm { font-size: 12px; padding: 4px 10px; }
+.tag-cloud-pill .tag-count { font-size: 11px; font-weight: 500; opacity: 0.65; }
+
+/* ════════════════════════════════════════════════════
+   REGION FILTER PILLS
+   ════════════════════════════════════════════════════ */
+.region-pills {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--divider);
+}
+.region-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: var(--surface-1);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  color: var(--text-secondary);
+  transition: all 0.15s;
+  font-family: inherit;
+}
+.region-pill:hover { background: rgba(91,33,182,0.08); border-color: var(--nia-violet); color: var(--nia-violet); }
+.region-pill.active { background: var(--nia-violet); color: #fff; border-color: var(--nia-violet); }
+
+/* ════════════════════════════════════════════════════
+   ONBOARDING PROGRESS BAR
+   ════════════════════════════════════════════════════ */
+.onboarding-progress {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: var(--surface-2);
+  z-index: 100;
+}
+.onboarding-progress-fill {
+  height: 100%;
+  background: var(--grad-brand);
+  border-radius: 0 2px 2px 0;
+  transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ════════════════════════════════════════════════════
+   COUNTRY FLAG GRID (Onboarding)
+   ════════════════════════════════════════════════════ */
+.flag-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+  padding: 4px 0;
+}
+.flag-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 4px;
+  border-radius: 10px;
+  border: 1.5px solid transparent;
+  background: var(--surface-1);
+  cursor: pointer;
+  font-size: 22px;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+.flag-btn:hover { background: var(--surface-2); transform: scale(1.05); }
+.flag-btn.selected { border-color: var(--nia-violet); background: rgba(91,33,182,0.08); }
+.flag-btn .flag-name { font-size: 9px; font-weight: 600; color: var(--text-tertiary); text-align: center; line-height: 1.2; }
+
+/* ════════════════════════════════════════════════════
+   FLICKS — VIDEO PROGRESS BAR
+   ════════════════════════════════════════════════════ */
+.flick-progress {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: rgba(255,255,255,0.25);
+  z-index: 10;
+}
+.flick-progress-fill {
+  height: 100%;
+  background: rgba(255,255,255,0.9);
+  border-radius: 0 2px 2px 0;
+  transition: width 0.25s linear;
+}
+
+/* ════════════════════════════════════════════════════
+   ENHANCED ANIMATIONS
+   ════════════════════════════════════════════════════ */
+@keyframes like-pop {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.4); }
+  70%  { transform: scale(0.9); }
+  100% { transform: scale(1); }
+}
+@keyframes float-up {
+  0%   { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(-40px) scale(1.3); }
+}
+.animate-like-pop { animation: like-pop 0.35s cubic-bezier(0.34,1.56,0.64,1); }
+.float-heart {
+  position: absolute;
+  pointer-events: none;
+  animation: float-up 0.7s ease-out forwards;
+  font-size: 18px;
+  z-index: 99;
+}
+
+/* ════════════════════════════════════════════════════
+   UPGRADED STORY RINGS
+   ════════════════════════════════════════════════════ */
+.story-ring-unread {
+  background: linear-gradient(135deg, #f97316, #ec4899, #5B21B6) !important;
+}
+.story-ring-read {
+  background: var(--border) !important;
+}

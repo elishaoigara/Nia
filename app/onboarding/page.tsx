@@ -55,6 +55,14 @@ export default function OnboardingPage() {
       className="min-h-screen flex items-center justify-center px-4 py-12 relative overflow-hidden"
       style={{ background: 'var(--surface-0)' }}
     >
+      {/* Progress bar */}
+      <div className="onboarding-progress">
+        <div className="onboarding-progress-fill" style={{ width: `${((step + 1) / STEPS.length) * 100}%` }} />
+      </div>
+      {/* Step counter */}
+      <div style={{ position: 'fixed', top: 12, right: 16, fontSize: 12, fontWeight: 600, color: 'var(--text-tertiary)', zIndex: 101 }}>
+        {step + 1} / {STEPS.length}
+      </div>
       {/* Ambient blobs */}
       <div className="absolute top-0 left-0 w-64 h-64 rounded-full blur-[120px] opacity-10" style={{ background: 'var(--nia-amber)', transform: 'translate(-30%,-30%)' }} />
       <div className="absolute bottom-0 right-0 w-64 h-64 rounded-full blur-[120px] opacity-10" style={{ background: 'var(--nia-violet)', transform: 'translate(30%,30%)' }} />
@@ -133,30 +141,32 @@ export default function OnboardingPage() {
           {step === 1 && (
             <>
               <div>
-                <label className="text-sm font-bold mb-2 block">Where are you from? 🌍</label>
+                <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 4 }}>Pick your flag 🌍</h2>
+                <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginBottom: 12 }}>This connects you with your community on Nia.</p>
                 <input
                   value={countrySearch}
                   onChange={e => setCountrySearch(e.target.value)}
                   placeholder="Search country…"
-                  className="input mb-2 text-sm"
+                  className="input mb-3 text-sm"
                 />
-                <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                <div className="flag-grid" style={{ maxHeight: 260, overflowY: 'auto' }}>
                   {filteredCountries.map(c => (
                     <button
                       key={c}
                       onClick={() => { setCountry(c); setCountrySearch('') }}
-                      className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-semibold text-left transition-all"
-                      style={country === c
-                        ? { background: 'linear-gradient(135deg,rgba(255,107,107,0.12),rgba(168,85,247,0.12))', color: 'var(--nia-violet)', border: '1.5px solid var(--nia-violet)' }
-                        : { background: 'var(--surface-2)', color: 'var(--text-primary)', border: '1.5px solid transparent' }
-                      }
+                      className={`flag-btn${country === c ? ' selected' : ''}`}
+                      title={c}
                     >
-                      <span className="text-lg">{COUNTRY_FLAGS[c] ?? '🌍'}</span>
-                      {c}
-                      {country === c && <Check size={14} className="ml-auto" />}
+                      <span style={{ fontSize: 24 }}>{COUNTRY_FLAGS[c] ?? '🌍'}</span>
+                      <span className="flag-name">{c.length > 8 ? c.split(' ')[0] : c}</span>
                     </button>
                   ))}
                 </div>
+                {country && (
+                  <div style={{ marginTop: 10, padding: '8px 14px', borderRadius: 10, background: 'rgba(91,33,182,0.08)', color: 'var(--nia-violet)', fontWeight: 700, fontSize: 14 }}>
+                    {COUNTRY_FLAGS[country] ?? '🌍'} {country} selected
+                  </div>
+                )}
               </div>
 
               {country && (

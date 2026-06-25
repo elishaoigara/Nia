@@ -169,42 +169,47 @@ export default function Navbar() {
                 style={{
                   display: 'flex', flexDirection: 'column',
                   alignItems: 'center', justifyContent: 'center',
-                  gap: 2, flex: 1, padding: '6px 0',
+                  gap: 3, flex: 1, padding: '4px 0',
                   textDecoration: 'none',
                 }}
                 className="tap-xs"
               >
                 <div style={{
                   position: 'relative',
-                  width: 36, height: 36, borderRadius: 10,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  ...(active ? activeStyle : {}),
+                  display: 'flex', flexDirection: 'column',
+                  alignItems: 'center', gap: 3,
+                  padding: '5px 10px',
+                  borderRadius: 14,
+                  background: active ? 'rgba(91,33,182,0.1)' : 'transparent',
                   transition: 'background 0.2s',
                 }}>
-                  <Icon
-                    size={20}
-                    strokeWidth={active ? 2.5 : 1.8}
-                    color={active ? 'var(--nia-violet)' : 'var(--text-tertiary)'}
-                  />
-                  {showBadge && (
-                    <span style={{
-                      position: 'absolute', top: -3, right: -3,
-                      minWidth: 16, height: 16, borderRadius: 8,
-                      background: 'var(--nia-coral)', color: '#fff',
-                      fontSize: 9, fontWeight: 800,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      padding: '0 3px',
-                    }}>
-                      {unreadMessages > 9 ? '9+' : unreadMessages}
-                    </span>
-                  )}
+                  <div style={{ position: 'relative' }}>
+                    <Icon
+                      size={20}
+                      strokeWidth={active ? 2.5 : 1.8}
+                      color={active ? 'var(--nia-violet)' : 'var(--text-tertiary)'}
+                    />
+                    {showBadge && (
+                      <span style={{
+                        position: 'absolute', top: -4, right: -5,
+                        minWidth: 15, height: 15, borderRadius: 8,
+                        background: 'var(--nia-coral)', color: '#fff',
+                        fontSize: 9, fontWeight: 800,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        padding: '0 3px',
+                      }}>
+                        {unreadMessages > 9 ? '9+' : unreadMessages}
+                      </span>
+                    )}
+                  </div>
+                  <span style={{
+                    fontSize: 10, fontWeight: active ? 700 : 500,
+                    color: active ? 'var(--nia-violet)' : 'var(--text-tertiary)',
+                    lineHeight: 1,
+                  }}>
+                    {label}
+                  </span>
                 </div>
-                <span style={{
-                  fontSize: 9, fontWeight: 700,
-                  color: active ? 'var(--nia-violet)' : 'var(--text-tertiary)',
-                }}>
-                  {label}
-                </span>
               </Link>
             )
           })}

@@ -719,7 +719,7 @@ function FlickItem({
             @{profile?.username ?? 'unknown'}
           </span>
           {profile?.country && (
-            <span style={{ fontSize: 15, lineHeight: 1 }}>{getFlag(profile.country)}</span>
+            <span style={{ fontSize: 14, lineHeight: 1, opacity: 0.9 }}>{getFlag(profile.country)}</span>
           )}
         </Link>
         {video.content && (
@@ -734,16 +734,16 @@ function FlickItem({
         )}
       </div>
 
-      {/* Progress bar */}
+      {/* Progress bar — top of screen, white */}
       <div style={{
-        position: 'absolute', bottom: 0, left: 0, right: 0,
-        height: 2.5, background: 'rgba(255,255,255,0.15)',
+        position: 'absolute', top: 0, left: 0, right: 0,
+        height: 3, background: 'rgba(255,255,255,0.2)', zIndex: 10,
       }}>
         <div style={{
           height: '100%', width: `${progress}%`,
-          background: 'var(--nia-accent-soft)',
-          transition: 'width 0.1s linear',
-          boxShadow: '0 0 6px var(--nia-accent-soft)',
+          background: 'rgba(255,255,255,0.9)',
+          transition: 'width 0.25s linear',
+          borderRadius: '0 2px 2px 0',
         }} />
       </div>
     </div>

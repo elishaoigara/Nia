@@ -147,33 +147,40 @@ export default function ExplorePage() {
             </div>
           ) : (
             <>
+              {/* Region filter pills */}
+              <div className="region-pills hidden-scrollbar" style={{ margin: '-6px -16px 12px', padding: '8px 16px' }}>
+                {[
+                  { id: 'all', label: '🌍 All Africa' },
+                  { id: 'east', label: '🦁 East' },
+                  { id: 'west', label: '🥁 West' },
+                  { id: 'southern', label: '🦏 Southern' },
+                  { id: 'north', label: '🐪 North' },
+                  { id: 'central', label: '🦍 Central' },
+                ].map(r => (
+                  <button key={r.id} className="region-pill">{r.label}</button>
+                ))}
+              </div>
+
               {trending.length > 0 && (
                 <section>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-                    <TrendingUp size={16} style={{ color: 'var(--nia-violet)' }} />
-                    <h2 style={{ fontWeight: 800, fontSize: 15 }}>Trending across Africa</h2>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, paddingBottom: 2 }}>
+                    <TrendingUp size={14} style={{ color: 'var(--text-tertiary)' }} />
+                    <h2 style={{ fontWeight: 700, fontSize: 12, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Trending in Africa</h2>
                   </div>
-                  <div className="card" style={{ padding: 16 }}>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                      {trending.map(({ tag, count }) => (
+                  <div className="tag-cloud" style={{ padding: '0 0 4px' }}>
+                    {trending.map(({ tag, count }, i) => {
+                      const size = i === 0 ? 'size-lg' : i < 4 ? 'size-md' : 'size-sm'
+                      return (
                         <Link
                           key={tag}
                           href={`/tags/${tag}`}
-                          style={{
-                            display: 'flex', alignItems: 'center', gap: 6,
-                            padding: '7px 14px', borderRadius: 10,
-                            fontSize: 13, fontWeight: 700,
-                            background: 'rgba(91, 33, 182, 0.07)',
-                            color: 'var(--nia-violet)',
-                            textDecoration: 'none',
-                            transition: 'background 0.15s',
-                          }}
+                          className={`tag-cloud-pill ${size}`}
                         >
                           #{tag}
-                          <span style={{ fontSize: 11, fontWeight: 500, opacity: 0.55 }}>{count}</span>
+                          {count > 1 && <span className="tag-count">{count}</span>}
                         </Link>
-                      ))}
-                    </div>
+                      )
+                    })}
                   </div>
                 </section>
               )}

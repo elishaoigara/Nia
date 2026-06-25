@@ -481,7 +481,7 @@ export default function CreatePost({
           <textarea
             ref={textRef}
             className="compose-textarea"
-            placeholder="What's happening?"
+            placeholder="Share something with Africa 🌍"
             value={content}
             onChange={e => {
               setContent(e.target.value);
@@ -503,6 +503,31 @@ export default function CreatePost({
           </button>
         </div>
       </div>
+
+      {/* ── Mood chips ──────────────────────────── */}
+      {!content && (
+        <div className="mood-chips hidden-scrollbar">
+          {[
+            { emoji: '😂', label: 'Funny' },
+            { emoji: '🔥', label: 'Hot take' },
+            { emoji: '💡', label: 'Insight' },
+            { emoji: '🎵', label: 'Music' },
+            { emoji: '💪', label: 'Motivation' },
+            { emoji: '🍽️', label: 'Food' },
+          ].map(({ emoji, label }) => (
+            <button
+              key={label}
+              className="mood-chip"
+              onClick={() => {
+                const textarea = document.querySelector('.compose-textarea') as HTMLTextAreaElement
+                if (textarea) { textarea.focus() }
+              }}
+            >
+              {emoji} {label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* ── Error ───────────────────────────────── */}
       {error && (
