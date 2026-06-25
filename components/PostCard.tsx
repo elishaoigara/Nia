@@ -125,6 +125,26 @@ function mediaGridClass(count: number): string {
   return 'single';
 }
 
+/* ── Post weight variant ─────────────────────────
+   Determines the visual "weight" class applied to
+   the post-row, driving CSS differentiation:
+     post-row--media    → has images/video
+     post-row--trending → hot post (likes ≥ 30)
+     post-row--text     → pure text (default)
+   ─────────────────────────────────────────────── */
+const TRENDING_THRESHOLD = 30; // likes to qualify as trending
+
+type PostVariant = 'media' | 'trending' | 'text';
+
+function getPostVariant(
+  hasMedia: boolean,
+  likesCount: number,
+): PostVariant {
+  if (hasMedia) return 'media';
+  if (likesCount >= TRENDING_THRESHOLD) return 'trending';
+  return 'text';
+}
+
 /* ── Component ───────────────────────────────── */
 export default function PostCard({ post, currentUserId, onDelete, showLine }: PostCardProps) {
   const supabase = createClient();
@@ -306,6 +326,9 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
 
   const initials = profile?.username?.[0]?.toUpperCase() ?? '?';
 
+  /* ── Variant ── */
+  const variant = getPostVariant(allMedia.length > 0, likesCount);
+
   const handlePostClick = (e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
     if (
@@ -319,7 +342,11 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
 
   return (
     <>
-      <article className="post-row" onClick={handlePostClick} style={{ cursor: 'pointer' }}>
+      <article
+        className={`post-row post-row--${variant}`}
+        onClick={handlePostClick}
+        style={{ cursor: 'pointer' }}
+      >
         {/* ── Left column ── */}
         <div className="post-left">
           <Link href={`/profile/${profile?.id ?? '#'}`} onClick={e => e.stopPropagation()} className="post-avatar">
@@ -351,6 +378,9 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
               {/* Row 2: time + optional badges */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
                 <span className="post-time">{timeAgo(post.created_at)}</span>
+                {variant === 'trending' && (
+                  <span className="post-badge post-badge--trending">🔥 trending</span>
+                )}
                 {canEdit && (
                   <span style={{ fontSize: 11, color: 'var(--nia-violet)', fontWeight: 600, background: 'rgba(91,33,182,0.08)', borderRadius: 4, padding: '1px 5px' }}>
                     editable
@@ -529,13 +559,13 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
           <div className="post-actions">
             {/* Like */}
             <button className={`post-action-btn ${liked ? 'liked' : ''}`} onClick={handleLike} title="Like">
-              <Heart size={17} />
+              <Heart size={variant === 'text' ? 17 : 18} />
               {likesCount > 0 && <span className="post-action-label">{likesCount}</span>}
             </button>
 
             {/* Comment */}
             <Link href={`/posts/${post.id}`} className="post-action-btn" onClick={e => e.stopPropagation()} title="Reply">
-              <MessageCircle size={17} />
+              <MessageCircle size={variant === 'text' ? 17 : 18} />
               {commentsCount > 0 && <span className="post-action-label">{commentsCount}</span>}
             </Link>
 
@@ -546,7 +576,7 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
                 onClick={e => { e.stopPropagation(); setShowRepostMenu(prev => !prev); }}
                 title="Repost"
               >
-                <Repeat2 size={17} />
+                <Repeat2 size={variant === 'text' ? 17 : 18} />
                 {repostsCount > 0 && <span className="post-action-label">{repostsCount}</span>}
               </button>
               {showRepostMenu && (

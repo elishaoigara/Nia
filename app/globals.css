@@ -1098,6 +1098,117 @@ body {
 }
 
 /* reply-bar expanded styles handled in component via inline flexDirection: column */
+
+/* ════════════════════════════════════════════════════
+   POST WEIGHT VARIANTS
+   Three visual tiers that break feed monotony and
+   train the eye to keep scrolling.
+
+   post-row--text      Default. Flush, minimal padding.
+   post-row--media     Has images/video. Extra breathing
+                       room, slightly lifted surface.
+   post-row--trending  Hot post (≥30 likes). Accent
+                       left-border, warm tint, heavier
+                       action-bar numbers.
+   ════════════════════════════════════════════════════ */
+
+/* ── Media posts ─────────────────────────────────── */
+.post-row--media {
+  padding-top: 20px;          /* 2px more than base 18px */
+  padding-bottom: 2px;        /* slight extra bottom breath */
+  background: var(--surface-0);
+}
+.post-row--media:hover { background: var(--surface-1); }
+
+/* Tighter post-text above the grid so image feels closer to copy */
+.post-row--media .post-text {
+  margin-bottom: 10px;
+}
+
+/* Media grid gets a subtle shadow lift */
+.post-row--media .post-media {
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  border-color: var(--border);
+}
+.dark .post-row--media .post-media {
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.28);
+}
+
+/* Action bar label numbers — slightly larger for media posts */
+.post-row--media .post-action-label {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* ── Trending posts ───────────────────────────────── */
+.post-row--trending {
+  /* Warm violet tint on the row background */
+  background: rgba(91, 33, 182, 0.028);
+  /* Accent left border — the key visual differentiator */
+  border-left: 2.5px solid var(--nia-accent-soft);
+  /* Compensate padding so text still aligns with other posts */
+  padding-left: 13.5px;
+}
+.post-row--trending:hover {
+  background: rgba(91, 33, 182, 0.055);
+}
+.post-row--trending:active {
+  background: rgba(91, 33, 182, 0.08);
+}
+
+/* Darker post text — more readable, heavier visual weight */
+.post-row--trending .post-text {
+  font-size: 15.5px;
+  font-weight: 450;   /* slightly heavier than normal 400 */
+  line-height: 1.7;
+}
+
+/* Action counts — bolder for trending so numbers pop */
+.post-row--trending .post-action-label {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+/* Like count on trending — inherits coral when liked, else accent-tinted */
+.post-row--trending .post-action-btn:not(.liked):not(.reposted) {
+  color: var(--text-secondary);
+}
+
+/* Dark mode: tint is more visible on dark backgrounds */
+.dark .post-row--trending {
+  background: rgba(124, 58, 237, 0.06);
+  border-left-color: var(--nia-accent-soft);
+}
+.dark .post-row--trending:hover {
+  background: rgba(124, 58, 237, 0.1);
+}
+
+/* ── Text posts (default) ─────────────────────────── */
+/* Text posts use default post-row styles (no overrides needed). */
+
+/* ── Trending badge pill ──────────────────────────── */
+.post-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10.5px;
+  font-weight: 700;
+  border-radius: 5px;
+  padding: 1px 6px;
+  letter-spacing: 0.02em;
+  line-height: 1.6;
+}
+.post-badge--trending {
+  background: rgba(91, 33, 182, 0.09);
+  color: var(--nia-accent-soft);
+  border: 1px solid rgba(91, 33, 182, 0.18);
+}
+.dark .post-badge--trending {
+  background: rgba(124, 58, 237, 0.14);
+  color: #A78BFA;
+  border-color: rgba(124, 58, 237, 0.25);
+}
 /* ════════════════════════════════════════════════════
    EMOJI REACTIONS
    ════════════════════════════════════════════════════ */
