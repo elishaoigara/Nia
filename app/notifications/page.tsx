@@ -33,15 +33,48 @@ function timeAgo(date: string): string {
   return new Date(date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 }
 
-function NotifIcon({ type }: { type: string }) {
-  const size = 14;
+// Returns the coloured badge icon that sits over the avatar
+function NotifBadge({ type }: { type: string }) {
+  const base = 'absolute -bottom-0.5 -right-0.5 w-[18px] h-[18px] rounded-full border-2 flex items-center justify-center';
+  const iconSize = 9;
+
   switch (type) {
-    case 'like':    return <Heart size={size} fill="currentColor" className="text-rose-500" />;
-    case 'follow':  return <UserPlus size={size} className="text-violet-500" />;
-    case 'comment': return <MessageCircle size={size} className="text-blue-500" />;
-    case 'repost':  return <Repeat2 size={size} className="text-green-500" />;
-    case 'mention': return <AtSign size={size} className="text-orange-500" />;
-    default:        return <Bell size={size} className="text-gray-400" />;
+    case 'like':
+      return (
+        <span className={base} style={{ borderColor: 'var(--surface-0)', background: '#FEF2F2' }}>
+          <Heart size={iconSize} fill="#DC2626" strokeWidth={0} />
+        </span>
+      );
+    case 'follow':
+      return (
+        <span className={base} style={{ borderColor: 'var(--surface-0)', background: '#EDE9FE' }}>
+          <UserPlus size={iconSize} className="text-violet-600" strokeWidth={2} />
+        </span>
+      );
+    case 'comment':
+      return (
+        <span className={base} style={{ borderColor: 'var(--surface-0)', background: '#EFF6FF' }}>
+          <MessageCircle size={iconSize} className="text-blue-600" strokeWidth={2} />
+        </span>
+      );
+    case 'repost':
+      return (
+        <span className={base} style={{ borderColor: 'var(--surface-0)', background: '#F0FDF4' }}>
+          <Repeat2 size={iconSize} className="text-green-600" strokeWidth={2} />
+        </span>
+      );
+    case 'mention':
+      return (
+        <span className={base} style={{ borderColor: 'var(--surface-0)', background: '#FFF7ED' }}>
+          <AtSign size={iconSize} className="text-orange-500" strokeWidth={2} />
+        </span>
+      );
+    default:
+      return (
+        <span className={base} style={{ borderColor: 'var(--surface-0)', background: 'var(--surface-2)' }}>
+          <Bell size={iconSize} className="text-(--text-tertiary)" strokeWidth={2} />
+        </span>
+      );
   }
 }
 
@@ -49,14 +82,22 @@ function NotifIcon({ type }: { type: string }) {
 // 1. Explicit FK hint  — works if the constraint name matches exactly
 // 2. Generic hint      — works when Supabase can infer the join unambiguously
 // 3. No join at all    — always works; actor data hydrated in a second query
-const SELECT_WITH_FK     = `id, type, message, is_read, created_at, actor_id, entity_id, actor:profiles!notifications_actor_id_fkey(username, avatar_url, full_name)`;
-const SELECT_GENERIC_JOIN= `id, type, message, is_read, created_at, actor_id, entity_id, actor:profiles(username, avatar_url, full_name)`;
-const SELECT_BASE        = `id, type, message, is_read, created_at, actor_id, entity_id`;
+const SELECT_WITH_FK      = `id, type, message, is_read, created_at, actor_id, entity_id, actor:profiles!notifications_actor_id_fkey(username, avatar_url, full_name)`;
+const SELECT_GENERIC_JOIN = `id, type, message, is_read, created_at, actor_id, entity_id, actor:profiles(username, avatar_url, full_name)`;
+const SELECT_BASE         = `id, type, message, is_read, created_at, actor_id, entity_id`;
+
+// Split a flat list into "new" (unread) and "earlier" (read) buckets
+function partitionNotifications(items: Notification[]) {
+  return {
+    fresh:   items.filter(n => !n.is_read),
+    earlier: items.filter(n =>  n.is_read),
+  };
+}
 
 export default function Notifications() {
   // Stable client — never recreated, preserves auth state across renders
   const supabaseRef = useRef(createClient());
-  const supabase = supabaseRef.current;
+  const supabase    = supabaseRef.current;
 
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading]             = useState(true);
@@ -133,7 +174,7 @@ export default function Notifications() {
     setLoading(false);
   }, [supabase, hydrateActors]);
 
-  // Mark all unread as read
+  // Mark all unread as read (called after a short delay so users see unread state first)
   const markAllRead = useCallback(async (uid: string, items: Notification[]) => {
     const unread = items.filter(n => !n.is_read && !markedRef.current.has(n.id));
     if (unread.length === 0) return;
@@ -149,14 +190,12 @@ export default function Notifications() {
     );
   }, [supabase]);
 
+  // Immediate mark-all-read triggered by the header button
+  const handleMarkAllRead = useCallback(() => {
+    if (userId) markAllRead(userId, notifications);
+  }, [userId, notifications, markAllRead]);
+
   useEffect(() => {
-    // FIX: the realtime channel and its cleanup must live at the top level
-    // of the effect so React can actually call removeChannel on unmount.
-    // Previously `return () => removeChannel(channel)` was returned from
-    // inside the .then() callback, which useEffect never sees — so every
-    // mount (including React Strict Mode's double-invoke in dev, or simply
-    // navigating away and back) leaked a brand new channel subscription on
-    // the same topic name, eventually breaking realtime delivery entirely.
     let channel: ReturnType<typeof supabase.channel> | null = null;
     let cancelled = false;
 
@@ -168,10 +207,6 @@ export default function Notifications() {
       fetchNotifications(user.id).then(() => {
         // Show unread state briefly, then mark all read
         setTimeout(() => {
-          // FIX: don't smuggle an async side effect inside a setState
-          // updater (updaters must be pure and can be invoked more than
-          // once). Read the latest snapshot via the ref-backed state value
-          // instead and call markAllRead directly.
           if (!cancelled) {
             setNotifications(prev => {
               markAllRead(user.id, prev);
@@ -182,7 +217,6 @@ export default function Notifications() {
       });
 
       // Real-time: re-fetch the single inserted row with actor data
-      // (payload.new from postgres_changes never includes joined relations)
       channel = supabase
         .channel(`notifs-page-${user.id}`)
         .on(
@@ -190,7 +224,6 @@ export default function Notifications() {
           { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` },
           async (payload) => {
             const raw = payload.new as Notification;
-            // Try to hydrate actor, fall back to raw row
             const [hydrated] = await hydrateActors([raw]);
             if (!cancelled) {
               setNotifications(prev => [hydrated, ...prev]);
@@ -200,8 +233,6 @@ export default function Notifications() {
         .subscribe();
     });
 
-    // This cleanup now actually belongs to the effect, so React will call
-    // it on unmount / before the effect re-runs.
     return () => {
       cancelled = true;
       if (channel) supabase.removeChannel(channel);
@@ -211,11 +242,27 @@ export default function Notifications() {
   /* ── Loading skeleton ── */
   if (loading) {
     return (
-      <div className="max-w-xl mx-auto p-4">
-        <h1 className="text-2xl font-bold mb-4">Notifications</h1>
-        <div className="space-y-2">
+      <div className="max-w-xl mx-auto">
+        {/* Sticky header skeleton */}
+        <div
+          className="sticky top-0 z-10 flex items-center justify-between px-4 py-3.5 border-b"
+          style={{ borderColor: 'var(--divider)', background: 'var(--surface-0)' }}
+        >
+          <h1 className="text-[17px] font-bold tracking-tight text-(--text-primary)">Notifications</h1>
+        </div>
+        <div className="mt-2">
           {[...Array(5)].map((_, i) => (
-            <div key={i} className="p-3 border rounded-lg bg-(--surface-1) animate-pulse h-16" />
+            <div
+              key={i}
+              className="flex items-center gap-3 px-4 py-3 border-b"
+              style={{ borderColor: 'var(--divider)' }}
+            >
+              <div className="skeleton w-10 h-10 rounded-full shrink-0" />
+              <div className="flex-1 flex flex-col gap-2">
+                <div className="skeleton h-3 rounded-full w-3/4" />
+                <div className="skeleton h-2.5 rounded-full w-1/3" />
+              </div>
+            </div>
           ))}
         </div>
       </div>
@@ -225,8 +272,9 @@ export default function Notifications() {
   /* ── Not logged in ── */
   if (!userId) {
     return (
-      <div className="max-w-xl mx-auto p-4">
-        <p className="text-(--text-secondary)">Please log in to see your notifications.</p>
+      <div className="max-w-xl mx-auto px-4 py-16 flex flex-col items-center gap-3">
+        <Bell size={36} strokeWidth={1.5} className="text-(--text-tertiary)" />
+        <p className="text-sm text-(--text-secondary)">Please log in to see your notifications.</p>
       </div>
     );
   }
@@ -234,13 +282,23 @@ export default function Notifications() {
   /* ── Fetch error ── */
   if (fetchError) {
     return (
-      <div className="max-w-xl mx-auto p-4">
-        <h1 className="text-2xl font-bold mb-4">Notifications</h1>
+      <div className="max-w-xl mx-auto">
+        <div
+          className="sticky top-0 z-10 px-4 py-3.5 border-b"
+          style={{ borderColor: 'var(--divider)', background: 'var(--surface-0)' }}
+        >
+          <h1 className="text-[17px] font-bold tracking-tight text-(--text-primary)">Notifications</h1>
+        </div>
         <div className="flex flex-col items-center gap-3 py-16 text-(--text-secondary)">
-          <Bell size={40} strokeWidth={1.5} />
+          <div
+            className="w-12 h-12 rounded-full flex items-center justify-center"
+            style={{ background: 'var(--surface-2)' }}
+          >
+            <Bell size={22} strokeWidth={1.5} />
+          </div>
           <p className="text-sm">Could not load notifications</p>
           <button
-            className="text-xs underline text-(--text-tertiary)"
+            className="text-xs text-(--text-tertiary) underline underline-offset-2"
             onClick={() => { setLoading(true); fetchNotifications(userId); }}
           >
             Try again
@@ -250,82 +308,174 @@ export default function Notifications() {
     );
   }
 
+  const { fresh, earlier } = partitionNotifications(notifications);
+  const hasUnread = fresh.length > 0;
+
   /* ── Main render ── */
   return (
-    <div className="max-w-xl mx-auto p-4">
-      <h1 className="text-2xl font-bold mb-4">Notifications</h1>
+    <div className="max-w-xl mx-auto pb-8">
+
+      {/* Sticky frosted header */}
+      <div
+        className="sticky top-0 z-10 flex items-center justify-between px-4 py-3.5 border-b"
+        style={{
+          borderColor: 'var(--divider)',
+          background: 'rgba(249,248,246,0.88)',
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
+        }}
+      >
+        <h1 className="text-[17px] font-bold tracking-tight text-(--text-primary)">Notifications</h1>
+        {hasUnread && (
+          <button
+            onClick={handleMarkAllRead}
+            className="text-xs font-medium rounded-lg px-2 py-1 transition-colors"
+            style={{ color: 'var(--nia-accent-soft)' }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'rgba(91,33,182,0.07)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+          >
+            Mark all read
+          </button>
+        )}
+      </div>
 
       {notifications.length === 0 ? (
-        <div className="flex flex-col items-center gap-3 py-16 text-(--text-secondary)">
-          <Bell size={40} strokeWidth={1.5} />
-          <p className="text-sm">No notifications yet</p>
+        <div className="flex flex-col items-center gap-3 py-16">
+          <div
+            className="w-12 h-12 rounded-full flex items-center justify-center"
+            style={{ background: 'var(--surface-2)' }}
+          >
+            <Bell size={22} strokeWidth={1.5} className="text-(--text-tertiary)" />
+          </div>
+          <p className="text-sm text-(--text-secondary)">No notifications yet</p>
         </div>
       ) : (
-        <ul className="space-y-1">
-          {notifications.map((n) => {
-            const href = n.entity_id
-              ? `/posts/${n.entity_id}`
-              : n.actor_id
-              ? `/profile/${n.actor_id}`
-              : '#';
+        <>
+          {/* ── New (unread) section ── */}
+          {fresh.length > 0 && (
+            <>
+              <p
+                className="px-4 pt-3.5 pb-1.5 text-[11px] font-semibold tracking-widest uppercase"
+                style={{ color: 'var(--text-tertiary)' }}
+              >
+                New
+              </p>
+              <ul>
+                {fresh.map(n => (
+                  <NotifRow key={n.id} n={n} />
+                ))}
+              </ul>
+            </>
+          )}
 
-            const avatarUrl  = n.actor?.avatar_url;
-            const displayName = n.actor?.full_name || n.actor?.username || 'Someone';
-
-            return (
-              <li key={n.id}>
-                <Link
-                  href={href}
-                  className="flex items-start gap-3 p-3 rounded-xl transition-colors hover:bg-(--surface-2)"
-                  style={!n.is_read ? { background: 'rgba(91,33,182,0.05)' } : {}}
-                >
-                  {/* Avatar or fallback initial */}
-                  <div className="relative shrink-0">
-                    {avatarUrl ? (
-                      <img
-                        src={avatarUrl}
-                        alt={displayName}
-                        className="w-9 h-9 rounded-full object-cover"
-                      />
-                    ) : (
-                      <div
-                        className="w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-sm"
-                        style={{ background: 'var(--grad-brand)' }}
-                      >
-                        {displayName[0]?.toUpperCase() ?? '?'}
-                      </div>
-                    )}
-                    <span
-                      className="absolute -bottom-0.5 -right-0.5 w-4.5 h-4.5 rounded-full border-2 border-(--surface-0) flex items-center justify-center"
-                      style={{ background: 'var(--surface-1)' }}
-                    >
-                      <NotifIcon type={n.type} />
-                    </span>
-                  </div>
-
-                  {/* Message + timestamp */}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-(--text-primary) leading-snug">
-                      {n.message}
-                    </p>
-                    <p className="text-xs text-(--text-tertiary) mt-0.5">
-                      {timeAgo(n.created_at)}
-                    </p>
-                  </div>
-
-                  {/* Unread dot */}
-                  {!n.is_read && (
-                    <span
-                      className="shrink-0 w-2 h-2 rounded-full mt-1.5"
-                      style={{ background: 'var(--nia-violet)' }}
-                    />
-                  )}
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
+          {/* ── Earlier (read) section ── */}
+          {earlier.length > 0 && (
+            <>
+              <p
+                className="px-4 pt-4 pb-1.5 text-[11px] font-semibold tracking-widest uppercase"
+                style={{ color: 'var(--text-tertiary)' }}
+              >
+                {fresh.length > 0 ? 'Earlier' : 'Recent'}
+              </p>
+              <ul>
+                {earlier.map(n => (
+                  <NotifRow key={n.id} n={n} />
+                ))}
+              </ul>
+            </>
+          )}
+        </>
       )}
     </div>
+  );
+}
+
+/* ── Individual notification row ── */
+function NotifRow({ n }: { n: Notification }) {
+  const href = n.entity_id
+    ? `/posts/${n.entity_id}`
+    : n.actor_id
+    ? `/profile/${n.actor_id}`
+    : '#';
+
+  const avatarUrl   = n.actor?.avatar_url;
+  const displayName = n.actor?.full_name || n.actor?.username || 'Someone';
+  const initial     = displayName[0]?.toUpperCase() ?? '?';
+
+  return (
+    <li>
+      <Link
+        href={href}
+        className="relative flex items-start gap-3 px-4 py-3 transition-colors border-b tap-sm"
+        style={{
+          borderColor: 'var(--divider)',
+          background: n.is_read ? 'transparent' : 'rgba(91,33,182,0.04)',
+        }}
+        onMouseEnter={e => {
+          (e.currentTarget as HTMLElement).style.background = n.is_read
+            ? 'var(--surface-1)'
+            : 'rgba(91,33,182,0.07)';
+        }}
+        onMouseLeave={e => {
+          (e.currentTarget as HTMLElement).style.background = n.is_read
+            ? 'transparent'
+            : 'rgba(91,33,182,0.04)';
+        }}
+      >
+        {/* Violet left bar for unread */}
+        {!n.is_read && (
+          <span
+            className="absolute left-0 top-1/2 -translate-y-1/2 w-0.75 rounded-r-sm"
+            style={{
+              height: '60%',
+              background: 'var(--grad-brand)',
+            }}
+          />
+        )}
+
+        {/* Avatar + badge */}
+        <div className="relative shrink-0">
+          {avatarUrl ? (
+            <img
+              src={avatarUrl}
+              alt={displayName}
+              className="w-10 h-10 rounded-full object-cover"
+            />
+          ) : (
+            <div
+              className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm"
+              style={{ background: 'var(--grad-brand)' }}
+            >
+              {initial}
+            </div>
+          )}
+          <NotifBadge type={n.type} />
+        </div>
+
+        {/* Message + timestamp */}
+        <div className="flex-1 min-w-0 pt-0.5">
+          <p
+            className="text-sm leading-snug"
+            style={{ color: 'var(--text-primary)' }}
+          >
+            {n.message}
+          </p>
+          <p
+            className="text-xs mt-0.5"
+            style={{ color: 'var(--text-tertiary)' }}
+          >
+            {timeAgo(n.created_at)}
+          </p>
+        </div>
+
+        {/* Unread dot */}
+        {!n.is_read && (
+          <span
+            className="shrink-0 w-2 h-2 rounded-full mt-2 self-start"
+            style={{ background: 'var(--grad-brand)' }}
+          />
+        )}
+      </Link>
+    </li>
   );
 }
