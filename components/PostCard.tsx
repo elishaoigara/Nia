@@ -235,7 +235,7 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
           user_id: post.user_id,
           actor_id: currentUserId,
           type: 'like',
-          post_id: post.id,
+          entity_id: post.id,
           message: `${profile?.username ?? 'Someone'} liked your post`,
           is_read: false,
         });
@@ -258,7 +258,7 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
           user_id: post.user_id,
           actor_id: currentUserId,
           type: 'repost',
-          post_id: post.id,
+          entity_id: post.id,
           message: `${profile?.username ?? 'Someone'} reposted your post`,
           is_read: false,
         });

@@ -13,7 +13,7 @@ interface Notification {
   is_read: boolean;
   created_at: string;
   actor_id: string | null;
-  post_id: string | null;
+  entity_id: string | null;
   actor?: {
     username: string;
     avatar_url: string | null;
@@ -49,9 +49,9 @@ function NotifIcon({ type }: { type: string }) {
 // 1. Explicit FK hint  — works if the constraint name matches exactly
 // 2. Generic hint      — works when Supabase can infer the join unambiguously
 // 3. No join at all    — always works; actor data hydrated in a second query
-const SELECT_WITH_FK     = `id, type, message, is_read, created_at, actor_id, post_id, actor:profiles!notifications_actor_id_fkey(username, avatar_url, full_name)`;
-const SELECT_GENERIC_JOIN= `id, type, message, is_read, created_at, actor_id, post_id, actor:profiles(username, avatar_url, full_name)`;
-const SELECT_BASE        = `id, type, message, is_read, created_at, actor_id, post_id`;
+const SELECT_WITH_FK     = `id, type, message, is_read, created_at, actor_id, entity_id, actor:profiles!notifications_actor_id_fkey(username, avatar_url, full_name)`;
+const SELECT_GENERIC_JOIN= `id, type, message, is_read, created_at, actor_id, entity_id, actor:profiles(username, avatar_url, full_name)`;
+const SELECT_BASE        = `id, type, message, is_read, created_at, actor_id, entity_id`;
 
 export default function Notifications() {
   // Stable client — never recreated, preserves auth state across renders
@@ -263,8 +263,8 @@ export default function Notifications() {
       ) : (
         <ul className="space-y-1">
           {notifications.map((n) => {
-            const href = n.post_id
-              ? `/posts/${n.post_id}`
+            const href = n.entity_id
+              ? `/posts/${n.entity_id}`
               : n.actor_id
               ? `/profile/${n.actor_id}`
               : '#';

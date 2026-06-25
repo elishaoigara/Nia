@@ -194,7 +194,7 @@ export default function ReplyBar({ postId, currentUserId, postOwnerId }: ReplyBa
           user_id:  postOwnerId,
           actor_id: currentUserId,
           type:     'comment',
-          post_id:  postId,
+          entity_id: postId,
           message:  `${profile?.username ?? 'Someone'} commented on your post`,
           is_read:  false,
         })

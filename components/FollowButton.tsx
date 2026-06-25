@@ -59,7 +59,7 @@ export default function FollowButton({
           user_id: targetUserId,
           actor_id: currentUserId,
           type: 'follow',
-          post_id: null,
+          entity_id: null,
           message: `${actorProfile?.username ?? 'Someone'} started following you`,
           is_read: false,
         })

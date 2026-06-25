@@ -241,7 +241,7 @@ function InlineReplyBox({
           user_id: postOwnerId,
           actor_id: currentUserId,
           type: 'comment',
-          post_id: postId,
+          entity_id: postId,
           message: `${currentUserProfile?.username ?? 'Someone'} commented on your post`,
           is_read: false,
         })
