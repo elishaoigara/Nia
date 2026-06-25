@@ -1100,6 +1100,115 @@ body {
 /* reply-bar expanded styles handled in component via inline flexDirection: column */
 
 /* ════════════════════════════════════════════════════
+   COMPOSE — COLLAPSED TRIGGER + SLIDE-DOWN PANEL
+   ════════════════════════════════════════════════════ */
+
+/* ── Ghost trigger pill (default visible state) ── */
+.compose-trigger {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px 10px;
+  border-bottom: 1px solid var(--divider);
+  background: var(--surface-0);
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.compose-trigger:hover  { background: var(--surface-1); }
+.compose-trigger:active { background: var(--surface-2); }
+
+.compose-trigger-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--grad-brand);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 700;
+  font-size: 14px;
+}
+.compose-trigger-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+.compose-trigger-pill {
+  flex: 1;
+  min-width: 0;
+  height: 38px;
+  background: var(--surface-2);
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  border: 1px solid var(--border);
+  transition: border-color 0.15s;
+}
+.compose-trigger:hover .compose-trigger-pill {
+  border-color: var(--nia-accent-soft);
+}
+
+.compose-trigger-placeholder {
+  font-size: 14px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+
+.compose-trigger-media {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: none;
+  background: none;
+  color: var(--nia-violet);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+.compose-trigger-media:hover { background: rgba(91,33,182,0.08); }
+
+/* ── Compose panel (expandable) ─────────────────── */
+.compose-panel {
+  /* Hidden by default — height 0, no overflow */
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+  border-bottom: none;
+}
+.compose-panel--open {
+  /* Large enough to fit all content */
+  max-height: 900px;
+  border-bottom: 1px solid var(--divider);
+  overflow: visible; /* allow dropdowns/menus inside */
+}
+
+/* Collapse handle button */
+.compose-collapse-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 6px 0 2px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.compose-collapse-btn:hover { background: var(--surface-1); }
+
+/* ════════════════════════════════════════════════════
    POST WEIGHT VARIANTS
    Three visual tiers that break feed monotony and
    train the eye to keep scrolling.
@@ -1107,7 +1216,7 @@ body {
    post-row--text      Default. Flush, minimal padding.
    post-row--media     Has images/video. Extra breathing
                        room, slightly lifted surface.
-   post-row--trending  Hot post (≥30 likes). Accent
+   post-row--trending  Hot post (>=30 likes). Accent
                        left-border, warm tint, heavier
                        action-bar numbers.
    ════════════════════════════════════════════════════ */
@@ -1184,10 +1293,9 @@ body {
   background: rgba(124, 58, 237, 0.1);
 }
 
-/* ── Text posts (default) ─────────────────────────── */
-/* Default post-row styles apply — no overrides needed.
+/* .post-row--text has no overrides — default post-row styles apply.
    Padding stays at 18px top, action icons at 17px.
-   This is the "rest" state in the visual rhythm. */
+   This is the visual "rest" state in the feed rhythm. */
 
 /* ── Trending badge pill ──────────────────────────── */
 .post-badge {
