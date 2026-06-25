@@ -91,7 +91,7 @@ export default function Notifications() {
       .order('created_at', { ascending: false })
       .limit(50);
 
-    if (!e1 && d1 && d1.length >= 0) {
+    if (!e1 && d1) {
       setNotifications(d1 as unknown as Notification[]);
       setLoading(false);
       return;
@@ -105,7 +105,7 @@ export default function Notifications() {
       .order('created_at', { ascending: false })
       .limit(50);
 
-    if (!e2 && d2 && d2.length >= 0) {
+    if (!e2 && d2) {
       setNotifications(d2 as unknown as Notification[]);
       setLoading(false);
       return;
@@ -150,23 +150,40 @@ export default function Notifications() {
   }, [supabase]);
 
   useEffect(() => {
+    // FIX: the realtime channel and its cleanup must live at the top level
+    // of the effect so React can actually call removeChannel on unmount.
+    // Previously `return () => removeChannel(channel)` was returned from
+    // inside the .then() callback, which useEffect never sees — so every
+    // mount (including React Strict Mode's double-invoke in dev, or simply
+    // navigating away and back) leaked a brand new channel subscription on
+    // the same topic name, eventually breaking realtime delivery entirely.
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    let cancelled = false;
+
     supabase.auth.getUser().then(({ data: { user } }) => {
+      if (cancelled) return;
       if (!user) { setLoading(false); return; }
       setUserId(user.id);
 
       fetchNotifications(user.id).then(() => {
         // Show unread state briefly, then mark all read
         setTimeout(() => {
-          setNotifications(prev => {
-            markAllRead(user.id, prev);
-            return prev;
-          });
+          // FIX: don't smuggle an async side effect inside a setState
+          // updater (updaters must be pure and can be invoked more than
+          // once). Read the latest snapshot via the ref-backed state value
+          // instead and call markAllRead directly.
+          if (!cancelled) {
+            setNotifications(prev => {
+              markAllRead(user.id, prev);
+              return prev;
+            });
+          }
         }, 1500);
       });
 
       // Real-time: re-fetch the single inserted row with actor data
       // (payload.new from postgres_changes never includes joined relations)
-      const channel = supabase
+      channel = supabase
         .channel(`notifs-page-${user.id}`)
         .on(
           'postgres_changes',
@@ -175,13 +192,20 @@ export default function Notifications() {
             const raw = payload.new as Notification;
             // Try to hydrate actor, fall back to raw row
             const [hydrated] = await hydrateActors([raw]);
-            setNotifications(prev => [hydrated, ...prev]);
+            if (!cancelled) {
+              setNotifications(prev => [hydrated, ...prev]);
+            }
           }
         )
         .subscribe();
-
-      return () => { supabase.removeChannel(channel); };
     });
+
+    // This cleanup now actually belongs to the effect, so React will call
+    // it on unmount / before the effect re-runs.
+    return () => {
+      cancelled = true;
+      if (channel) supabase.removeChannel(channel);
+    };
   }, []); // eslint-disable-line
 
   /* ── Loading skeleton ── */
@@ -281,7 +305,6 @@ export default function Notifications() {
 
                   {/* Message + timestamp */}
                   <div className="flex-1 min-w-0">
-                    {/* FIX: was "text-(--text-primary)ing-snug" — leading-snug was fused onto the color class */}
                     <p className="text-sm text-(--text-primary) leading-snug">
                       {n.message}
                     </p>
