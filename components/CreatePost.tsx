@@ -21,6 +21,7 @@ interface MediaItem {
   file: File;
   preview: string;
   type: 'image' | 'video';
+  duration?: number;
 }
 
 interface CreatePostProps {
@@ -52,8 +53,8 @@ const AFRICAN_LANGUAGES: LanguageOption[] = [
 
 const MAX_MEDIA = 5;
 const MAX_CHARS = 500;
-const MAX_VIDEO_MB = 10;
-const MAX_VIDEO_SEC = 60;
+const MAX_VIDEO_MB = 150;
+const MAX_VIDEO_SEC = 600; // 10 min ceiling — short vs long is decided automatically by duration
 
 export default function CreatePost({
   userId,
@@ -147,13 +148,13 @@ export default function CreatePost({
         continue;
       }
 
-      addFiles([f], 'video');
+      addFiles([f], 'video', dur);
     }
 
     setLoading(false);
   }
 
-  function addFiles(files: File[], type: 'image' | 'video') {
+  function addFiles(files: File[], type: 'image' | 'video', duration?: number) {
     setError('');
 
     const slots = MAX_MEDIA - mediaItems.length;
@@ -164,6 +165,7 @@ export default function CreatePost({
         file: f,
         preview: URL.createObjectURL(f),
         type,
+        duration,
       }));
 
     setMediaItems(prev => [...prev, ...items]);
@@ -360,6 +362,9 @@ export default function CreatePost({
       }
 
       /* Insert post */
+      const isVideo = media_type === 'video';
+      const videoDuration = isVideo ? (mediaItems[0]?.duration ?? null) : null;
+
       const { data: post, error: postErr } = await supabase
         .from('posts')
         .insert({
@@ -368,6 +373,7 @@ export default function CreatePost({
           content: content.trim() || null,
           media_url,
           media_type,
+          video_duration: videoDuration,
           extra_media: extra_media.length ? extra_media : null,
           language,
         })

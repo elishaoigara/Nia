@@ -15,13 +15,15 @@ export interface FlickPost {
   media_url: string
   created_at: string
   language: string | null
+  video_duration?: number | null
   profiles: { id: string; username: string; avatar_url: string | null; country: string | null } | null
   likes: { user_id: string }[]
   comments: { id: string }[]
 }
 
 interface FlicksClientProps {
-  videos: FlickPost[]
+  shorts: FlickPost[]
+  longs: FlickPost[]
   currentUserId: string
 }
 
@@ -31,6 +33,13 @@ function timeAgo(date: string) {
   if (s < 3600) return `${Math.floor(s / 60)}m`
   if (s < 86400) return `${Math.floor(s / 3600)}h`
   return `${Math.floor(s / 86400)}d`
+}
+
+function formatDuration(sec?: number | null) {
+  if (!sec || sec <= 0) return ''
+  const m = Math.floor(sec / 60)
+  const s = Math.floor(sec % 60)
+  return `${m}:${s.toString().padStart(2, '0')}`
 }
 
 // ── Comment Sheet ─────────────────────────────────────────────────────────────
@@ -349,25 +358,27 @@ function CommentSheet({
 }
 
 // ── Main Flicks Component ─────────────────────────────────────────────────────
-export default function NiaFlicksClient({ videos, currentUserId }: FlicksClientProps) {
+export default function NiaFlicksClient({ shorts, longs, currentUserId }: FlicksClientProps) {
+  const [tab, setTab] = useState<'short' | 'long'>('short')
   const [activeIdx, setActiveIdx] = useState(0)
   const [muted, setMuted] = useState(false)
   const [commentSheet, setCommentSheet] = useState<{ postId: string; count: number; flickIdx: number } | null>(null)
   const [commentCounts, setCommentCounts] = useState<Record<string, number>>(
-    () => Object.fromEntries(videos.map(v => [v.id, v.comments?.length ?? 0]))
+    () => Object.fromEntries([...shorts, ...longs].map(v => [v.id, v.comments?.length ?? 0]))
   )
+  const [openLong, setOpenLong] = useState<FlickPost | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const el = containerRef.current
-    if (!el) return
+    if (!el || tab !== 'short') return
     function onScroll() {
       const idx = Math.round(el!.scrollTop / window.innerHeight)
       setActiveIdx(idx)
     }
     el.addEventListener('scroll', onScroll, { passive: true })
     return () => el.removeEventListener('scroll', onScroll)
-  }, [])
+  }, [tab])
 
   // Lock body scroll when sheet open
   useEffect(() => {
@@ -383,7 +394,44 @@ export default function NiaFlicksClient({ videos, currentUserId }: FlicksClientP
     setCommentCounts(prev => ({ ...prev, [postId]: newCount }))
   }, [])
 
-  if (videos.length === 0) {
+  // ── Tab toggle (shared header) ──────────────────────────────────
+  const TabToggle = (
+    <div
+      style={{
+        position: 'absolute', top: 10, left: 0, right: 0, zIndex: 60,
+        display: 'flex', justifyContent: 'center', pointerEvents: 'none',
+      }}
+    >
+      <div style={{
+        pointerEvents: 'auto',
+        display: 'flex', gap: 4,
+        background: 'rgba(20,18,17,0.55)',
+        backdropFilter: 'blur(10px)',
+        border: '1px solid rgba(255,255,255,0.1)',
+        borderRadius: 20, padding: 3,
+      }}>
+        {(['short', 'long'] as const).map(t => (
+          <button
+            key={t}
+            onClick={() => { setTab(t); setActiveIdx(0) }}
+            style={{
+              border: 'none', cursor: 'pointer',
+              padding: '6px 16px', borderRadius: 16,
+              fontSize: 13, fontWeight: 700,
+              background: tab === t ? 'var(--grad-brand)' : 'transparent',
+              color: tab === t ? 'white' : 'rgba(255,255,255,0.6)',
+              transition: 'background 0.15s, color 0.15s',
+            }}
+          >
+            {t === 'short' ? 'Flicks' : 'Long Flicks'}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+
+  // ── Empty state ──────────────────────────────────────────────────
+  if (shorts.length === 0 && longs.length === 0) {
     return (
       <div style={{ position: 'fixed', inset: 0, background: '#0D0C0B', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
         <div style={{ textAlign: 'center', padding: '0 32px' }}>
@@ -405,6 +453,40 @@ export default function NiaFlicksClient({ videos, currentUserId }: FlicksClientP
     )
   }
 
+  // ── Long Flicks tab ───────────────────────────────────────────────
+  if (tab === 'long') {
+    return (
+      <div style={{ position: 'fixed', inset: 0, background: '#0D0C0B', overflowY: 'auto' }}>
+        {TabToggle}
+        <LongFlicksList
+          videos={longs}
+          onOpen={setOpenLong}
+        />
+        {openLong && (
+          <LongFlickPlayer
+            video={openLong}
+            currentUserId={currentUserId}
+            commentCount={commentCounts[openLong.id] ?? 0}
+            onOpenComments={(postId, count) => handleOpenComments(postId, count, -1)}
+            onClose={() => setOpenLong(null)}
+          />
+        )}
+        {commentSheet && (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 200 }}>
+            <CommentSheet
+              postId={commentSheet.postId}
+              currentUserId={currentUserId}
+              initialCount={commentSheet.count}
+              onClose={() => setCommentSheet(null)}
+              onCountChange={(n) => handleCommentCountChange(commentSheet.postId, n)}
+            />
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // ── Flicks (shorts) tab — unchanged swipe feed ───────────────────
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#000' }}>
       {/* Header overlay */}
@@ -425,7 +507,6 @@ export default function NiaFlicksClient({ videos, currentUserId }: FlicksClientP
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             color: 'white', fontWeight: 900, fontSize: 13,
           }}>N</div>
-          <span style={{ color: 'white', fontWeight: 800, fontSize: 17, letterSpacing: '-0.3px' }}>Flicks</span>
         </Link>
         <span style={{
           fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.7)',
@@ -435,35 +516,42 @@ export default function NiaFlicksClient({ videos, currentUserId }: FlicksClientP
           border: '1px solid rgba(255,255,255,0.1)',
           pointerEvents: 'none',
         }}>
-          {activeIdx + 1} / {videos.length}
+          {shorts.length > 0 ? `${activeIdx + 1} / ${shorts.length}` : ''}
         </span>
       </div>
 
-      {/* Scrollable reel container */}
-      <div
-        ref={containerRef}
-        style={{
-          position: 'absolute', inset: 0,
-          overflowY: 'scroll',
-          scrollSnapType: 'y mandatory',
-          WebkitOverflowScrolling: 'touch',
-          scrollbarWidth: 'none',
-          msOverflowStyle: 'none',
-        } as React.CSSProperties}
-      >
-        {videos.map((video, i) => (
-          <FlickItem
-            key={video.id}
-            video={video}
-            isActive={i === activeIdx}
-            muted={muted}
-            onToggleMute={() => setMuted(m => !m)}
-            currentUserId={currentUserId}
-            commentCount={commentCounts[video.id] ?? 0}
-            onOpenComments={(postId, count) => handleOpenComments(postId, count, i)}
-          />
-        ))}
-      </div>
+      {TabToggle}
+
+      {shorts.length === 0 ? (
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <p style={{ color: 'rgba(255,255,255,0.45)', fontSize: 14 }}>No short flicks yet — check Long Flicks!</p>
+        </div>
+      ) : (
+        <div
+          ref={containerRef}
+          style={{
+            position: 'absolute', inset: 0,
+            overflowY: 'scroll',
+            scrollSnapType: 'y mandatory',
+            WebkitOverflowScrolling: 'touch',
+            scrollbarWidth: 'none',
+            msOverflowStyle: 'none',
+          } as React.CSSProperties}
+        >
+          {shorts.map((video, i) => (
+            <FlickItem
+              key={video.id}
+              video={video}
+              isActive={i === activeIdx}
+              muted={muted}
+              onToggleMute={() => setMuted(m => !m)}
+              currentUserId={currentUserId}
+              commentCount={commentCounts[video.id] ?? 0}
+              onOpenComments={(postId, count) => handleOpenComments(postId, count, i)}
+            />
+          ))}
+        </div>
+      )}
 
       {/* Comment sheet */}
       {commentSheet && (
@@ -475,6 +563,214 @@ export default function NiaFlicksClient({ videos, currentUserId }: FlicksClientP
           onCountChange={(n) => handleCommentCountChange(commentSheet.postId, n)}
         />
       )}
+    </div>
+  )
+}
+
+// ── Long Flicks: card list ────────────────────────────────────────────────────
+function LongFlicksList({ videos, onOpen }: { videos: FlickPost[]; onOpen: (v: FlickPost) => void }) {
+  if (videos.length === 0) {
+    return (
+      <div style={{ paddingTop: 120, textAlign: 'center' }}>
+        <div style={{ fontSize: 40, marginBottom: 10 }}>🎞️</div>
+        <p style={{ color: 'rgba(255,255,255,0.45)', fontSize: 14 }}>No long flicks yet. Share something longer!</p>
+      </div>
+    )
+  }
+  return (
+    <div style={{ paddingTop: 64, paddingBottom: 32, display: 'flex', flexDirection: 'column', gap: 14, padding: '64px 14px 32px' }}>
+      {videos.map(v => {
+        const profile = v.profiles
+        return (
+          <button
+            key={v.id}
+            onClick={() => onOpen(v)}
+            style={{
+              textAlign: 'left', border: '1px solid rgba(255,255,255,0.08)',
+              background: 'rgba(255,255,255,0.04)', borderRadius: 16,
+              cursor: 'pointer', padding: 0, overflow: 'hidden',
+            }}
+          >
+            {/* Thumbnail */}
+            <div style={{ position: 'relative', width: '100%', aspectRatio: '16/9', background: '#000' }}>
+              <video src={v.media_url} preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover' }} muted />
+              <div style={{
+                position: 'absolute', inset: 0,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: 'rgba(0,0,0,0.18)',
+              }}>
+                <div style={{
+                  width: 46, height: 46, borderRadius: '50%',
+                  background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(6px)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  border: '1px solid rgba(255,255,255,0.2)',
+                }}>
+                  <Play size={20} fill="white" color="white" style={{ marginLeft: 2 }} />
+                </div>
+              </div>
+              {!!v.video_duration && (
+                <span style={{
+                  position: 'absolute', bottom: 8, right: 8,
+                  background: 'rgba(0,0,0,0.75)', color: 'white',
+                  fontSize: 11, fontWeight: 700, padding: '2px 6px', borderRadius: 4,
+                }}>
+                  {formatDuration(v.video_duration)}
+                </span>
+              )}
+            </div>
+
+            {/* Info */}
+            <div style={{ padding: '10px 12px', display: 'flex', gap: 10 }}>
+              <div style={{
+                width: 34, height: 34, borderRadius: '50%', overflow: 'hidden', flexShrink: 0,
+                background: 'var(--grad-brand)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: 'white', fontWeight: 700, fontSize: 12,
+              }}>
+                {profile?.avatar_url
+                  ? <img src={profile.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  : profile?.username?.[0]?.toUpperCase() ?? '?'
+                }
+              </div>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                {v.content && (
+                  <p style={{
+                    color: 'rgba(255,255,255,0.92)', fontSize: 13.5, fontWeight: 600, margin: 0,
+                    display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+                  } as React.CSSProperties}>
+                    {v.content}
+                  </p>
+                )}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 4 }}>
+                  <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', fontWeight: 600 }}>
+                    @{profile?.username ?? 'unknown'}
+                  </span>
+                  {profile?.country && <span style={{ fontSize: 12 }}>{getFlag(profile.country)}</span>}
+                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>· {timeAgo(v.created_at)}</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 6 }}>
+                  <span style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.45)', display: 'flex', alignItems: 'center', gap: 3 }}>
+                    <Heart size={12} /> {v.likes?.length ?? 0}
+                  </span>
+                  <span style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.45)', display: 'flex', alignItems: 'center', gap: 3 }}>
+                    <MessageCircle size={12} /> {v.comments?.length ?? 0}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+// ── Long Flicks: dedicated player screen ─────────────────────────────────────
+function LongFlickPlayer({
+  video, currentUserId, commentCount, onOpenComments, onClose,
+}: {
+  video: FlickPost
+  currentUserId: string
+  commentCount: number
+  onOpenComments: (postId: string, count: number) => void
+  onClose: () => void
+}) {
+  const supabase = createClient()
+  const [liked, setLiked] = useState(video.likes?.some(l => l.user_id === currentUserId) ?? false)
+  const [likeCount, setLikeCount] = useState(video.likes?.length ?? 0)
+  const [copied, setCopied] = useState(false)
+  const profile = video.profiles
+
+  async function toggleLike() {
+    if (liked) {
+      setLiked(false); setLikeCount(c => c - 1)
+      await supabase.from('likes').delete().eq('post_id', video.id).eq('user_id', currentUserId)
+    } else {
+      setLiked(true); setLikeCount(c => c + 1)
+      await supabase.from('likes').insert({ post_id: video.id, user_id: currentUserId })
+    }
+  }
+
+  async function share() {
+    const url = `${window.location.origin}/posts/${video.id}`
+    if (navigator.share) {
+      await navigator.share({ url })
+    } else {
+      await navigator.clipboard.writeText(url)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 100, background: '#0D0C0B', overflowY: 'auto' }}>
+      {/* Close */}
+      <button
+        onClick={onClose}
+        style={{
+          position: 'absolute', top: 14, left: 14, zIndex: 10,
+          width: 34, height: 34, borderRadius: '50%', border: 'none',
+          background: 'rgba(0,0,0,0.55)', cursor: 'pointer',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}
+      >
+        <X size={16} color="white" />
+      </button>
+
+      {/* Player */}
+      <video
+        src={video.media_url}
+        controls autoPlay playsInline
+        style={{ width: '100%', maxHeight: '50vh', background: '#000', display: 'block' }}
+      />
+
+      {/* Info */}
+      <div style={{ padding: '14px 16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+          <Link href={`/profile/${profile?.id}`} style={{ display: 'flex' }}>
+            <div style={{
+              width: 40, height: 40, borderRadius: '50%', overflow: 'hidden',
+              background: 'var(--grad-brand)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: 'white', fontWeight: 700, fontSize: 14,
+            }}>
+              {profile?.avatar_url
+                ? <img src={profile.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                : profile?.username?.[0]?.toUpperCase() ?? '?'
+              }
+            </div>
+          </Link>
+          <div style={{ minWidth: 0 }}>
+            <Link href={`/profile/${profile?.id}`} style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ color: 'white', fontWeight: 700, fontSize: 14 }}>@{profile?.username ?? 'unknown'}</span>
+              {profile?.country && <span style={{ fontSize: 13 }}>{getFlag(profile.country)}</span>}
+            </Link>
+            <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11.5 }}>{timeAgo(video.created_at)}</span>
+          </div>
+        </div>
+
+        {video.content && (
+          <p style={{ color: 'rgba(255,255,255,0.85)', fontSize: 14, lineHeight: 1.55, marginBottom: 14 }}>
+            {video.content}
+          </p>
+        )}
+
+        {/* Actions */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 18, paddingTop: 6, borderTop: '1px solid rgba(255,255,255,0.06)', marginTop: 4 }}>
+          <button onClick={toggleLike} style={{ display: 'flex', alignItems: 'center', gap: 6, border: 'none', background: 'none', cursor: 'pointer', padding: '10px 0' }}>
+            <Heart size={20} fill={liked ? '#ff4d6d' : 'none'} color={liked ? '#ff4d6d' : 'rgba(255,255,255,0.8)'} strokeWidth={1.8} />
+            <span style={{ color: 'rgba(255,255,255,0.8)', fontSize: 13, fontWeight: 700 }}>{likeCount}</span>
+          </button>
+          <button onClick={() => onOpenComments(video.id, commentCount)} style={{ display: 'flex', alignItems: 'center', gap: 6, border: 'none', background: 'none', cursor: 'pointer', padding: '10px 0' }}>
+            <MessageCircle size={20} color="rgba(255,255,255,0.8)" strokeWidth={1.8} />
+            <span style={{ color: 'rgba(255,255,255,0.8)', fontSize: 13, fontWeight: 700 }}>{commentCount}</span>
+          </button>
+          <button onClick={share} style={{ display: 'flex', alignItems: 'center', gap: 6, border: 'none', background: 'none', cursor: 'pointer', padding: '10px 0' }}>
+            {copied ? <Check size={18} color="rgba(255,255,255,0.8)" /> : <Share2 size={18} color="rgba(255,255,255,0.8)" strokeWidth={1.8} />}
+            <span style={{ color: 'rgba(255,255,255,0.8)', fontSize: 13, fontWeight: 700 }}>{copied ? 'Copied' : 'Share'}</span>
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
