@@ -13,6 +13,8 @@ import {
   Trash2,
   Mic,
   MicOff,
+  Play,
+  Globe,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
@@ -53,6 +55,7 @@ const AFRICAN_LANGUAGES: LanguageOption[] = [
 
 const MAX_MEDIA = 5;
 const MAX_CHARS = 500;
+const MAX_IMAGE_MB = 20;
 const MAX_VIDEO_MB = 150;
 const MAX_VIDEO_SEC = 600; // 10 min ceiling — short vs long is decided automatically by duration
 
@@ -71,6 +74,7 @@ export default function CreatePost({
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
   const [voiceBlob, setVoiceBlob] = useState<Blob | null>(null);
   const [loading, setLoading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
   const [captionLoad, setCaptionLoad] = useState(false);
   const [error, setError] = useState('');
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -126,7 +130,22 @@ export default function CreatePost({
   function handleImagePick(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
 
-    addFiles(files, 'image');
+    const tooBig = files.filter(f => f.size > MAX_IMAGE_MB * 1024 * 1024);
+    const ok = files.filter(f => f.size <= MAX_IMAGE_MB * 1024 * 1024);
+
+    if (tooBig.length) {
+      setError(
+        tooBig.length === 1
+          ? `That image is over ${MAX_IMAGE_MB} MB. Try a smaller photo.`
+          : `${tooBig.length} images are over ${MAX_IMAGE_MB} MB and were skipped.`
+      );
+    } else {
+      setError('');
+    }
+
+    if (ok.length) {
+      addFiles(ok, 'image');
+    }
 
     e.target.value = '';
   }
@@ -299,6 +318,11 @@ export default function CreatePost({
 
     let extra_media: { url: string; type: string }[] = [];
 
+    const totalUploads = voiceBlob ? 1 : mediaItems.length;
+    if (totalUploads > 0) {
+      setUploadProgress({ done: 0, total: totalUploads });
+    }
+
     try {
       /* Upload voice */
       if (voiceBlob) {
@@ -321,12 +345,14 @@ export default function CreatePost({
           .data.publicUrl;
 
         media_type = 'audio';
+        setUploadProgress({ done: 1, total: 1 });
 
       /* Upload images/videos */
       } else if (mediaItems.length > 0) {
         const uploaded: { url: string; type: string }[] = [];
 
-        for (const item of mediaItems) {
+        for (let i = 0; i < mediaItems.length; i++) {
+          const item = mediaItems[i];
           const ext =
             item.file.name.split('.').pop() ??
             (item.type === 'video' ? 'mp4' : 'jpg');
@@ -354,6 +380,8 @@ export default function CreatePost({
               .data.publicUrl,
             type: item.type,
           });
+
+          setUploadProgress({ done: i + 1, total: mediaItems.length });
         }
 
         media_url = uploaded[0].url;
@@ -453,6 +481,7 @@ export default function CreatePost({
       setError('Something went wrong.');
     } finally {
       setLoading(false);
+      setUploadProgress(null);
     }
   }
 
@@ -553,7 +582,14 @@ export default function CreatePost({
               disabled={!canPost || loading}
               onClick={handlePost}
             >
-              {loading ? <Loader2 className="animate-spin" size={16} /> : 'Post'}
+              {loading ? (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <Loader2 className="animate-spin" size={16} />
+                  {uploadProgress && uploadProgress.total > 0
+                    ? `${uploadProgress.done}/${uploadProgress.total}`
+                    : null}
+                </span>
+              ) : 'Post'}
             </button>
           </div>
         </div>
@@ -627,17 +663,32 @@ export default function CreatePost({
 
         {mediaItems.length > 0 && (
           <div style={{ padding: '0 16px 12px' }}>
-            <div className={`post-media ${mediaGridClass}`}>
+            <div className={`post-media compose-media ${mediaGridClass}`}>
               {mediaItems.map((item, idx) => (
-                <div key={idx} style={{ position: 'relative' }}>
-                  {item.type === 'image' ? <img src={item.preview} alt={`Upload ${idx}`} /> : <video src={item.preview} />}
-                  <button onClick={() => removeMedia(idx)}
-                    style={{ position: 'absolute', top: 6, right: 6, background: 'rgba(0,0,0,0.6)', border: 'none', borderRadius: '50%', width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#fff' }}>
-                    <X size={14} />
+                <div key={idx} className="compose-media-item">
+                  {item.type === 'image' ? (
+                    <img src={item.preview} alt={`Upload ${idx + 1}`} />
+                  ) : (
+                    <>
+                      <video src={item.preview} muted playsInline />
+                      <span className="compose-media-badge">
+                        <Play size={12} fill="currentColor" />
+                      </span>
+                    </>
+                  )}
+                  <button
+                    className="compose-media-remove"
+                    onClick={() => removeMedia(idx)}
+                    aria-label="Remove media"
+                  >
+                    <X size={16} />
                   </button>
                 </div>
               ))}
             </div>
+            <p className="compose-media-hint">
+              {mediaItems.length}/{MAX_MEDIA} added
+            </p>
           </div>
         )}
 
@@ -688,8 +739,13 @@ export default function CreatePost({
             <button className="compose-icon-btn" onClick={() => setShowPoll(prev => !prev)} title="Add poll" style={{ color: showPoll ? 'var(--nia-violet)' : undefined }}>
               <BarChart2 size={20} />
             </button>
-            <button className="compose-icon-btn" onClick={() => setShowLang(prev => !prev)} title="Select language" style={{ color: showLang ? 'var(--nia-violet)' : undefined }}>
-              <span style={{ fontSize: 18 }}>{AFRICAN_LANGUAGES.find(l => l.code === language)?.emoji ?? '🌍'}</span>
+            <button className="compose-icon-btn" onClick={() => setShowLang(prev => !prev)} title="Select language" style={{ color: showLang || language !== 'english' ? 'var(--nia-violet)' : undefined }}>
+              <Globe size={20} />
+              {language !== 'english' && (
+                <span className="compose-lang-badge">
+                  {language.slice(0, 2).toUpperCase()}
+                </span>
+              )}
             </button>
           </div>
           <span style={{
