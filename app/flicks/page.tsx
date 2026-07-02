@@ -16,8 +16,12 @@ export default async function ReelsPage() {
       id, content, media_url, media_type, created_at, language, video_duration,
       profiles:user_id (id, username, avatar_url, country),
       likes (user_id),
-      comments (id)
+      comments (id),
+      post_views (id)
     `)
+    // If/when you add a thumbnail_url column (generate a poster frame at upload time),
+    // add it to the select above and it'll be picked up automatically by FlicksClient —
+    // no other changes needed.
     .eq('media_type', 'video')
     .not('media_url', 'is', null)
     .order('created_at', { ascending: false })

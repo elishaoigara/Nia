@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import {
   Heart, MessageCircle, Share2, Volume2, VolumeX, Play,
-  X, Send, Loader2, ImagePlus, Eye, Check,
+  X, Send, Loader2, ImagePlus, Eye, Check, AlertCircle, RotateCcw,
 } from 'lucide-react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
@@ -13,12 +13,16 @@ export interface FlickPost {
   id: string
   content: string | null
   media_url: string
+  /** Optional poster frame — add a `thumbnail_url` column + generate it at upload time to kill the black-flash-on-load. Falls back gracefully if absent. */
+  thumbnail_url?: string | null
   created_at: string
   language: string | null
   video_duration?: number | null
   profiles: { id: string; username: string; avatar_url: string | null; country: string | null } | null
   likes: { user_id: string }[]
   comments: { id: string }[]
+  /** Join this in the server query (`post_views (id)`) so we don't fire a separate count query per video on mount. */
+  post_views?: { id: string }[]
 }
 
 interface FlicksClientProps {
@@ -26,6 +30,12 @@ interface FlicksClientProps {
   longs: FlickPost[]
   currentUserId: string
 }
+
+// How many videos on either side of the active one get a real <video> element.
+// Everything outside this window renders a lightweight poster placeholder instead —
+// this is the fix for mid/low-end Android devices choking after scrolling a while.
+const RENDER_WINDOW = 1
+const DOUBLE_TAP_MS = 280
 
 function timeAgo(date: string) {
   const s = Math.floor((Date.now() - new Date(date).getTime()) / 1000)
@@ -41,6 +51,36 @@ function formatDuration(sec?: number | null) {
   const s = Math.floor(sec % 60)
   return `${m}:${s.toString().padStart(2, '0')}`
 }
+
+// Detects Data Saver / slow connections (common on African mobile networks) so we
+// can dial back preloading instead of burning the user's data bundle in the background.
+function useSlowConnection() {
+  const [slow, setSlow] = useState(false)
+  useEffect(() => {
+    const conn = (navigator as any).connection
+    if (!conn) return
+    function update() {
+      setSlow(!!conn.saveData || ['slow-2g', '2g', '3g'].includes(conn.effectiveType))
+    }
+    update()
+    conn.addEventListener?.('change', update)
+    return () => conn.removeEventListener?.('change', update)
+  }, [])
+  return slow
+}
+
+const HEART_BURST_KEYFRAMES = `
+@keyframes niaHeartBurst {
+  0% { transform: scale(0.3); opacity: 0; }
+  25% { transform: scale(1.15); opacity: 1; }
+  45% { transform: scale(0.95); opacity: 1; }
+  100% { transform: scale(1.05); opacity: 0; }
+}
+@keyframes niaSoundHintFade {
+  0%, 70% { opacity: 1; }
+  100% { opacity: 0; }
+}
+`
 
 // ── Comment Sheet ─────────────────────────────────────────────────────────────
 function CommentSheet({
@@ -84,7 +124,11 @@ function CommentSheet({
         setLoading(false)
         setTimeout(() => {
           listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' })
-          inputRef.current?.focus()
+          // Don't force-focus on mobile — it pops the keyboard immediately and covers
+          // the comment list before the user has even read anything.
+          if (window.matchMedia?.('(pointer: fine)').matches) {
+            inputRef.current?.focus()
+          }
         }, 200)
       })
   }, [postId]) // eslint-disable-line
@@ -326,7 +370,7 @@ function CommentSheet({
               rows={1}
               style={{
                 flex: 1, padding: '9px 14px', borderRadius: 20, outline: 'none',
-                resize: 'none', fontSize: 13, fontFamily: 'inherit',
+                resize: 'none', fontSize: 16, fontFamily: 'inherit', // 16px prevents iOS Safari auto-zoom on focus
                 background: 'rgba(255,255,255,0.07)',
                 color: 'white',
                 border: '1.5px solid rgba(255,255,255,0.09)',
@@ -361,23 +405,31 @@ function CommentSheet({
 export default function NiaFlicksClient({ shorts, longs, currentUserId }: FlicksClientProps) {
   const [tab, setTab] = useState<'short' | 'long'>('short')
   const [activeIdx, setActiveIdx] = useState(0)
-  const [muted, setMuted] = useState(false)
+  // Start muted: iOS/most mobile browsers silently reject unmuted autoplay, which
+  // meant the very first video often never actually started playing. Muted-by-default
+  // + a "tap for sound" hint is the standard short-video pattern for a reason.
+  const [muted, setMuted] = useState(true)
   const [commentSheet, setCommentSheet] = useState<{ postId: string; count: number; flickIdx: number } | null>(null)
   const [commentCounts, setCommentCounts] = useState<Record<string, number>>(
     () => Object.fromEntries([...shorts, ...longs].map(v => [v.id, v.comments?.length ?? 0]))
   )
   const [openLong, setOpenLong] = useState<FlickPost | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const slowConnection = useSlowConnection()
 
   useEffect(() => {
     const el = containerRef.current
     if (!el || tab !== 'short') return
+    let raf = 0
     function onScroll() {
-      const idx = Math.round(el!.scrollTop / window.innerHeight)
-      setActiveIdx(idx)
+      cancelAnimationFrame(raf)
+      raf = requestAnimationFrame(() => {
+        const idx = Math.round(el!.scrollTop / window.innerHeight)
+        setActiveIdx(idx)
+      })
     }
     el.addEventListener('scroll', onScroll, { passive: true })
-    return () => el.removeEventListener('scroll', onScroll)
+    return () => { el.removeEventListener('scroll', onScroll); cancelAnimationFrame(raf) }
   }, [tab])
 
   // Lock body scroll when sheet open
@@ -398,7 +450,7 @@ export default function NiaFlicksClient({ shorts, longs, currentUserId }: Flicks
   const TabToggle = (
     <div
       style={{
-        position: 'absolute', top: 10, left: 0, right: 0, zIndex: 60,
+        position: 'absolute', top: 'calc(10px + env(safe-area-inset-top, 0px))', left: 0, right: 0, zIndex: 60,
         display: 'flex', justifyContent: 'center', pointerEvents: 'none',
       }}
     >
@@ -416,11 +468,12 @@ export default function NiaFlicksClient({ shorts, longs, currentUserId }: Flicks
             onClick={() => { setTab(t); setActiveIdx(0) }}
             style={{
               border: 'none', cursor: 'pointer',
-              padding: '6px 16px', borderRadius: 16,
+              padding: '8px 16px', borderRadius: 16, // 8px vertical = comfortably >=44px tap target with line-height
               fontSize: 13, fontWeight: 700,
               background: tab === t ? 'var(--grad-brand)' : 'transparent',
               color: tab === t ? 'white' : 'rgba(255,255,255,0.6)',
               transition: 'background 0.15s, color 0.15s',
+              touchAction: 'manipulation',
             }}
           >
             {t === 'short' ? 'Flicks' : 'Long Flicks'}
@@ -456,7 +509,7 @@ export default function NiaFlicksClient({ shorts, longs, currentUserId }: Flicks
   // ── Long Flicks tab ───────────────────────────────────────────────
   if (tab === 'long') {
     return (
-      <div style={{ position: 'fixed', inset: 0, background: '#0D0C0B', overflowY: 'auto' }}>
+      <div style={{ position: 'fixed', inset: 0, background: '#0D0C0B', overflowY: 'auto', overscrollBehaviorY: 'contain' } as React.CSSProperties}>
         {TabToggle}
         <LongFlicksList
           videos={longs}
@@ -486,14 +539,17 @@ export default function NiaFlicksClient({ shorts, longs, currentUserId }: Flicks
     )
   }
 
-  // ── Flicks (shorts) tab — unchanged swipe feed ───────────────────
+  // ── Flicks (shorts) tab ───────────────────────────────────────────
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#000' }}>
+      <style>{HEART_BURST_KEYFRAMES}</style>
+
       {/* Header overlay */}
       <div
         style={{
           position: 'absolute', top: 0, left: 0, right: 0, zIndex: 50,
-          height: 60,
+          height: 'calc(60px + env(safe-area-inset-top, 0px))',
+          paddingTop: 'env(safe-area-inset-top, 0px)',
           background: 'linear-gradient(to bottom, rgba(0,0,0,0.72) 0%, transparent 100%)',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           padding: '0 16px',
@@ -534,6 +590,7 @@ export default function NiaFlicksClient({ shorts, longs, currentUserId }: Flicks
             overflowY: 'scroll',
             scrollSnapType: 'y mandatory',
             WebkitOverflowScrolling: 'touch',
+            overscrollBehaviorY: 'contain', // stops iOS rubber-band from bleeding into pull-to-refresh
             scrollbarWidth: 'none',
             msOverflowStyle: 'none',
           } as React.CSSProperties}
@@ -543,11 +600,14 @@ export default function NiaFlicksClient({ shorts, longs, currentUserId }: Flicks
               key={video.id}
               video={video}
               isActive={i === activeIdx}
+              shouldMount={Math.abs(i - activeIdx) <= RENDER_WINDOW}
+              slowConnection={slowConnection}
               muted={muted}
               onToggleMute={() => setMuted(m => !m)}
               currentUserId={currentUserId}
               commentCount={commentCounts[video.id] ?? 0}
               onOpenComments={(postId, count) => handleOpenComments(postId, count, i)}
+              showSoundHint={i === 0 && muted}
             />
           ))}
         </div>
@@ -589,11 +649,18 @@ function LongFlicksList({ videos, onOpen }: { videos: FlickPost[]; onOpen: (v: F
               textAlign: 'left', border: '1px solid rgba(255,255,255,0.08)',
               background: 'rgba(255,255,255,0.04)', borderRadius: 16,
               cursor: 'pointer', padding: 0, overflow: 'hidden',
+              touchAction: 'manipulation',
             }}
           >
             {/* Thumbnail */}
             <div style={{ position: 'relative', width: '100%', aspectRatio: '16/9', background: '#000' }}>
-              <video src={v.media_url} preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover' }} muted />
+              <video
+                src={v.media_url}
+                preload="metadata"
+                poster={v.thumbnail_url ?? undefined}
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                muted
+              />
               <div style={{
                 position: 'absolute', inset: 0,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -708,10 +775,11 @@ function LongFlickPlayer({
       <button
         onClick={onClose}
         style={{
-          position: 'absolute', top: 14, left: 14, zIndex: 10,
+          position: 'absolute', top: 'calc(14px + env(safe-area-inset-top, 0px))', left: 14, zIndex: 10,
           width: 34, height: 34, borderRadius: '50%', border: 'none',
           background: 'rgba(0,0,0,0.55)', cursor: 'pointer',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
+          touchAction: 'manipulation',
         }}
       >
         <X size={16} color="white" />
@@ -720,12 +788,13 @@ function LongFlickPlayer({
       {/* Player */}
       <video
         src={video.media_url}
+        poster={video.thumbnail_url ?? undefined}
         controls autoPlay playsInline
         style={{ width: '100%', maxHeight: '50vh', background: '#000', display: 'block' }}
       />
 
       {/* Info */}
-      <div style={{ padding: '14px 16px' }}>
+      <div style={{ padding: '14px 16px calc(14px + env(safe-area-inset-bottom, 0px))' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
           <Link href={`/profile/${profile?.id}`} style={{ display: 'flex' }}>
             <div style={{
@@ -757,15 +826,15 @@ function LongFlickPlayer({
 
         {/* Actions */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 18, paddingTop: 6, borderTop: '1px solid rgba(255,255,255,0.06)', marginTop: 4 }}>
-          <button onClick={toggleLike} style={{ display: 'flex', alignItems: 'center', gap: 6, border: 'none', background: 'none', cursor: 'pointer', padding: '10px 0' }}>
+          <button onClick={toggleLike} style={{ display: 'flex', alignItems: 'center', gap: 6, border: 'none', background: 'none', cursor: 'pointer', padding: '10px 0', touchAction: 'manipulation' }}>
             <Heart size={20} fill={liked ? '#ff4d6d' : 'none'} color={liked ? '#ff4d6d' : 'rgba(255,255,255,0.8)'} strokeWidth={1.8} />
             <span style={{ color: 'rgba(255,255,255,0.8)', fontSize: 13, fontWeight: 700 }}>{likeCount}</span>
           </button>
-          <button onClick={() => onOpenComments(video.id, commentCount)} style={{ display: 'flex', alignItems: 'center', gap: 6, border: 'none', background: 'none', cursor: 'pointer', padding: '10px 0' }}>
+          <button onClick={() => onOpenComments(video.id, commentCount)} style={{ display: 'flex', alignItems: 'center', gap: 6, border: 'none', background: 'none', cursor: 'pointer', padding: '10px 0', touchAction: 'manipulation' }}>
             <MessageCircle size={20} color="rgba(255,255,255,0.8)" strokeWidth={1.8} />
             <span style={{ color: 'rgba(255,255,255,0.8)', fontSize: 13, fontWeight: 700 }}>{commentCount}</span>
           </button>
-          <button onClick={share} style={{ display: 'flex', alignItems: 'center', gap: 6, border: 'none', background: 'none', cursor: 'pointer', padding: '10px 0' }}>
+          <button onClick={share} style={{ display: 'flex', alignItems: 'center', gap: 6, border: 'none', background: 'none', cursor: 'pointer', padding: '10px 0', touchAction: 'manipulation' }}>
             {copied ? <Check size={18} color="rgba(255,255,255,0.8)" /> : <Share2 size={18} color="rgba(255,255,255,0.8)" strokeWidth={1.8} />}
             <span style={{ color: 'rgba(255,255,255,0.8)', fontSize: 13, fontWeight: 700 }}>{copied ? 'Copied' : 'Share'}</span>
           </button>
@@ -777,37 +846,38 @@ function LongFlickPlayer({
 
 // ── Single Flick Item ─────────────────────────────────────────────────────────
 function FlickItem({
-  video, isActive, muted, onToggleMute, currentUserId, commentCount, onOpenComments,
+  video, isActive, shouldMount, slowConnection, muted, onToggleMute,
+  currentUserId, commentCount, onOpenComments, showSoundHint,
 }: {
   video: FlickPost
   isActive: boolean
+  shouldMount: boolean
+  slowConnection: boolean
   muted: boolean
   onToggleMute: () => void
   currentUserId: string
   commentCount: number
   onOpenComments: (postId: string, count: number) => void
+  showSoundHint: boolean
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const viewTracked = useRef(false)
+  const lastTapRef = useRef(0)
+  const tapTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const supabase = createClient()
 
   const [playing, setPlaying] = useState(false)
   const [liked, setLiked] = useState(video.likes?.some(l => l.user_id === currentUserId) ?? false)
   const [likeCount, setLikeCount] = useState(video.likes?.length ?? 0)
   const [progress, setProgress] = useState(0)
-  const [viewCount, setViewCount] = useState<number | null>(null)
+  const [viewCount, setViewCount] = useState<number>(video.post_views?.length ?? 0)
   const [copied, setCopied] = useState(false)
+  const [buffering, setBuffering] = useState(false)
+  const [errored, setErrored] = useState(false)
+  const [showBigHeart, setShowBigHeart] = useState(false)
 
-  // Fetch real view count on mount
-  useEffect(() => {
-    supabase
-      .from('post_views')
-      .select('id', { count: 'exact', head: true })
-      .eq('post_id', video.id)
-      .then(({ count }) => setViewCount(count ?? 0))
-  }, [video.id]) // eslint-disable-line
-
-  // Track view once per active session
+  // Track view once per active session — count comes from the joined `post_views`
+  // in the server query now, so no extra fetch per video on mount.
   useEffect(() => {
     if (isActive && !viewTracked.current && currentUserId) {
       viewTracked.current = true
@@ -815,19 +885,15 @@ function FlickItem({
         .from('post_views')
         .insert({ post_id: video.id, user_id: currentUserId })
         .then(({ error }) => {
-          if (!error) setViewCount(c => (c ?? 0) + 1)
+          if (!error) setViewCount(c => c + 1)
         })
-    }
-    if (!isActive) {
-      // Reset so re-entry counts again only if navigated away fully
-      // (keep viewTracked true so same session doesn't double-count)
     }
   }, [isActive]) // eslint-disable-line
 
-  // Play / pause based on active state
+  // Play / pause based on active state (only meaningful once the <video> is mounted)
   useEffect(() => {
     const v = videoRef.current
-    if (!v) return
+    if (!v || !shouldMount) return
     if (isActive) {
       v.currentTime = 0
       v.play().then(() => setPlaying(true)).catch(() => { })
@@ -836,12 +902,16 @@ function FlickItem({
       setPlaying(false)
       setProgress(0)
     }
-  }, [isActive])
+  }, [isActive, shouldMount])
 
   // Sync mute
   useEffect(() => {
     if (videoRef.current) videoRef.current.muted = muted
   }, [muted])
+
+  useEffect(() => {
+    return () => { if (tapTimeoutRef.current) clearTimeout(tapTimeoutRef.current) }
+  }, [])
 
   function togglePlay() {
     const v = videoRef.current
@@ -850,14 +920,48 @@ function FlickItem({
     else { v.pause(); setPlaying(false) }
   }
 
+  async function likeIfNotAlready() {
+    if (liked) return
+    setLiked(true); setLikeCount(c => c + 1)
+    await supabase.from('likes').insert({ post_id: video.id, user_id: currentUserId })
+  }
+
   async function toggleLike() {
     if (liked) {
       setLiked(false); setLikeCount(c => c - 1)
       await supabase.from('likes').delete().eq('post_id', video.id).eq('user_id', currentUserId)
     } else {
-      setLiked(true); setLikeCount(c => c + 1)
-      await supabase.from('likes').insert({ post_id: video.id, user_id: currentUserId })
+      await likeIfNotAlready()
     }
+  }
+
+  // Single tap = play/pause. Double tap = like (Instagram-style: always likes, never unlikes)
+  // plus a big center heart burst. touchAction: 'manipulation' on the video kills the native
+  // double-tap-to-zoom gesture so this doesn't fight the browser on mobile.
+  function handleTap() {
+    const now = Date.now()
+    const dt = now - lastTapRef.current
+    if (dt > 0 && dt < DOUBLE_TAP_MS) {
+      if (tapTimeoutRef.current) { clearTimeout(tapTimeoutRef.current); tapTimeoutRef.current = null }
+      lastTapRef.current = 0
+      likeIfNotAlready()
+      setShowBigHeart(true)
+      setTimeout(() => setShowBigHeart(false), 700)
+    } else {
+      lastTapRef.current = now
+      tapTimeoutRef.current = setTimeout(() => {
+        togglePlay()
+        tapTimeoutRef.current = null
+      }, DOUBLE_TAP_MS)
+    }
+  }
+
+  function retryVideo() {
+    setErrored(false)
+    const v = videoRef.current
+    if (!v) return
+    v.load()
+    if (isActive) v.play().then(() => setPlaying(true)).catch(() => { })
   }
 
   async function share() {
@@ -873,6 +977,10 @@ function FlickItem({
 
   const profile = video.profiles
 
+  // Only preload aggressively for the active video, or for neighbors when we're
+  // not on a constrained connection — keeps data usage sane on 3G.
+  const preload = isActive ? 'auto' : slowConnection ? 'none' : 'metadata'
+
   return (
     <div
       style={{
@@ -881,20 +989,43 @@ function FlickItem({
         scrollSnapAlign: 'start', scrollSnapStop: 'always',
         background: '#000',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
+        overflow: 'hidden',
       }}
     >
-      {/* Video */}
-      <video
-        ref={videoRef}
-        src={video.media_url}
-        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
-        loop playsInline preload={isActive ? 'auto' : 'none'}
-        onTimeUpdate={() => {
-          const v = videoRef.current
-          if (v && v.duration) setProgress((v.currentTime / v.duration) * 100)
-        }}
-        onClick={togglePlay}
-      />
+      {shouldMount ? (
+        <video
+          ref={videoRef}
+          src={video.media_url}
+          poster={video.thumbnail_url ?? undefined}
+          style={{
+            position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover',
+            touchAction: 'manipulation', WebkitUserSelect: 'none', userSelect: 'none',
+          } as React.CSSProperties}
+          loop playsInline preload={preload}
+          onTimeUpdate={() => {
+            const v = videoRef.current
+            if (v && v.duration) setProgress((v.currentTime / v.duration) * 100)
+          }}
+          onWaiting={() => setBuffering(true)}
+          onPlaying={() => { setBuffering(false); setErrored(false) }}
+          onCanPlay={() => setBuffering(false)}
+          onError={() => { setBuffering(false); setErrored(true) }}
+          onClick={handleTap}
+        />
+      ) : (
+        // Lightweight placeholder for off-screen videos — no decoder, no network request
+        // beyond the (already cached) poster image. This is what keeps memory sane once
+        // someone's scrolled through 20+ flicks on a low-end device.
+        <div
+          onClick={handleTap}
+          style={{
+            position: 'absolute', inset: 0,
+            background: video.thumbnail_url
+              ? `#000 url(${video.thumbnail_url}) center / cover no-repeat`
+              : 'linear-gradient(180deg, #1a1815 0%, #0D0C0B 100%)',
+          }}
+        />
+      )}
 
       {/* Cinematic gradient */}
       <div
@@ -904,8 +1035,37 @@ function FlickItem({
         }}
       />
 
+      {/* Buffering spinner — distinguishes "loading" from "broken" on slow connections */}
+      {buffering && isActive && !errored && (
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+          <Loader2 size={34} className="animate-spin" style={{ color: 'rgba(255,255,255,0.85)' }} />
+        </div>
+      )}
+
+      {/* Error state with retry */}
+      {errored && (
+        <div style={{
+          position: 'absolute', inset: 0, zIndex: 5,
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10,
+          background: 'rgba(0,0,0,0.55)',
+        }}>
+          <AlertCircle size={30} color="rgba(255,255,255,0.75)" />
+          <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: 13, fontWeight: 600 }}>Couldn't load this video</p>
+          <button
+            onClick={retryVideo}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', borderRadius: 20,
+              border: '1px solid rgba(255,255,255,0.25)', background: 'rgba(255,255,255,0.1)',
+              color: 'white', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', touchAction: 'manipulation',
+            }}
+          >
+            <RotateCcw size={14} /> Retry
+          </button>
+        </div>
+      )}
+
       {/* Pause overlay */}
-      {!playing && (
+      {!playing && !buffering && !errored && (
         <div style={{
           position: 'absolute', inset: 0,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -923,9 +1083,43 @@ function FlickItem({
         </div>
       )}
 
+      {/* Double-tap like burst */}
+      {showBigHeart && (
+        <div style={{
+          position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          pointerEvents: 'none', zIndex: 8,
+        }}>
+          <Heart
+            size={110}
+            fill="#ff4d6d"
+            color="#ff4d6d"
+            style={{ animation: 'niaHeartBurst 0.7s ease-out forwards', filter: 'drop-shadow(0 4px 16px rgba(0,0,0,0.4))' }}
+          />
+        </div>
+      )}
+
+      {/* "Tap for sound" hint — only on the very first flick, only while muted */}
+      {showSoundHint && isActive && (
+        <div style={{
+          position: 'absolute', top: 'calc(72px + env(safe-area-inset-top, 0px))', left: 0, right: 0,
+          display: 'flex', justifyContent: 'center', pointerEvents: 'none', zIndex: 9,
+          animation: 'niaSoundHintFade 3.5s ease-out forwards',
+        }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)',
+            padding: '6px 14px', borderRadius: 20,
+            border: '1px solid rgba(255,255,255,0.15)',
+          }}>
+            <VolumeX size={13} color="white" />
+            <span style={{ color: 'white', fontSize: 12, fontWeight: 600 }}>Tap the speaker for sound</span>
+          </div>
+        </div>
+      )}
+
       {/* ── Right action rail ───────────────────────────── */}
       <div style={{
-        position: 'absolute', right: 12, bottom: 100,
+        position: 'absolute', right: 12, bottom: 'calc(100px + env(safe-area-inset-bottom, 0px))',
         display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20,
         zIndex: 10,
       }}>
@@ -972,7 +1166,7 @@ function FlickItem({
             <Eye size={19} color="rgba(255,255,255,0.85)" />
           </div>
           <span style={{ color: 'white', fontSize: 11, fontWeight: 700, minHeight: 14, textShadow: '0 1px 3px rgba(0,0,0,0.6)' }}>
-            {viewCount !== null && viewCount > 0 ? (viewCount >= 1000 ? `${(viewCount / 1000).toFixed(1)}k` : viewCount) : ''}
+            {viewCount > 0 ? (viewCount >= 1000 ? `${(viewCount / 1000).toFixed(1)}k` : viewCount) : ''}
           </span>
         </div>
 
@@ -992,7 +1186,7 @@ function FlickItem({
             backdropFilter: 'blur(6px)',
             border: '1px solid rgba(255,255,255,0.12)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            transition: 'transform 0.1s',
+            transition: 'transform 0.1s', touchAction: 'manipulation',
           } as React.CSSProperties}
         >
           {muted
@@ -1004,7 +1198,7 @@ function FlickItem({
 
       {/* ── Bottom info ─────────────────────────────────── */}
       <div style={{
-        position: 'absolute', bottom: 56, left: 0, right: 68,
+        position: 'absolute', bottom: 'calc(56px + env(safe-area-inset-bottom, 0px))', left: 0, right: 68,
         padding: '0 16px',
       }}>
         <Link href={`/profile/${profile?.id}`} style={{
@@ -1016,6 +1210,15 @@ function FlickItem({
           </span>
           {profile?.country && (
             <span style={{ fontSize: 14, lineHeight: 1, opacity: 0.9 }}>{getFlag(profile.country)}</span>
+          )}
+          {video.language && (
+            <span style={{
+              fontSize: 10.5, fontWeight: 700, color: 'rgba(255,255,255,0.85)',
+              background: 'rgba(255,255,255,0.14)', padding: '2px 7px', borderRadius: 8,
+              textTransform: 'uppercase', letterSpacing: 0.3,
+            }}>
+              {video.language}
+            </span>
           )}
         </Link>
         {video.content && (
@@ -1061,7 +1264,7 @@ function ActionBtn({
       style={{
         display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
         border: 'none', background: 'none', cursor: 'pointer',
-        padding: 0, transition: 'transform 0.12s',
+        padding: 0, transition: 'transform 0.12s', touchAction: 'manipulation',
       }}
       onMouseDown={e => (e.currentTarget.style.transform = 'scale(0.88)')}
       onMouseUp={e => (e.currentTarget.style.transform = 'scale(1)')}
