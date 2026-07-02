@@ -4,10 +4,12 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import {
   Heart, MessageCircle, Share2, Volume2, VolumeX, Play,
   X, Send, Loader2, ImagePlus, Eye, Check, AlertCircle, RotateCcw,
+  Search, ArrowLeft, Hash,
 } from 'lucide-react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { getFlag } from '@/lib/african-data'
+import { VIDEO_CATEGORIES, getCategoryMeta } from '@/lib/video-categories'
 
 export interface FlickPost {
   id: string
@@ -18,6 +20,7 @@ export interface FlickPost {
   created_at: string
   language: string | null
   video_duration?: number | null
+  category?: string | null
   profiles: { id: string; username: string; avatar_url: string | null; country: string | null } | null
   likes: { user_id: string }[]
   comments: { id: string }[]
@@ -414,6 +417,7 @@ export default function NiaFlicksClient({ shorts, longs, currentUserId }: Flicks
     () => Object.fromEntries([...shorts, ...longs].map(v => [v.id, v.comments?.length ?? 0]))
   )
   const [openLong, setOpenLong] = useState<FlickPost | null>(null)
+  const [searchOpen, setSearchOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
   const slowConnection = useSlowConnection()
 
@@ -483,6 +487,23 @@ export default function NiaFlicksClient({ shorts, longs, currentUserId }: Flicks
     </div>
   )
 
+  // ── Search button (shared header, opens the video-only search overlay) ──
+  const SearchButton = (
+    <button
+      onClick={() => setSearchOpen(true)}
+      style={{
+        position: 'absolute', top: 'calc(10px + env(safe-area-inset-top, 0px))', right: 14, zIndex: 60,
+        width: 36, height: 36, borderRadius: '50%', border: '1px solid rgba(255,255,255,0.1)',
+        background: 'rgba(20,18,17,0.55)', backdropFilter: 'blur(10px)', cursor: 'pointer',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', touchAction: 'manipulation',
+      }}
+      title="Search flicks"
+    >
+      <Search size={16} color="rgba(255,255,255,0.85)" />
+    </button>
+  )
+
+
   // ── Empty state ──────────────────────────────────────────────────
   if (shorts.length === 0 && longs.length === 0) {
     return (
@@ -511,7 +532,8 @@ export default function NiaFlicksClient({ shorts, longs, currentUserId }: Flicks
     return (
       <div style={{ position: 'fixed', inset: 0, background: '#0D0C0B', overflowY: 'auto', overscrollBehaviorY: 'contain' } as React.CSSProperties}>
         {TabToggle}
-        <LongFlicksList
+        {SearchButton}
+        <LongFlicksGrid
           videos={longs}
           onOpen={setOpenLong}
         />
@@ -523,6 +545,9 @@ export default function NiaFlicksClient({ shorts, longs, currentUserId }: Flicks
             onOpenComments={(postId, count) => handleOpenComments(postId, count, -1)}
             onClose={() => setOpenLong(null)}
           />
+        )}
+        {searchOpen && (
+          <SearchOverlay onClose={() => setSearchOpen(false)} />
         )}
         {commentSheet && (
           <div style={{ position: 'fixed', inset: 0, zIndex: 200 }}>
@@ -564,19 +589,35 @@ export default function NiaFlicksClient({ shorts, longs, currentUserId }: Flicks
             color: 'white', fontWeight: 900, fontSize: 13,
           }}>N</div>
         </Link>
-        <span style={{
-          fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.7)',
-          background: 'rgba(255,255,255,0.1)',
-          backdropFilter: 'blur(8px)',
-          padding: '4px 10px', borderRadius: 20,
-          border: '1px solid rgba(255,255,255,0.1)',
-          pointerEvents: 'none',
-        }}>
-          {shorts.length > 0 ? `${activeIdx + 1} / ${shorts.length}` : ''}
-        </span>
+        <div style={{ pointerEvents: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{
+            fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.7)',
+            background: 'rgba(255,255,255,0.1)',
+            backdropFilter: 'blur(8px)',
+            padding: '4px 10px', borderRadius: 20,
+            border: '1px solid rgba(255,255,255,0.1)',
+          }}>
+            {shorts.length > 0 ? `${activeIdx + 1} / ${shorts.length}` : ''}
+          </span>
+          <button
+            onClick={() => setSearchOpen(true)}
+            style={{
+              width: 30, height: 30, borderRadius: '50%', border: '1px solid rgba(255,255,255,0.1)',
+              background: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(8px)', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', touchAction: 'manipulation',
+            }}
+            title="Search flicks"
+          >
+            <Search size={14} color="rgba(255,255,255,0.85)" />
+          </button>
+        </div>
       </div>
 
       {TabToggle}
+
+      {searchOpen && (
+        <SearchOverlay onClose={() => setSearchOpen(false)} />
+      )}
 
       {shorts.length === 0 ? (
         <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -627,8 +668,23 @@ export default function NiaFlicksClient({ shorts, longs, currentUserId }: Flicks
   )
 }
 
-// ── Long Flicks: card list ────────────────────────────────────────────────────
-function LongFlicksList({ videos, onOpen }: { videos: FlickPost[]; onOpen: (v: FlickPost) => void }) {
+// ── Long Flicks: topic grid + category chips ──────────────────────────────────
+function LongFlicksGrid({ videos, onOpen }: { videos: FlickPost[]; onOpen: (v: FlickPost) => void }) {
+  const [activeCategory, setActiveCategory] = useState<string>('all')
+
+  const counts = videos.reduce((acc: Record<string, number>, v) => {
+    const cat = v.category ?? 'other'
+    acc[cat] = (acc[cat] ?? 0) + 1
+    return acc
+  }, {})
+
+  const chips = [{ id: 'all', label: 'All', emoji: '🎬' }, ...VIDEO_CATEGORIES]
+    .filter(c => c.id === 'all' || (counts[c.id] ?? 0) > 0)
+
+  const filtered = activeCategory === 'all'
+    ? videos
+    : videos.filter(v => (v.category ?? 'other') === activeCategory)
+
   if (videos.length === 0) {
     return (
       <div style={{ paddingTop: 120, textAlign: 'center' }}>
@@ -637,97 +693,370 @@ function LongFlicksList({ videos, onOpen }: { videos: FlickPost[]; onOpen: (v: F
       </div>
     )
   }
-  return (
-    <div style={{ paddingTop: 64, paddingBottom: 32, display: 'flex', flexDirection: 'column', gap: 14, padding: '64px 14px 32px' }}>
-      {videos.map(v => {
-        const profile = v.profiles
-        return (
-          <button
-            key={v.id}
-            onClick={() => onOpen(v)}
-            style={{
-              textAlign: 'left', border: '1px solid rgba(255,255,255,0.08)',
-              background: 'rgba(255,255,255,0.04)', borderRadius: 16,
-              cursor: 'pointer', padding: 0, overflow: 'hidden',
-              touchAction: 'manipulation',
-            }}
-          >
-            {/* Thumbnail */}
-            <div style={{ position: 'relative', width: '100%', aspectRatio: '16/9', background: '#000' }}>
-              <video
-                src={v.media_url}
-                preload="metadata"
-                poster={v.thumbnail_url ?? undefined}
-                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                muted
-              />
-              <div style={{
-                position: 'absolute', inset: 0,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                background: 'rgba(0,0,0,0.18)',
-              }}>
-                <div style={{
-                  width: 46, height: 46, borderRadius: '50%',
-                  background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(6px)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  border: '1px solid rgba(255,255,255,0.2)',
-                }}>
-                  <Play size={20} fill="white" color="white" style={{ marginLeft: 2 }} />
-                </div>
-              </div>
-              {!!v.video_duration && (
-                <span style={{
-                  position: 'absolute', bottom: 8, right: 8,
-                  background: 'rgba(0,0,0,0.75)', color: 'white',
-                  fontSize: 11, fontWeight: 700, padding: '2px 6px', borderRadius: 4,
-                }}>
-                  {formatDuration(v.video_duration)}
-                </span>
-              )}
-            </div>
 
-            {/* Info */}
-            <div style={{ padding: '10px 12px', display: 'flex', gap: 10 }}>
-              <div style={{
-                width: 34, height: 34, borderRadius: '50%', overflow: 'hidden', flexShrink: 0,
-                background: 'var(--grad-brand)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                color: 'white', fontWeight: 700, fontSize: 12,
-              }}>
-                {profile?.avatar_url
-                  ? <img src={profile.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  : profile?.username?.[0]?.toUpperCase() ?? '?'
-                }
-              </div>
-              <div style={{ minWidth: 0, flex: 1 }}>
-                {v.content && (
-                  <p style={{
-                    color: 'rgba(255,255,255,0.92)', fontSize: 13.5, fontWeight: 600, margin: 0,
-                    display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
-                  } as React.CSSProperties}>
-                    {v.content}
-                  </p>
-                )}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 4 }}>
-                  <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', fontWeight: 600 }}>
-                    @{profile?.username ?? 'unknown'}
-                  </span>
-                  {profile?.country && <span style={{ fontSize: 12 }}>{getFlag(profile.country)}</span>}
-                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>· {timeAgo(v.created_at)}</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 6 }}>
-                  <span style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.45)', display: 'flex', alignItems: 'center', gap: 3 }}>
-                    <Heart size={12} /> {v.likes?.length ?? 0}
-                  </span>
-                  <span style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.45)', display: 'flex', alignItems: 'center', gap: 3 }}>
-                    <MessageCircle size={12} /> {v.comments?.length ?? 0}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </button>
+  return (
+    <div style={{ paddingTop: 60 }}>
+      {/* Category chip bar — pinned under the tab header, horizontally scrollable */}
+      <div
+        className="hidden-scrollbar"
+        style={{
+          display: 'flex', gap: 6, overflowX: 'auto',
+          padding: '10px 14px', WebkitOverflowScrolling: 'touch',
+        }}
+      >
+        {chips.map(c => {
+          const active = activeCategory === c.id
+          return (
+            <button
+              key={c.id}
+              onClick={() => setActiveCategory(c.id)}
+              style={{
+                flexShrink: 0, cursor: 'pointer',
+                padding: '7px 14px', borderRadius: 16,
+                fontSize: 12.5, fontWeight: 700, whiteSpace: 'nowrap',
+                background: active ? 'var(--grad-brand)' : 'rgba(255,255,255,0.08)',
+                color: active ? 'white' : 'rgba(255,255,255,0.65)',
+                border: active ? 'none' : '1px solid rgba(255,255,255,0.08)',
+                transition: 'background 0.15s, color 0.15s',
+                touchAction: 'manipulation',
+              }}
+            >
+              {c.emoji} {c.label}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* 2-column thumbnail grid */}
+      {filtered.length === 0 ? (
+        <div style={{ paddingTop: 60, textAlign: 'center' }}>
+          <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>Nothing in this topic yet.</p>
+        </div>
+      ) : (
+        <div style={{
+          display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10,
+          padding: '4px 10px 32px',
+        }}>
+          {filtered.map(v => <LongFlickGridCard key={v.id} video={v} onOpen={onOpen} />)}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function LongFlickGridCard({ video: v, onOpen }: { video: FlickPost; onOpen: (v: FlickPost) => void }) {
+  const profile = v.profiles
+  return (
+    <button
+      onClick={() => onOpen(v)}
+      style={{
+        textAlign: 'left', border: '1px solid rgba(255,255,255,0.08)',
+        background: 'rgba(255,255,255,0.04)', borderRadius: 14,
+        cursor: 'pointer', padding: 0, overflow: 'hidden',
+        touchAction: 'manipulation', display: 'flex', flexDirection: 'column',
+      }}
+    >
+      {/* Thumbnail */}
+      <div style={{ position: 'relative', width: '100%', aspectRatio: '16/9', background: '#000' }}>
+        <video
+          src={v.media_url}
+          preload="metadata"
+          poster={v.thumbnail_url ?? undefined}
+          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          muted
+        />
+        <div style={{
+          position: 'absolute', inset: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: 'rgba(0,0,0,0.15)',
+        }}>
+          <div style={{
+            width: 32, height: 32, borderRadius: '50%',
+            background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(6px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            border: '1px solid rgba(255,255,255,0.2)',
+          }}>
+            <Play size={14} fill="white" color="white" style={{ marginLeft: 1 }} />
+          </div>
+        </div>
+        {!!v.video_duration && (
+          <span style={{
+            position: 'absolute', bottom: 6, right: 6,
+            background: 'rgba(0,0,0,0.75)', color: 'white',
+            fontSize: 10, fontWeight: 700, padding: '1px 5px', borderRadius: 4,
+          }}>
+            {formatDuration(v.video_duration)}
+          </span>
+        )}
+        {/* Category badge */}
+        <span style={{
+          position: 'absolute', top: 6, left: 6,
+          background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)',
+          color: 'white', fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 8,
+        }}>
+          {getCategoryMeta(v.category).emoji}
+        </span>
+      </div>
+
+      {/* Info */}
+      <div style={{ padding: '8px 9px', display: 'flex', gap: 7 }}>
+        <div style={{
+          width: 24, height: 24, borderRadius: '50%', overflow: 'hidden', flexShrink: 0,
+          background: 'var(--grad-brand)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          color: 'white', fontWeight: 700, fontSize: 10,
+        }}>
+          {profile?.avatar_url
+            ? <img src={profile.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            : profile?.username?.[0]?.toUpperCase() ?? '?'
+          }
+        </div>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          {v.content && (
+            <p style={{
+              color: 'rgba(255,255,255,0.92)', fontSize: 12.5, fontWeight: 600, margin: 0,
+              display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+              lineHeight: 1.35,
+            } as React.CSSProperties}>
+              {v.content}
+            </p>
+          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 3 }}>
+            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              @{profile?.username ?? 'unknown'}
+            </span>
+            {profile?.country && <span style={{ fontSize: 11, flexShrink: 0 }}>{getFlag(profile.country)}</span>}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 3 }}>
+            <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.4)', display: 'flex', alignItems: 'center', gap: 2 }}>
+              <Heart size={10} /> {v.likes?.length ?? 0}
+            </span>
+            <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.4)' }}>· {timeAgo(v.created_at)}</span>
+          </div>
+        </div>
+      </div>
+    </button>
+  )
+}
+
+// ── Video search: dedicated overlay covering both Flicks and Long Flicks ──────
+function SearchOverlay({ onClose }: { onClose: () => void }) {
+  const supabase = createClient()
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState<FlickPost[]>([])
+  const [loading, setLoading] = useState(false)
+  const [hasSearched, setHasSearched] = useState(false)
+  const [trending, setTrending] = useState<{ tag: string; count: number }[]>([])
+  const [recent, setRecent] = useState<string[]>([])
+  const inputRef = useRef<HTMLInputElement>(null)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Focus + load default state (trending tags on video posts, recent searches)
+  useEffect(() => {
+    inputRef.current?.focus()
+    try {
+      setRecent(JSON.parse(localStorage.getItem('nia:flicks-recent-searches') ?? '[]'))
+    } catch { /* ignore malformed storage */ }
+
+    const since = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString()
+    supabase
+      .from('hashtags')
+      .select('tag, posts:post_id!inner(media_type)')
+      .eq('posts.media_type', 'video')
+      .gte('created_at', since)
+      .then(({ data }) => {
+        const counts = (data ?? []).reduce((acc: Record<string, number>, h: any) => {
+          acc[h.tag] = (acc[h.tag] ?? 0) + 1
+          return acc
+        }, {})
+        setTrending(
+          Object.entries(counts).sort(([, a], [, b]) => b - a).slice(0, 10)
+            .map(([tag, count]) => ({ tag, count }))
         )
-      })}
+      })
+  }, []) // eslint-disable-line
+
+  async function runSearch(q: string) {
+    const term = q.trim()
+    if (!term) { setResults([]); setHasSearched(false); return }
+    setLoading(true)
+    setHasSearched(true)
+
+    const like = `%${term}%`
+    const tagTerm = term.replace(/^#/, '')
+
+    const [{ data: byContent }, { data: tagRows }] = await Promise.all([
+      supabase
+        .from('posts')
+        .select(`
+          id, content, media_url, thumbnail_url, created_at, language, video_duration, category,
+          profiles:user_id (id, username, avatar_url, country),
+          likes (user_id), comments (id)
+        `)
+        .eq('media_type', 'video')
+        .ilike('content', like)
+        .order('created_at', { ascending: false })
+        .limit(20),
+      supabase
+        .from('hashtags')
+        .select('post_id')
+        .ilike('tag', `%${tagTerm}%`)
+        .limit(20),
+    ])
+
+    let byTag: any[] = []
+    const tagPostIds = [...new Set((tagRows ?? []).map((r: any) => r.post_id))]
+    if (tagPostIds.length > 0) {
+      const { data } = await supabase
+        .from('posts')
+        .select(`
+          id, content, media_url, thumbnail_url, created_at, language, video_duration, category,
+          profiles:user_id (id, username, avatar_url, country),
+          likes (user_id), comments (id)
+        `)
+        .eq('media_type', 'video')
+        .in('id', tagPostIds)
+        .order('created_at', { ascending: false })
+        .limit(20)
+      byTag = data ?? []
+    }
+
+    const merged = [...(byContent ?? []), ...byTag]
+    const deduped = [...new Map(merged.map(p => [p.id, p])).values()] as unknown as FlickPost[]
+    setResults(deduped)
+    setLoading(false)
+
+    // Save to recent searches
+    try {
+      const next = [term, ...recent.filter(r => r !== term)].slice(0, 8)
+      setRecent(next)
+      localStorage.setItem('nia:flicks-recent-searches', JSON.stringify(next))
+    } catch { /* ignore storage errors (private mode etc.) */ }
+  }
+
+  function handleChange(v: string) {
+    setQuery(v)
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => runSearch(v), 300)
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 300, background: '#0D0C0B', display: 'flex', flexDirection: 'column' }}>
+      {/* Header */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 10,
+        padding: '12px 14px', paddingTop: 'calc(12px + env(safe-area-inset-top, 0px))',
+        borderBottom: '1px solid rgba(255,255,255,0.06)', flexShrink: 0,
+      }}>
+        <button
+          onClick={onClose}
+          style={{
+            width: 32, height: 32, borderRadius: '50%', border: 'none',
+            background: 'rgba(255,255,255,0.08)', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+          }}
+        >
+          <ArrowLeft size={16} color="rgba(255,255,255,0.8)" />
+        </button>
+        <div style={{ position: 'relative', flex: 1 }}>
+          <Search size={15} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.35)' }} />
+          <input
+            ref={inputRef}
+            value={query}
+            onChange={e => handleChange(e.target.value)}
+            placeholder="Search flicks — captions, #hashtags…"
+            style={{
+              width: '100%', padding: '9px 12px 9px 34px', borderRadius: 20, outline: 'none',
+              fontSize: 15, background: 'rgba(255,255,255,0.07)', color: 'white',
+              border: '1.5px solid rgba(255,255,255,0.09)',
+            }}
+          />
+          {loading && (
+            <Loader2 size={14} className="animate-spin" style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.4)' }} />
+          )}
+        </div>
+      </div>
+
+      {/* Body */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '14px' }}>
+        {!hasSearched ? (
+          <>
+            {recent.length > 0 && (
+              <div style={{ marginBottom: 20 }}>
+                <p style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
+                  Recent
+                </p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {recent.map(r => (
+                    <button
+                      key={r}
+                      onClick={() => { setQuery(r); runSearch(r) }}
+                      style={{
+                        border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.06)',
+                        color: 'rgba(255,255,255,0.75)', borderRadius: 16, padding: '6px 12px',
+                        fontSize: 12.5, cursor: 'pointer',
+                      }}
+                    >
+                      {r}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            <p style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
+              Trending in Flicks
+            </p>
+            {trending.length === 0 ? (
+              <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.35)' }}>Nothing trending yet — be the first to tag a video!</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                {trending.map(t => (
+                  <button
+                    key={t.tag}
+                    onClick={() => { setQuery(`#${t.tag}`); runSearch(`#${t.tag}`) }}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 10, border: 'none', background: 'none',
+                      color: 'white', padding: '10px 4px', cursor: 'pointer', textAlign: 'left', width: '100%',
+                    }}
+                  >
+                    <div style={{
+                      width: 32, height: 32, borderRadius: '50%', background: 'rgba(255,255,255,0.08)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                    }}>
+                      <Hash size={14} color="rgba(255,255,255,0.6)" />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ fontSize: 13.5, fontWeight: 700, margin: 0 }}>#{t.tag}</p>
+                      <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', margin: 0 }}>{t.count} video{t.count !== 1 ? 's' : ''}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </>
+        ) : loading && results.length === 0 ? (
+          <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 48 }}>
+            <Loader2 size={22} className="animate-spin" style={{ color: 'rgba(255,255,255,0.35)' }} />
+          </div>
+        ) : results.length === 0 ? (
+          <div style={{ textAlign: 'center', paddingTop: 48 }}>
+            <div style={{ fontSize: 36, marginBottom: 8 }}>🤔</div>
+            <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.4)', fontWeight: 600 }}>No flicks found for "{query}"</p>
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            {results.map(v => (
+              <Link
+                key={v.id}
+                href={`/posts/${v.id}`}
+                style={{ textDecoration: 'none' }}
+              >
+                <LongFlickGridCard video={v} onOpen={() => {}} />
+              </Link>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

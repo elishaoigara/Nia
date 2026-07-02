@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { VIDEO_CATEGORIES } from '@/lib/video-categories';
 
 interface MediaItem {
   file: File;
@@ -80,6 +81,7 @@ export default function CreatePost({
   const [profile, setProfile] = useState<Profile | null>(null);
   const [language, setLanguage] = useState('english');
   const [showLang, setShowLang] = useState(false);
+  const [category, setCategory] = useState<string | null>(null);
   const [showPoll, setShowPoll] = useState(false);
   const [pollQ, setPollQ] = useState('');
   const [pollOpts, setPollOpts] = useState(['', '']);
@@ -110,6 +112,7 @@ export default function CreatePost({
   };
 
   const canAddMore = mediaItems.length < MAX_MEDIA && !voiceBlob;
+  const hasVideo = mediaItems.some(m => m.type === 'video');
   const charsLeft = MAX_CHARS - content.length;
   const isOver = charsLeft < 0;
 
@@ -404,6 +407,7 @@ export default function CreatePost({
           video_duration: videoDuration,
           extra_media: extra_media.length ? extra_media : null,
           language,
+          category: isVideo ? (category ?? 'other') : null,
         })
         .select()
         .single();
@@ -464,6 +468,7 @@ export default function CreatePost({
       setContent('');
       setMediaItems([]);
       setVoiceBlob(null);
+      setCategory(null);
 
       setShowPoll(false);
       setPollQ('');
@@ -713,6 +718,27 @@ export default function CreatePost({
                 {l.emoji} {l.label}
               </button>
             ))}
+          </div>
+        )}
+
+        {hasVideo && (
+          <div style={{ padding: '0 16px 12px' }}>
+            <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
+              Topic — helps people find this in Flicks
+            </p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {VIDEO_CATEGORIES.map(c => (
+                <button
+                  key={c.id}
+                  type="button"
+                  className={category === c.id ? 'btn-primary' : 'btn-ghost'}
+                  style={{ fontSize: 13, padding: '4px 12px' }}
+                  onClick={() => setCategory(c.id)}
+                >
+                  {c.emoji} {c.label}
+                </button>
+              ))}
+            </div>
           </div>
         )}
 

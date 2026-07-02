@@ -13,7 +13,7 @@ export default async function ReelsPage() {
   const { data: videos } = await supabase
     .from('posts')
     .select(`
-      id, content, media_url, media_type, created_at, language, video_duration,
+      id, content, media_url, media_type, created_at, language, video_duration, category,
       profiles:user_id (id, username, avatar_url, country),
       likes (user_id),
       comments (id),
