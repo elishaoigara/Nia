@@ -530,7 +530,11 @@ export default function NiaFlicksClient({ shorts, longs, currentUserId }: Flicks
   // ── Long Flicks tab ───────────────────────────────────────────────
   if (tab === 'long') {
     return (
-      <div style={{ position: 'fixed', inset: 0, background: '#0D0C0B', overflowY: 'auto', overscrollBehaviorY: 'contain' } as React.CSSProperties}>
+      <div style={{
+        position: 'fixed', inset: 0, background: '#0D0C0B',
+        overflowY: 'auto', overscrollBehaviorY: 'contain',
+        WebkitOverflowScrolling: 'touch',
+      } as React.CSSProperties}>
         {TabToggle}
         {SearchButton}
         <LongFlicksGrid
@@ -777,16 +781,24 @@ function LongFlickGridCard({ video: v, onOpen }: { video: FlickPost; onOpen: (v:
         background: 'rgba(255,255,255,0.04)', borderRadius: 14,
         cursor: 'pointer', padding: 0, overflow: 'hidden',
         touchAction: 'manipulation', display: 'flex', flexDirection: 'column',
-      }}
+        // Isolates this card's paint/layout from its siblings — without this, one
+        // card's async image/video swapping in can force the browser to repaint
+        // the whole scroll container on the next frame, which is what produces
+        // the torn/duplicated-looking rows during fast scroll on weaker GPUs.
+        contain: 'layout paint style',
+      } as React.CSSProperties}
     >
       {/* Thumbnail */}
       <div ref={thumbRef} style={{ position: 'relative', width: '100%', aspectRatio: '16/9', background: '#000' }}>
         {v.thumbnail_url ? (
           // Static poster image — cheap to render even 30+ at once, no decoding needed.
+          // No native `loading="lazy"` here — the IntersectionObserver above already
+          // gates when this card's contents mount at all, so a second independent
+          // lazy-load timer only adds another source of layout-shift-on-scroll.
           <img
             src={v.thumbnail_url}
             alt=""
-            loading="lazy"
+            decoding="async"
             style={{ width: '100%', height: '100%', objectFit: 'cover' }}
           />
         ) : inView ? (
@@ -807,9 +819,13 @@ function LongFlickGridCard({ video: v, onOpen }: { video: FlickPost; onOpen: (v:
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           background: 'rgba(0,0,0,0.15)',
         }}>
+          {/* Solid background instead of backdrop-filter: blur() — blur is compositor-
+              expensive, and this same overlay repeats on every card in the grid.
+              At 20-30 cards on screen it was enough to make Chrome drop/tear frames
+              mid-scroll, which is what showed up as ghosted/duplicated content. */}
           <div style={{
             width: 32, height: 32, borderRadius: '50%',
-            background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(6px)',
+            background: 'rgba(15,13,12,0.65)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             border: '1px solid rgba(255,255,255,0.2)',
           }}>
@@ -825,10 +841,10 @@ function LongFlickGridCard({ video: v, onOpen }: { video: FlickPost; onOpen: (v:
             {formatDuration(v.video_duration)}
           </span>
         )}
-        {/* Category badge */}
+        {/* Category badge — solid background, same reasoning as the play button above */}
         <span style={{
           position: 'absolute', top: 6, left: 6,
-          background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)',
+          background: 'rgba(15,13,12,0.75)',
           color: 'white', fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 8,
         }}>
           {getCategoryMeta(v.category).emoji}
@@ -844,20 +860,27 @@ function LongFlickGridCard({ video: v, onOpen }: { video: FlickPost; onOpen: (v:
           color: 'white', fontWeight: 700, fontSize: 10,
         }}>
           {profile?.avatar_url
-            ? <img src={profile.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            ? <img src={profile.avatar_url} alt="" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             : profile?.username?.[0]?.toUpperCase() ?? '?'
           }
         </div>
         <div style={{ minWidth: 0, flex: 1 }}>
-          {v.content && (
-            <p style={{
-              color: 'rgba(255,255,255,0.92)', fontSize: 12.5, fontWeight: 600, margin: 0,
-              display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
-              lineHeight: 1.35,
-            } as React.CSSProperties}>
-              {v.content}
-            </p>
-          )}
+          {/* Fixed-height wrapper reserved whether or not there's a caption, so every
+              card in a row is the same height from the very first paint — a card
+              that's shorter because it has no caption is exactly the kind of layout
+              shift that produces seams/ghosting when the OS stitches a scroll-capture
+              screenshot together. */}
+          <div style={{ minHeight: 34 }}>
+            {v.content && (
+              <p style={{
+                color: 'rgba(255,255,255,0.92)', fontSize: 12.5, fontWeight: 600, margin: 0,
+                display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+                lineHeight: 1.35,
+              } as React.CSSProperties}>
+                {v.content}
+              </p>
+            )}
+          </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 3 }}>
             <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               @{profile?.username ?? 'unknown'}
