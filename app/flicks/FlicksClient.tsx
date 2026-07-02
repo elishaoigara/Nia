@@ -744,8 +744,31 @@ function LongFlicksGrid({ videos, onOpen }: { videos: FlickPost[]; onOpen: (v: F
   )
 }
 
+// Mounts a real <video> element only once the card scrolls near the viewport, and
+// keeps it mounted after that. Without this, a grid of 20-30 cards each carrying a
+// live <video preload="metadata"> tag overloads mid/low-end Android GPUs — the
+// browser can't composite/decode them all at once, which shows up as torn,
+// ghosted, duplicated-looking frames in screenshots and on-device.
+function useInView<T extends HTMLElement>(rootMargin = '600px 0px') {
+  const ref = useRef<T>(null)
+  const [inView, setInView] = useState(false)
+  useEffect(() => {
+    const el = ref.current
+    if (!el || inView) return
+    const observer = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) { setInView(true); observer.disconnect() } },
+      { rootMargin }
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [inView, rootMargin])
+  return [ref, inView] as const
+}
+
 function LongFlickGridCard({ video: v, onOpen }: { video: FlickPost; onOpen: (v: FlickPost) => void }) {
   const profile = v.profiles
+  const [thumbRef, inView] = useInView<HTMLDivElement>()
+
   return (
     <button
       onClick={() => onOpen(v)}
@@ -757,14 +780,28 @@ function LongFlickGridCard({ video: v, onOpen }: { video: FlickPost; onOpen: (v:
       }}
     >
       {/* Thumbnail */}
-      <div style={{ position: 'relative', width: '100%', aspectRatio: '16/9', background: '#000' }}>
-        <video
-          src={v.media_url}
-          preload="metadata"
-          poster={v.thumbnail_url ?? undefined}
-          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-          muted
-        />
+      <div ref={thumbRef} style={{ position: 'relative', width: '100%', aspectRatio: '16/9', background: '#000' }}>
+        {v.thumbnail_url ? (
+          // Static poster image — cheap to render even 30+ at once, no decoding needed.
+          <img
+            src={v.thumbnail_url}
+            alt=""
+            loading="lazy"
+            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          />
+        ) : inView ? (
+          // No poster available — only mount a real <video> once this card is
+          // actually near the viewport, so we're never decoding 20+ videos at once.
+          <video
+            src={v.media_url}
+            preload="metadata"
+            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            muted
+          />
+        ) : (
+          // Off-screen placeholder — no decode cost at all.
+          <div style={{ width: '100%', height: '100%', background: 'linear-gradient(160deg, #1a1816, #0d0c0b)' }} />
+        )}
         <div style={{
           position: 'absolute', inset: 0,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
