@@ -1,15 +1,16 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, type CSSProperties } from 'react'
 import { LogOut, Loader2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 
 interface LogoutButtonProps {
   className?: string
   variant?: 'full' | 'icon'
+  style?: CSSProperties
 }
 
-export default function LogoutButton({ className = '', variant = 'full' }: LogoutButtonProps) {
+export default function LogoutButton({ className = '', variant = 'full', style }: LogoutButtonProps) {
   const [loading, setLoading] = useState(false)
   const supabase = createClient()
 
@@ -28,7 +29,7 @@ export default function LogoutButton({ className = '', variant = 'full' }: Logou
         aria-label="Log out"
         title="Log out"
         className={`flex items-center justify-center rounded-full p-2 transition-all active:scale-95 bg-transparent hover:bg-(--surface-2) ${className}`}
-        style={{ color: 'var(--text-secondary)' }}
+        style={{ color: 'var(--text-secondary)', ...style }}
       >
         {loading ? <Loader2 size={18} className="animate-spin" /> : <LogOut size={18} />}
       </button>

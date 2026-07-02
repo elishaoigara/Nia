@@ -6,6 +6,7 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import PostCard from '@/components/PostCard'
 import FollowButton from '@/components/FollowButton'
+import LogoutButton from '@/components/LogoutButton'
 import {
   ArrowLeft, MapPin, Calendar, Pencil,
   Grid3x3, MessageCircle, Bookmark,
@@ -372,14 +373,21 @@ export default function ProfilePage() {
           <p style={{ fontSize: 11, color: 'var(--text-tertiary)', margin: 0 }}>{postCount} posts</p>
         </div>
         {isOwner && (
-          <Link href="/profile/edit" style={{
-            padding: '6px 14px', borderRadius: 20, fontSize: 13, fontWeight: 700,
-            border: '1.5px solid var(--border)', background: 'none',
-            color: 'var(--text-primary)', textDecoration: 'none',
-            display: 'flex', alignItems: 'center', gap: 5,
-          }}>
-            <Pencil size={12} /> Edit
-          </Link>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+            <Link href="/profile/edit" style={{
+              padding: '6px 14px', borderRadius: 20, fontSize: 13, fontWeight: 700,
+              border: '1.5px solid var(--border)', background: 'none',
+              color: 'var(--text-primary)', textDecoration: 'none',
+              display: 'flex', alignItems: 'center', gap: 5,
+            }}>
+              <Pencil size={12} /> Edit
+            </Link>
+            <LogoutButton
+              variant="icon"
+              className="border"
+              style={{ border: '1.5px solid var(--border)' }}
+            />
+          </div>
         )}
       </div>
 
