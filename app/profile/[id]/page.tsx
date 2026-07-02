@@ -36,11 +36,11 @@ const CITY_SKYLINES: Record<string, string> = {
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 200" preserveAspectRatio="none">
       <defs>
         <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="%23120a2e"/>
-          <stop offset="100%" stop-color="%231a0f3a"/>
+          <stop offset="0%" stop-color="#120a2e"/>
+          <stop offset="100%" stop-color="#1a0f3a"/>
         </linearGradient>
       </defs>
-      <rect width="800" height="200" fill="url(%23sky)"/>
+      <rect width="800" height="200" fill="url(#sky)"/>
       <!-- Stars -->
       <circle cx="50" cy="20" r="1" fill="white" opacity="0.8"/>
       <circle cx="120" cy="35" r="0.8" fill="white" opacity="0.6"/>
@@ -51,109 +51,109 @@ const CITY_SKYLINES: Record<string, string> = {
       <circle cx="680" cy="18" r="1.1" fill="white" opacity="0.8"/>
       <circle cx="740" cy="40" r="0.8" fill="white" opacity="0.5"/>
       <!-- KICC tower -->
-      <rect x="370" y="40" width="18" height="140" fill="%231e1245" opacity="0.95"/>
-      <rect x="374" y="30" width="10" height="20" fill="%231e1245"/>
-      <rect x="377" y="20" width="4" height="15" fill="%232a1a5e"/>
-      <rect x="363" y="100" width="32" height="8" fill="%23160d38"/>
+      <rect x="370" y="40" width="18" height="140" fill="#1e1245" opacity="0.95"/>
+      <rect x="374" y="30" width="10" height="20" fill="#1e1245"/>
+      <rect x="377" y="20" width="4" height="15" fill="#2a1a5e"/>
+      <rect x="363" y="100" width="32" height="8" fill="#160d38"/>
       <!-- Tall office blocks -->
-      <rect x="80" y="80" width="35" height="120" fill="%231a1040" opacity="0.9"/>
-      <rect x="85" y="85" width="6" height="8" fill="%235b21b6" opacity="0.4"/>
-      <rect x="96" y="85" width="6" height="8" fill="%235b21b6" opacity="0.3"/>
-      <rect x="85" y="100" width="6" height="8" fill="%235b21b6" opacity="0.35"/>
-      <rect x="130" y="95" width="28" height="105" fill="%23160e38" opacity="0.85"/>
-      <rect x="170" y="70" width="40" height="130" fill="%231c1242" opacity="0.9"/>
-      <rect x="175" y="75" width="8" height="10" fill="%235b21b6" opacity="0.4"/>
-      <rect x="190" y="75" width="8" height="10" fill="%235b21b6" opacity="0.3"/>
-      <rect x="430" y="60" width="45" height="140" fill="%231a1040" opacity="0.92"/>
-      <rect x="435" y="65" width="8" height="10" fill="%235b21b6" opacity="0.35"/>
-      <rect x="450" y="65" width="8" height="10" fill="%235b21b6" opacity="0.4"/>
-      <rect x="435" y="82" width="8" height="10" fill="%235b21b6" opacity="0.3"/>
-      <rect x="490" y="75" width="35" height="125" fill="%23160e38"/>
-      <rect x="540" y="55" width="50" height="145" fill="%231e1245" opacity="0.9"/>
-      <rect x="600" y="85" width="30" height="115" fill="%231a1040"/>
-      <rect x="645" y="90" width="38" height="110" fill="%23160e38" opacity="0.88"/>
-      <rect x="700" y="100" width="25" height="100" fill="%231a1040"/>
+      <rect x="80" y="80" width="35" height="120" fill="#1a1040" opacity="0.9"/>
+      <rect x="85" y="85" width="6" height="8" fill="#5b21b6" opacity="0.4"/>
+      <rect x="96" y="85" width="6" height="8" fill="#5b21b6" opacity="0.3"/>
+      <rect x="85" y="100" width="6" height="8" fill="#5b21b6" opacity="0.35"/>
+      <rect x="130" y="95" width="28" height="105" fill="#160e38" opacity="0.85"/>
+      <rect x="170" y="70" width="40" height="130" fill="#1c1242" opacity="0.9"/>
+      <rect x="175" y="75" width="8" height="10" fill="#5b21b6" opacity="0.4"/>
+      <rect x="190" y="75" width="8" height="10" fill="#5b21b6" opacity="0.3"/>
+      <rect x="430" y="60" width="45" height="140" fill="#1a1040" opacity="0.92"/>
+      <rect x="435" y="65" width="8" height="10" fill="#5b21b6" opacity="0.35"/>
+      <rect x="450" y="65" width="8" height="10" fill="#5b21b6" opacity="0.4"/>
+      <rect x="435" y="82" width="8" height="10" fill="#5b21b6" opacity="0.3"/>
+      <rect x="490" y="75" width="35" height="125" fill="#160e38"/>
+      <rect x="540" y="55" width="50" height="145" fill="#1e1245" opacity="0.9"/>
+      <rect x="600" y="85" width="30" height="115" fill="#1a1040"/>
+      <rect x="645" y="90" width="38" height="110" fill="#160e38" opacity="0.88"/>
+      <rect x="700" y="100" width="25" height="100" fill="#1a1040"/>
       <!-- Ground -->
-      <rect x="0" y="185" width="800" height="15" fill="%230d0820" opacity="0.95"/>
+      <rect x="0" y="185" width="800" height="15" fill="#0d0820" opacity="0.95"/>
       <!-- Glow at base of KICC -->
-      <ellipse cx="379" cy="185" rx="60" ry="8" fill="%235b21b6" opacity="0.15"/>
+      <ellipse cx="379" cy="185" rx="60" ry="8" fill="#5b21b6" opacity="0.15"/>
     </svg>`,
   Lagos: `
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 200" preserveAspectRatio="none">
       <defs>
         <linearGradient id="sky2" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="%230a1628"/>
-          <stop offset="100%" stop-color="%23142038"/>
+          <stop offset="0%" stop-color="#0a1628"/>
+          <stop offset="100%" stop-color="#142038"/>
         </linearGradient>
       </defs>
-      <rect width="800" height="200" fill="url(%23sky2)"/>
+      <rect width="800" height="200" fill="url(#sky2)"/>
       <circle cx="100" cy="25" r="1" fill="white" opacity="0.7"/>
       <circle cx="250" cy="15" r="1.2" fill="white" opacity="0.8"/>
       <circle cx="500" cy="20" r="0.9" fill="white" opacity="0.6"/>
       <circle cx="700" cy="30" r="1" fill="white" opacity="0.75"/>
       <!-- Eko Atlantic style towers -->
-      <rect x="60" y="50" width="50" height="150" fill="%230e1c35" opacity="0.95"/>
-      <rect x="66" y="55" width="8" height="12" fill="%23fbbf24" opacity="0.3"/>
-      <rect x="80" y="55" width="8" height="12" fill="%23fbbf24" opacity="0.25"/>
-      <rect x="66" y="75" width="8" height="12" fill="%23fbbf24" opacity="0.2"/>
-      <rect x="125" y="30" width="60" height="170" fill="%230c1830" opacity="0.9"/>
-      <rect x="131" y="35" width="10" height="14" fill="%23fbbf24" opacity="0.3"/>
-      <rect x="148" y="35" width="10" height="14" fill="%23fbbf24" opacity="0.25"/>
-      <rect x="165" y="35" width="10" height="14" fill="%23fbbf24" opacity="0.2"/>
-      <rect x="200" y="65" width="40" height="135" fill="%230e1c35"/>
-      <rect x="260" y="45" width="55" height="155" fill="%23101f38" opacity="0.92"/>
-      <rect x="330" y="20" width="70" height="180" fill="%230c1830" opacity="0.95"/>
-      <rect x="337" y="25" width="12" height="16" fill="%23fbbf24" opacity="0.3"/>
-      <rect x="356" y="25" width="12" height="16" fill="%23fbbf24" opacity="0.25"/>
-      <rect x="375" y="25" width="12" height="16" fill="%23fbbf24" opacity="0.2"/>
-      <rect x="415" y="55" width="45" height="145" fill="%230e1c35"/>
-      <rect x="475" y="40" width="55" height="160" fill="%23101f38" opacity="0.9"/>
-      <rect x="545" y="70" width="40" height="130" fill="%230c1830"/>
-      <rect x="600" y="50" width="50" height="150" fill="%230e1c35" opacity="0.88"/>
-      <rect x="665" y="80" width="35" height="120" fill="%23101f38"/>
-      <rect x="715" y="60" width="45" height="140" fill="%230c1830" opacity="0.9"/>
-      <rect x="0" y="188" width="800" height="12" fill="%23071020"/>
-      <ellipse cx="360" cy="188" rx="80" ry="6" fill="%23fbbf24" opacity="0.1"/>
+      <rect x="60" y="50" width="50" height="150" fill="#0e1c35" opacity="0.95"/>
+      <rect x="66" y="55" width="8" height="12" fill="#fbbf24" opacity="0.3"/>
+      <rect x="80" y="55" width="8" height="12" fill="#fbbf24" opacity="0.25"/>
+      <rect x="66" y="75" width="8" height="12" fill="#fbbf24" opacity="0.2"/>
+      <rect x="125" y="30" width="60" height="170" fill="#0c1830" opacity="0.9"/>
+      <rect x="131" y="35" width="10" height="14" fill="#fbbf24" opacity="0.3"/>
+      <rect x="148" y="35" width="10" height="14" fill="#fbbf24" opacity="0.25"/>
+      <rect x="165" y="35" width="10" height="14" fill="#fbbf24" opacity="0.2"/>
+      <rect x="200" y="65" width="40" height="135" fill="#0e1c35"/>
+      <rect x="260" y="45" width="55" height="155" fill="#101f38" opacity="0.92"/>
+      <rect x="330" y="20" width="70" height="180" fill="#0c1830" opacity="0.95"/>
+      <rect x="337" y="25" width="12" height="16" fill="#fbbf24" opacity="0.3"/>
+      <rect x="356" y="25" width="12" height="16" fill="#fbbf24" opacity="0.25"/>
+      <rect x="375" y="25" width="12" height="16" fill="#fbbf24" opacity="0.2"/>
+      <rect x="415" y="55" width="45" height="145" fill="#0e1c35"/>
+      <rect x="475" y="40" width="55" height="160" fill="#101f38" opacity="0.9"/>
+      <rect x="545" y="70" width="40" height="130" fill="#0c1830"/>
+      <rect x="600" y="50" width="50" height="150" fill="#0e1c35" opacity="0.88"/>
+      <rect x="665" y="80" width="35" height="120" fill="#101f38"/>
+      <rect x="715" y="60" width="45" height="140" fill="#0c1830" opacity="0.9"/>
+      <rect x="0" y="188" width="800" height="12" fill="#071020"/>
+      <ellipse cx="360" cy="188" rx="80" ry="6" fill="#fbbf24" opacity="0.1"/>
     </svg>`,
   Accra: `
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 200" preserveAspectRatio="none">
       <defs>
         <linearGradient id="sky3" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stop-color="%231a0a0a"/>
-          <stop offset="100%" stop-color="%230a1a12"/>
+          <stop offset="0%" stop-color="#1a0a0a"/>
+          <stop offset="100%" stop-color="#0a1a12"/>
         </linearGradient>
       </defs>
-      <rect width="800" height="200" fill="url(%23sky3)"/>
+      <rect width="800" height="200" fill="url(#sky3)"/>
       <circle cx="80" cy="20" r="1" fill="white" opacity="0.75"/>
       <circle cx="350" cy="12" r="1.1" fill="white" opacity="0.8"/>
       <circle cx="620" cy="25" r="0.9" fill="white" opacity="0.7"/>
       <!-- Independence Arch style -->
-      <rect x="370" y="90" width="60" height="110" fill="%23101a12" opacity="0.95"/>
-      <path d="M370 90 Q400 60 430 90" stroke="%23166534" stroke-width="3" fill="none" opacity="0.6"/>
-      <rect x="395" y="70" width="10" height="25" fill="%23166534" opacity="0.5"/>
+      <rect x="370" y="90" width="60" height="110" fill="#101a12" opacity="0.95"/>
+      <path d="M370 90 Q400 60 430 90" stroke="#166534" stroke-width="3" fill="none" opacity="0.6"/>
+      <rect x="395" y="70" width="10" height="25" fill="#166534" opacity="0.5"/>
       <!-- Other buildings -->
-      <rect x="50" y="70" width="45" height="130" fill="%230f1a10" opacity="0.9"/>
-      <rect x="110" y="55" width="55" height="145" fill="%230d1810"/>
-      <rect x="180" y="80" width="35" height="120" fill="%230f1a10" opacity="0.88"/>
-      <rect x="230" y="45" width="60" height="155" fill="%230d1810" opacity="0.92"/>
-      <rect x="310" y="65" width="45" height="135" fill="%230f1a10"/>
-      <rect x="450" y="50" width="55" height="150" fill="%230d1810" opacity="0.9"/>
-      <rect x="520" y="75" width="40" height="125" fill="%230f1a10" opacity="0.88"/>
-      <rect x="575" y="55" width="50" height="145" fill="%230d1810"/>
-      <rect x="640" y="85" width="38" height="115" fill="%230f1a10" opacity="0.9"/>
-      <rect x="692" y="65" width="45" height="135" fill="%230d1810"/>
-      <rect x="0" y="186" width="800" height="14" fill="%23060d08"/>
+      <rect x="50" y="70" width="45" height="130" fill="#0f1a10" opacity="0.9"/>
+      <rect x="110" y="55" width="55" height="145" fill="#0d1810"/>
+      <rect x="180" y="80" width="35" height="120" fill="#0f1a10" opacity="0.88"/>
+      <rect x="230" y="45" width="60" height="155" fill="#0d1810" opacity="0.92"/>
+      <rect x="310" y="65" width="45" height="135" fill="#0f1a10"/>
+      <rect x="450" y="50" width="55" height="150" fill="#0d1810" opacity="0.9"/>
+      <rect x="520" y="75" width="40" height="125" fill="#0f1a10" opacity="0.88"/>
+      <rect x="575" y="55" width="50" height="145" fill="#0d1810"/>
+      <rect x="640" y="85" width="38" height="115" fill="#0f1a10" opacity="0.9"/>
+      <rect x="692" y="65" width="45" height="135" fill="#0d1810"/>
+      <rect x="0" y="186" width="800" height="14" fill="#060d08"/>
     </svg>`,
   default: `
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 200" preserveAspectRatio="none">
       <defs>
         <linearGradient id="skyD" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stop-color="%230d0820"/>
-          <stop offset="60%" stop-color="%23180f35"/>
-          <stop offset="100%" stop-color="%230f1428"/>
+          <stop offset="0%" stop-color="#0d0820"/>
+          <stop offset="60%" stop-color="#180f35"/>
+          <stop offset="100%" stop-color="#0f1428"/>
         </linearGradient>
       </defs>
-      <rect width="800" height="200" fill="url(%23skyD)"/>
+      <rect width="800" height="200" fill="url(#skyD)"/>
       <!-- Stars -->
       <circle cx="40" cy="18" r="1" fill="white" opacity="0.8"/>
       <circle cx="150" cy="30" r="0.8" fill="white" opacity="0.6"/>
@@ -162,28 +162,28 @@ const CITY_SKYLINES: Record<string, string> = {
       <circle cx="560" cy="8" r="1" fill="white" opacity="0.8"/>
       <circle cx="700" cy="28" r="0.8" fill="white" opacity="0.65"/>
       <!-- Generic African city silhouette -->
-      <rect x="40" y="85" width="30" height="115" fill="%23130b30" opacity="0.9"/>
-      <rect x="85" y="65" width="40" height="135" fill="%230f0928" opacity="0.95"/>
-      <rect x="140" y="75" width="50" height="125" fill="%23130b30" opacity="0.88"/>
-      <rect x="205" y="50" width="35" height="150" fill="%230f0928"/>
+      <rect x="40" y="85" width="30" height="115" fill="#130b30" opacity="0.9"/>
+      <rect x="85" y="65" width="40" height="135" fill="#0f0928" opacity="0.95"/>
+      <rect x="140" y="75" width="50" height="125" fill="#130b30" opacity="0.88"/>
+      <rect x="205" y="50" width="35" height="150" fill="#0f0928"/>
       <!-- Central landmark tower -->
-      <rect x="260" y="35" width="20" height="165" fill="%231a0f40" opacity="0.95"/>
-      <rect x="264" y="25" width="12" height="15" fill="%231a0f40"/>
-      <rect x="267" y="15" width="6" height="14" fill="%235b21b6" opacity="0.6"/>
-      <rect x="253" y="95" width="34" height="6" fill="%23130b30"/>
-      <rect x="295" y="60" width="45" height="140" fill="%230f0928" opacity="0.9"/>
-      <rect x="355" y="70" width="38" height="130" fill="%23130b30"/>
-      <rect x="408" y="45" width="52" height="155" fill="%230f0928" opacity="0.92"/>
-      <rect x="415" y="50" width="8" height="10" fill="%235b21b6" opacity="0.35"/>
-      <rect x="430" y="50" width="8" height="10" fill="%235b21b6" opacity="0.3"/>
-      <rect x="415" y="67" width="8" height="10" fill="%235b21b6" opacity="0.25"/>
-      <rect x="475" y="80" width="35" height="120" fill="%23130b30" opacity="0.88"/>
-      <rect x="525" y="55" width="48" height="145" fill="%230f0928"/>
-      <rect x="588" y="70" width="40" height="130" fill="%23130b30" opacity="0.9"/>
-      <rect x="643" y="85" width="32" height="115" fill="%230f0928"/>
-      <rect x="690" y="60" width="44" height="140" fill="%23130b30" opacity="0.88"/>
-      <rect x="0" y="186" width="800" height="14" fill="%23080515"/>
-      <ellipse cx="270" cy="186" rx="50" ry="7" fill="%235b21b6" opacity="0.2"/>
+      <rect x="260" y="35" width="20" height="165" fill="#1a0f40" opacity="0.95"/>
+      <rect x="264" y="25" width="12" height="15" fill="#1a0f40"/>
+      <rect x="267" y="15" width="6" height="14" fill="#5b21b6" opacity="0.6"/>
+      <rect x="253" y="95" width="34" height="6" fill="#130b30"/>
+      <rect x="295" y="60" width="45" height="140" fill="#0f0928" opacity="0.9"/>
+      <rect x="355" y="70" width="38" height="130" fill="#130b30"/>
+      <rect x="408" y="45" width="52" height="155" fill="#0f0928" opacity="0.92"/>
+      <rect x="415" y="50" width="8" height="10" fill="#5b21b6" opacity="0.35"/>
+      <rect x="430" y="50" width="8" height="10" fill="#5b21b6" opacity="0.3"/>
+      <rect x="415" y="67" width="8" height="10" fill="#5b21b6" opacity="0.25"/>
+      <rect x="475" y="80" width="35" height="120" fill="#130b30" opacity="0.88"/>
+      <rect x="525" y="55" width="48" height="145" fill="#0f0928"/>
+      <rect x="588" y="70" width="40" height="130" fill="#130b30" opacity="0.9"/>
+      <rect x="643" y="85" width="32" height="115" fill="#0f0928"/>
+      <rect x="690" y="60" width="44" height="140" fill="#130b30" opacity="0.88"/>
+      <rect x="0" y="186" width="800" height="14" fill="#080515"/>
+      <ellipse cx="270" cy="186" rx="50" ry="7" fill="#5b21b6" opacity="0.2"/>
     </svg>`,
 }
 
@@ -338,7 +338,7 @@ export default function ProfilePage() {
 
   // Banner: uploaded > city skyline SVG
   const skylineSvg  = getCitySkyline(profile.city, profile.country)
-  const skylineUri  = `data:image/svg+xml,${skylineSvg.trim().replace(/\s+/g, ' ')}`
+  const skylineUri  = `data:image/svg+xml,${encodeURIComponent(skylineSvg.trim().replace(/\s+/g, ' '))}`
   const bannerStyle = profile.banner_url
     ? `url(${profile.banner_url}) center/cover no-repeat`
     : `url("${skylineUri}") center/cover no-repeat`
