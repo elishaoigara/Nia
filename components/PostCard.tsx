@@ -23,6 +23,7 @@ import { createClient } from '@/lib/supabase/client';
 import { createClient as createClientLocal } from '@/lib/supabase/client';
 import MediaLightbox from './MediaLightbox';
 import FollowButton from './FollowButton';
+import { getFlag } from '@/lib/african-data';
 
 /* ── Types ──────────────────────────────────── */
 
@@ -31,6 +32,7 @@ interface Profile {
   username: string;
   full_name: string | null;
   avatar_url: string | null;
+  country: string | null;
 }
 
 interface PostMedia {
@@ -73,6 +75,10 @@ interface PostCardProps {
     lomi_count?: number;
     reposts_count?: number;
     polls: PollInfo[] | null;
+    likes?: { user_id: string }[];
+    reposts?: { user_id: string }[];
+    bookmarks?: { user_id: string }[];
+    viewer_is_following?: boolean;
   };
   currentUserId?: string | null;
   onDelete?: (postId: string) => void;
@@ -128,9 +134,9 @@ function mediaGridClass(count: number): string {
 /* ── Post weight variant ─────────────────────────
    Determines the visual "weight" class applied to
    the post-row, driving CSS differentiation:
-     post-row--media    → has images/video
-     post-row--trending → hot post (likes ≥ 30)
-     post-row--text     → pure text (default)
+     post-row--text      Default. Flush, minimal padding.
+     post-row--media     Has images/video. Extra breathing
+     post-row--trending  Hot post (>=30 likes). Accent
    ─────────────────────────────────────────────── */
 const TRENDING_THRESHOLD = 30; // likes to qualify as trending
 
@@ -150,7 +156,9 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
   const supabase = createClient();
   const router   = useRouter();
 
-  const [liked,              setLiked]              = useState(false);
+  const [liked,              setLiked]              = useState(
+    !!currentUserId && Array.isArray(post.likes) && post.likes.some(l => l.user_id === currentUserId)
+  );
   const [likesCount,         setLikesCount]         = useState(
     post.likes_count ?? (Array.isArray((post as any).likes) ? (post as any).likes.length : 0)
   );
@@ -160,12 +168,16 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
   const [repostsCount,       setRepostsCount]       = useState(
     post.reposts_count ?? (Array.isArray((post as any).reposts) ? (post as any).reposts.length : 0)
   );
-  const [reposted,           setReposted]           = useState(false);
-  const [bookmarked,         setBookmarked]         = useState(false);
+  const [reposted,           setReposted]           = useState(
+    !!currentUserId && Array.isArray(post.reposts) && post.reposts.some(r => r.user_id === currentUserId)
+  );
+  const [bookmarked,         setBookmarked]         = useState(
+    !!currentUserId && Array.isArray(post.bookmarks) && post.bookmarks.some(b => b.user_id === currentUserId)
+  );
   const [showMenu,           setShowMenu]           = useState(false);
   const [lightboxOpen,       setLightboxOpen]       = useState(false);
   const [lightboxIndex,      setLightboxIndex]      = useState(0);
-  const [initialIsFollowing, setInitialIsFollowing] = useState(false);
+  const [isFollowingAuthor,  setIsFollowingAuthor]  = useState(!!post.viewer_is_following);
   const [copied,             setCopied]             = useState(false);
 
   // Edit state
@@ -197,27 +209,9 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
   const canEdit     = isOwner && minsOld <= EDIT_WINDOW_MINS;
   const editCharsLeft = MAX_EDIT_CHARS - editContent.length;
 
-  /* ── Initial data fetches ── */
-  useEffect(() => {
-    if (!currentUserId) return;
-    // Liked?
-    supabase.from('likes').select('id').eq('post_id', post.id).eq('user_id', currentUserId)
-      .maybeSingle().then(({ data }) => { if (data) setLiked(true); });
-    // Reposted?
-    supabase.from('reposts').select('id').eq('post_id', post.id).eq('user_id', currentUserId)
-      .maybeSingle().then(({ data }) => { if (data) setReposted(true); });
-    // Bookmarked?
-    supabase.from('bookmarks').select('id').eq('post_id', post.id).eq('user_id', currentUserId)
-      .maybeSingle().then(({ data }) => { if (data) setBookmarked(true); });
-  }, [currentUserId, post.id]); // eslint-disable-line
-
-  /* Follow state */
-  useEffect(() => {
-    if (!currentUserId || !profile?.id || currentUserId === profile.id) return;
-    supabase.from('follows').select('follower_id').eq('follower_id', currentUserId)
-      .eq('following_id', profile.id).maybeSingle()
-      .then(({ data }) => { setInitialIsFollowing(!!data); });
-  }, [currentUserId, profile?.id]); // eslint-disable-line
+  /* Note: liked / reposted / bookmarked / following state are derived
+     synchronously from the post payload (see useState initializers above),
+     so no client-side fetch or flash-of-wrong-state on mount. */
 
   /* Close menus on outside click */
   useEffect(() => {
@@ -374,6 +368,11 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
                     @{profile.username}
                   </span>
                 )}
+                {profile?.country && (
+                  <span style={{ fontSize: 12, flexShrink: 0 }} title={profile.country}>
+                    {getFlag(profile.country)}
+                  </span>
+                )}
               </div>
               {/* Row 2: time + optional badges */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
@@ -391,11 +390,12 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
-              {currentUserId && currentUserId !== profile?.id && profile && (
+              {currentUserId && currentUserId !== profile?.id && profile && !isFollowingAuthor && (
                 <FollowButton
                   targetUserId={profile.id}
                   currentUserId={currentUserId}
-                  initialIsFollowing={initialIsFollowing}
+                  initialIsFollowing={false}
+                  onFollowChange={setIsFollowingAuthor}
                 />
               )}
 

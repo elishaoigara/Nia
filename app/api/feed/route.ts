@@ -17,6 +17,7 @@ const BASE_SELECT = `
   comments (id),
   reactions (user_id, emoji),
   reposts (user_id),
+  bookmarks (user_id),
   polls:polls (*)
 `
 
@@ -91,7 +92,11 @@ export async function GET(req: NextRequest) {
     // ── 3. Score + rank ────────────────────────────────────────────────────
     const ranked  = scorePosts(candidates, ctx)
     const offset  = (page - 1) * PAGE_SIZE
-    const posts   = ranked.slice(offset, offset + PAGE_SIZE)
+    const pageSlice = ranked.slice(offset, offset + PAGE_SIZE)
+    const posts = pageSlice.map(p => ({
+      ...p,
+      viewer_is_following: ctx.followingIds.has((p as any).user_id),
+    }))
     // hasMore is true if there are more ranked posts beyond this page,
     // OR if we hit the candidate pool ceiling (more DB rows likely exist).
     const hasMore = ranked.length > offset + PAGE_SIZE || candidates.length === candidatePool

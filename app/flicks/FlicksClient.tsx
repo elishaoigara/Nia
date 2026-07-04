@@ -13,6 +13,7 @@ import { VIDEO_CATEGORIES, getCategoryMeta } from '@/lib/video-categories'
 
 export interface FlickPost {
   id: string
+  user_id?: string
   content: string | null
   media_url: string
   /** Optional poster frame — add a `thumbnail_url` column + generate it at upload time to kill the black-flash-on-load. Falls back gracefully if absent. */
@@ -416,7 +417,11 @@ export default function NiaFlicksClient({ shorts, longs, currentUserId }: Flicks
   const [commentCounts, setCommentCounts] = useState<Record<string, number>>(
     () => Object.fromEntries([...shorts, ...longs].map(v => [v.id, v.comments?.length ?? 0]))
   )
-  const [openLong, setOpenLong] = useState<FlickPost | null>(null)
+  // Renamed from `openLong` — this now also opens when a *short* flick is picked
+  // from search, since the detail player works fine for any duration. Previously
+  // this only rendered inside the "long" tab branch, so selecting a search result
+  // while on the Flicks (short) tab silently did nothing.
+  const [openDetail, setOpenDetail] = useState<FlickPost | null>(null)
   const [searchOpen, setSearchOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
   const slowConnection = useSlowConnection()
@@ -539,19 +544,22 @@ export default function NiaFlicksClient({ shorts, longs, currentUserId }: Flicks
         {SearchButton}
         <LongFlicksGrid
           videos={longs}
-          onOpen={setOpenLong}
+          onOpen={setOpenDetail}
         />
-        {openLong && (
+        {openDetail && (
           <LongFlickPlayer
-            video={openLong}
+            video={openDetail}
             currentUserId={currentUserId}
-            commentCount={commentCounts[openLong.id] ?? 0}
+            commentCount={commentCounts[openDetail.id] ?? 0}
             onOpenComments={(postId, count) => handleOpenComments(postId, count, -1)}
-            onClose={() => setOpenLong(null)}
+            onClose={() => setOpenDetail(null)}
           />
         )}
         {searchOpen && (
-          <SearchOverlay onClose={() => setSearchOpen(false)} />
+          <SearchOverlay
+            onClose={() => setSearchOpen(false)}
+            onSelect={(v) => { setOpenDetail(v); setSearchOpen(false) }}
+          />
         )}
         {commentSheet && (
           <div style={{ position: 'fixed', inset: 0, zIndex: 200 }}>
@@ -594,15 +602,6 @@ export default function NiaFlicksClient({ shorts, longs, currentUserId }: Flicks
           }}>N</div>
         </Link>
         <div style={{ pointerEvents: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{
-            fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.7)',
-            background: 'rgba(255,255,255,0.1)',
-            backdropFilter: 'blur(8px)',
-            padding: '4px 10px', borderRadius: 20,
-            border: '1px solid rgba(255,255,255,0.1)',
-          }}>
-            {shorts.length > 0 ? `${activeIdx + 1} / ${shorts.length}` : ''}
-          </span>
           <button
             onClick={() => setSearchOpen(true)}
             style={{
@@ -620,7 +619,23 @@ export default function NiaFlicksClient({ shorts, longs, currentUserId }: Flicks
       {TabToggle}
 
       {searchOpen && (
-        <SearchOverlay onClose={() => setSearchOpen(false)} />
+        <SearchOverlay
+          onClose={() => setSearchOpen(false)}
+          onSelect={(v) => { setOpenDetail(v); setSearchOpen(false) }}
+        />
+      )}
+
+      {/* Detail player for a search result picked while on the short-flicks tab —
+          this was previously only rendered inside the "long" tab branch, so it
+          silently did nothing if you searched from here. */}
+      {openDetail && (
+        <LongFlickPlayer
+          video={openDetail}
+          currentUserId={currentUserId}
+          commentCount={commentCounts[openDetail.id] ?? 0}
+          onOpenComments={(postId, count) => handleOpenComments(postId, count, -1)}
+          onClose={() => setOpenDetail(null)}
+        />
       )}
 
       {shorts.length === 0 ? (
@@ -900,7 +915,7 @@ function LongFlickGridCard({ video: v, onOpen }: { video: FlickPost; onOpen: (v:
 }
 
 // ── Video search: dedicated overlay covering both Flicks and Long Flicks ──────
-function SearchOverlay({ onClose }: { onClose: () => void }) {
+function SearchOverlay({ onClose, onSelect }: { onClose: () => void; onSelect: (v: FlickPost) => void }) {
   const supabase = createClient()
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<FlickPost[]>([])
@@ -999,6 +1014,12 @@ function SearchOverlay({ onClose }: { onClose: () => void }) {
     if (debounceRef.current) clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => runSearch(v), 300)
   }
+
+  // Without this, closing the overlay while a debounced search is in flight
+  // (or mid-timeout) fires setState on an unmounted component.
+  useEffect(() => {
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
+  }, [])
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 300, background: '#0D0C0B', display: 'flex', flexDirection: 'column' }}>
@@ -1105,14 +1126,15 @@ function SearchOverlay({ onClose }: { onClose: () => void }) {
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            {/* Previously this wrapped LongFlickGridCard's own <button> in a <Link>
+                (an <a> wrapping a <button> — invalid HTML, and unpredictable click
+                behavior across browsers). It also navigated to a generic /posts/:id
+                page, which ignored the in-app player entirely and behaved
+                differently for a short flick vs a long one found via search.
+                onOpen -> onSelect now opens the same detail player used elsewhere,
+                whether the result is a short or long flick. */}
             {results.map(v => (
-              <Link
-                key={v.id}
-                href={`/posts/${v.id}`}
-                style={{ textDecoration: 'none' }}
-              >
-                <LongFlickGridCard video={v} onOpen={() => {}} />
-              </Link>
+              <LongFlickGridCard key={v.id} video={v} onOpen={onSelect} />
             ))}
           </div>
         )}

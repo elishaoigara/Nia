@@ -20,6 +20,7 @@ const BASE_SELECT = `
   comments (id, profiles:user_id (id, username, avatar_url)),
   reactions (user_id, emoji),
   reposts (user_id),
+  bookmarks (user_id),
   polls:polls (*)
 `
 
@@ -91,7 +92,11 @@ export default async function FeedPage({
   }
 
   const ranked = scorePosts(candidates, ctx)
-  const posts   = ranked.slice(offset, offset + PAGE_SIZE)
+  const pageSlice = ranked.slice(offset, offset + PAGE_SIZE)
+  const posts = pageSlice.map(p => ({
+    ...p,
+    viewer_is_following: ctx.followingIds.has((p as any).user_id),
+  })) as ScorerPost[]
   const hasMore = ranked.length > offset + PAGE_SIZE || candidates.length === candidatePool
 
   const EMPTY: Record<string, { emoji: string; title: string; body: string }> = {

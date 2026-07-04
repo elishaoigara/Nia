@@ -8,12 +8,14 @@ interface FollowButtonProps {
   currentUserId: string
   targetUserId: string
   initialIsFollowing: boolean
+  onFollowChange?: (isFollowing: boolean) => void
 }
 
 export default function FollowButton({
   currentUserId,
   targetUserId,
   initialIsFollowing,
+  onFollowChange,
 }: FollowButtonProps) {
   const supabase = createClient()
   const [isFollowing, setIsFollowing] = useState(initialIsFollowing)
@@ -24,12 +26,13 @@ export default function FollowButton({
     if (currentUserId === targetUserId) return
 
     setLoading(true)
-    
+
     // Save the previous state for error rollbacks
     const previousState = isFollowing
-    
+
     // 1. Optimistic Update: Instantly flip UI state for a super fast native feel
     setIsFollowing(!previousState)
+    onFollowChange?.(!previousState)
 
     try {
       if (previousState) {
@@ -37,7 +40,7 @@ export default function FollowButton({
           .from('follows')
           .delete()
           .match({ follower_id: currentUserId, following_id: targetUserId })
-        
+
         if (error) throw error
       } else {
         const { error } = await supabase
@@ -46,7 +49,7 @@ export default function FollowButton({
             follower_id: currentUserId,
             following_id: targetUserId,
           })
-          
+
         if (error) throw error
 
         // Notify the followed user
@@ -68,6 +71,7 @@ export default function FollowButton({
       console.error('Follow operation failed:', err)
       // 2. Rollback UI immediately if database operation dropped or network failed
       setIsFollowing(previousState)
+      onFollowChange?.(previousState)
     } finally {
       setLoading(false)
     }
@@ -75,9 +79,9 @@ export default function FollowButton({
 
   return (
     <button
-      onClick={toggleFollow}
+      onClick={e => { e.stopPropagation(); toggleFollow() }}
       disabled={loading || currentUserId === targetUserId}
-      className="tap-sm flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-xl text-sm font-bold select-none transition-all duration-150 active:scale-95 disabled:opacity-40 min-h-8.5"
+      className="btn-follow tap-sm flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-xl text-sm font-bold select-none transition-all duration-150 active:scale-95 disabled:opacity-40 min-h-8.5"
       style={
         isFollowing
           ? {
@@ -99,7 +103,7 @@ export default function FollowButton({
       ) : (
         <UserPlus size={14} />
       )}
-      
+
       <span>
         {loading ? (isFollowing ? 'Leaving…' : 'Joining…') : isFollowing ? 'Following' : 'Follow'}
       </span>
