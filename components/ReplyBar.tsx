@@ -9,6 +9,7 @@ interface ReplyBarProps {
   postId:        string
   currentUserId: string
   postOwnerId?:  string
+  currentUserProfile?: { avatar_url?: string | null; username?: string }
 }
 
 const MAX_TEXT     = 500
@@ -36,13 +37,12 @@ const FALLBACK_GIFS: GifResult[] = [
   { url: 'https://media.giphy.com/media/l46CyJmS9KUbokzsI/giphy.gif',  preview: 'https://media.giphy.com/media/l46CyJmS9KUbokzsI/giphy_s.gif' },
 ]
 
-export default function ReplyBar({ postId, currentUserId, postOwnerId }: ReplyBarProps) {
+export default function ReplyBar({ postId, currentUserId, postOwnerId, currentUserProfile }: ReplyBarProps) {
   const supabase = createClient()
   const router   = useRouter()
 
   const [text,      setText]      = useState('')
   const [loading,   setLoading]   = useState(false)
-  const [profile,   setProfile]   = useState<any>(null)
   const [media,     setMedia]     = useState<MediaItem[]>([])
   const [error,     setError]     = useState('')
   const [showGifs,  setShowGifs]  = useState(false)
@@ -54,11 +54,6 @@ export default function ReplyBar({ postId, currentUserId, postOwnerId }: ReplyBa
   const videoRef    = useRef<HTMLInputElement>(null)
   const textRef     = useRef<HTMLTextAreaElement>(null)
   const gifPanelRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    supabase.from('profiles').select('username, avatar_url').eq('id', currentUserId).single()
-      .then(({ data }) => setProfile(data))
-  }, [currentUserId]) // eslint-disable-line
 
   useEffect(() => {
     if (!showGifs) return
@@ -181,7 +176,7 @@ export default function ReplyBar({ postId, currentUserId, postOwnerId }: ReplyBa
       const { error: insertErr } = await supabase.from('comments').insert({
         post_id:     postId,
         user_id:     currentUserId,
-        content:     text.trim() || '',
+        content:     text.trim() || null,
         media_url,
         media_type,
         extra_media: extra_media.length ? extra_media : null,
@@ -195,7 +190,7 @@ export default function ReplyBar({ postId, currentUserId, postOwnerId }: ReplyBa
           actor_id: currentUserId,
           type:     'comment',
           entity_id: postId,
-          message:  `${profile?.username ?? 'Someone'} commented on your post`,
+          message:  `${currentUserProfile?.username ?? 'Someone'} commented on your post`,
           is_read:  false,
         })
       }
@@ -213,7 +208,7 @@ export default function ReplyBar({ postId, currentUserId, postOwnerId }: ReplyBa
     }
   }
 
-  const initials   = profile?.username?.[0]?.toUpperCase() ?? '?'
+  const initials   = currentUserProfile?.username?.[0]?.toUpperCase() ?? '?'
   const imageCount = media.filter(m => m.type === 'image').length
   const hasVideo   = media.some(m => m.type === 'video')
   const hasGif     = media.some(m => m.type === 'gif')
@@ -339,8 +334,8 @@ export default function ReplyBar({ postId, currentUserId, postOwnerId }: ReplyBa
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           color: '#fff', fontWeight: 700, fontSize: 12, overflow: 'hidden',
         }}>
-          {profile?.avatar_url
-            ? <img src={profile.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          {currentUserProfile?.avatar_url
+            ? <img src={currentUserProfile.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             : initials
           }
         </div>

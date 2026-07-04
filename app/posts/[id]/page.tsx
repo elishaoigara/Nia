@@ -86,12 +86,28 @@ export default async function PostDetailPage({ params }: Props) {
 
   if (!post) notFound()
 
-  // Fetch current user's profile for the inline reply avatar
+  // Fetch current user's profile for the inline reply avatar (used by both
+  // CommentThread's inline reply boxes and the sticky ReplyBar) — fetched
+  // once here so neither client component needs its own round trip.
   const { data: currentProfile } = await supabase
     .from('profiles')
     .select('username, avatar_url')
     .eq('id', user.id)
     .single()
+
+  // Whether the viewer already follows this post's author — computed here
+  // (same as the home feed) so PostCard can hide the Follow button for
+  // authors you already follow, instead of always defaulting to "show it".
+  let viewerIsFollowing = false
+  if (post.user_id && post.user_id !== user.id) {
+    const { data: followRow } = await supabase
+      .from('follows')
+      .select('follower_id')
+      .eq('follower_id', user.id)
+      .eq('following_id', post.user_id)
+      .maybeSingle()
+    viewerIsFollowing = !!followRow
+  }
 
   const comments = ((post.comments ?? []) as any[]).sort(
     (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
@@ -127,7 +143,7 @@ export default async function PostDetailPage({ params }: Props) {
 
       {/* Original post */}
       <PostCard
-        post={post}
+        post={{ ...post, viewer_is_following: viewerIsFollowing }}
         currentUserId={user.id}
         showLine={comments.length > 0}
       />
@@ -147,7 +163,12 @@ export default async function PostDetailPage({ params }: Props) {
       <div style={{ height: 80 }} />
 
       {/* Sticky reply input */}
-      <ReplyBar postId={post.id} currentUserId={user.id} postOwnerId={post.user_id} />
+      <ReplyBar
+        postId={post.id}
+        currentUserId={user.id}
+        postOwnerId={post.user_id}
+        currentUserProfile={currentProfile ?? undefined}
+      />
     </div>
   )
 }

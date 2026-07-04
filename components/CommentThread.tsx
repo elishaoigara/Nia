@@ -25,6 +25,12 @@ interface GifResult {
 }
 
 const TENOR_KEY = process.env.NEXT_PUBLIC_TENOR_API_KEY ?? ''
+
+// Soft-delete sentinel: deleting a comment overwrites its content with this
+// marker instead of removing the row, so replies underneath keep their
+// place in the thread instead of becoming orphaned root comments.
+const DELETED_MARKER = '__deleted__'
+
 const FALLBACK_GIFS: GifResult[] = [
   { url: 'https://media.giphy.com/media/l0MYt5jPR6QX5pnqM/giphy.gif', preview: 'https://media.giphy.com/media/l0MYt5jPR6QX5pnqM/giphy_s.gif' },
   { url: 'https://media.giphy.com/media/3o7TKSjRrfIPjeiVyM/giphy.gif', preview: 'https://media.giphy.com/media/3o7TKSjRrfIPjeiVyM/giphy_s.gif' },
@@ -217,7 +223,7 @@ function InlineReplyBox({
       const payload: any = {
         post_id:     postId,
         user_id:     currentUserId,
-        content:     text.trim(),
+        content:     text.trim() || null,
         media_url,
         media_type,
         extra_media: extra_media.length ? extra_media : null,
@@ -415,7 +421,7 @@ function CommentRow({
   const [liked,       setLiked]       = useState(() => likesList.some((l: any) => l.user_id === currentUserId))
   const [likeCount,   setLikeCount]   = useState(likesList.length)
   const [showMenu,    setShowMenu]    = useState(false)
-  const [deleted,     setDeleted]     = useState(false)
+  const [softDeleted, setSoftDeleted] = useState(false)
   const [replying,    setReplying]    = useState(false)
   const [showReplies, setShowReplies] = useState(true)
 
@@ -433,9 +439,10 @@ function CommentRow({
     return () => { document.removeEventListener('mousedown', handleClick); document.removeEventListener('keydown', handleKey) }
   }, [showMenu])
 
-  const media    = buildMedia(comment)
-  const children = (comment.children ?? []) as any[]
-  const initials = profile?.username?.[0]?.toUpperCase() ?? '?'
+  const media     = buildMedia(comment)
+  const children  = (comment.children ?? []) as any[]
+  const initials  = profile?.username?.[0]?.toUpperCase() ?? '?'
+  const isDeleted = softDeleted || comment.content === DELETED_MARKER
 
   async function toggleLike() {
     let nowLiked = false
@@ -450,12 +457,17 @@ function CommentRow({
 
   async function deleteComment() {
     setShowMenu(false)
-    await supabase.from('comments').delete().eq('id', comment.id)
-    setDeleted(true)
+    // Soft-delete: overwrite content/media instead of removing the row, so
+    // any replies underneath this comment keep their place in the thread
+    // rather than becoming orphaned root comments after the next refresh.
+    setSoftDeleted(true)
+    await supabase
+      .from('comments')
+      .update({ content: DELETED_MARKER, media_url: null, media_type: null, extra_media: null })
+      .eq('id', comment.id)
+      .eq('user_id', currentUserId)
     router.refresh()
   }
-
-  if (deleted) return null
 
   // max indent depth = 2 (keeps layout clean on mobile)
   const canNestDeeper = depth < 2
@@ -476,83 +488,94 @@ function CommentRow({
 
         {/* Right: body */}
         <div className="comment-body">
-          <div className="comment-meta">
-            <Link href={`/profile/${profile?.id}`} className="comment-username">
-              {profile?.full_name ?? profile?.username ?? 'unknown'}
-            </Link>
-            <span className="comment-handle">@{profile?.username ?? 'unknown'}</span>
-            <span className="comment-dot">·</span>
-            <span className="comment-time">{timeAgo(comment.created_at)}</span>
+          {isDeleted ? (
+            <p style={{
+              fontSize: 13, fontStyle: 'italic', color: 'var(--text-tertiary)',
+              padding: '6px 0', margin: 0,
+            }}>
+              [deleted]
+            </p>
+          ) : (
+            <>
+              <div className="comment-meta">
+                <Link href={`/profile/${profile?.id}`} className="comment-username">
+                  {profile?.full_name ?? profile?.username ?? 'unknown'}
+                </Link>
+                <span className="comment-handle">@{profile?.username ?? 'unknown'}</span>
+                <span className="comment-dot">·</span>
+                <span className="comment-time">{timeAgo(comment.created_at)}</span>
 
-            {isOwner && (
-              <div ref={menuRef} style={{ marginLeft: 'auto', position: 'relative' }}>
-                <button
-                  onClick={() => setShowMenu(p => !p)}
-                  className="comment-more-btn"
-                  aria-label="More"
-                >
-                  <MoreHorizontal size={14} />
-                </button>
-                {showMenu && (
-                  <div className="comment-menu">
-                    <button onClick={deleteComment} className="comment-menu-item comment-menu-danger">
-                      <Trash2 size={13} />
-                      Delete reply
+                {isOwner && (
+                  <div ref={menuRef} style={{ marginLeft: 'auto', position: 'relative' }}>
+                    <button
+                      onClick={() => setShowMenu(p => !p)}
+                      className="comment-more-btn"
+                      aria-label="More"
+                    >
+                      <MoreHorizontal size={14} />
                     </button>
+                    {showMenu && (
+                      <div className="comment-menu">
+                        <button onClick={deleteComment} className="comment-menu-item comment-menu-danger">
+                          <Trash2 size={13} />
+                          Delete reply
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
-            )}
-          </div>
 
-          {comment.content && (
-            <p className="comment-text">{comment.content}</p>
+              {comment.content && (
+                <p className="comment-text">{comment.content}</p>
+              )}
+
+              {media.length > 0 && <CommentMediaGrid media={media} />}
+
+              <div className="comment-actions">
+                {/* Like */}
+                <button className={`comment-action-btn${liked ? ' liked' : ''}`} onClick={toggleLike} aria-label="Like">
+                  <Heart size={14} strokeWidth={liked ? 0 : 1.75} fill={liked ? '#f43f5e' : 'none'} />
+                  {likeCount > 0 && <span>{likeCount}</span>}
+                </button>
+
+                {/* Reply */}
+                <button
+                  className="comment-action-btn"
+                  onClick={() => setReplying(p => !p)}
+                  aria-label="Reply"
+                >
+                  <MessageCircle size={14} strokeWidth={1.75} />
+                  {children.length > 0 && <span>{children.length}</span>}
+                </button>
+
+                {/* Toggle nested replies if collapsed */}
+                {children.length > 0 && !showReplies && (
+                  <button
+                    className="comment-action-btn"
+                    onClick={() => setShowReplies(true)}
+                    style={{ fontSize: 11, color: 'var(--nia-violet)' }}
+                  >
+                    Show {children.length} {children.length === 1 ? 'reply' : 'replies'}
+                  </button>
+                )}
+                {children.length > 0 && showReplies && (
+                  <button
+                    className="comment-action-btn"
+                    onClick={() => setShowReplies(false)}
+                    style={{ fontSize: 11 }}
+                  >
+                    Hide replies
+                  </button>
+                )}
+              </div>
+            </>
           )}
-
-          {media.length > 0 && <CommentMediaGrid media={media} />}
-
-          <div className="comment-actions">
-            {/* Like */}
-            <button className={`comment-action-btn${liked ? ' liked' : ''}`} onClick={toggleLike} aria-label="Like">
-              <Heart size={14} strokeWidth={liked ? 0 : 1.75} fill={liked ? '#f43f5e' : 'none'} />
-              {likeCount > 0 && <span>{likeCount}</span>}
-            </button>
-
-            {/* Reply */}
-            <button
-              className="comment-action-btn"
-              onClick={() => setReplying(p => !p)}
-              aria-label="Reply"
-            >
-              <MessageCircle size={14} strokeWidth={1.75} />
-              {children.length > 0 && <span>{children.length}</span>}
-            </button>
-
-            {/* Toggle nested replies if collapsed */}
-            {children.length > 0 && !showReplies && (
-              <button
-                className="comment-action-btn"
-                onClick={() => setShowReplies(true)}
-                style={{ fontSize: 11, color: 'var(--nia-violet)' }}
-              >
-                Show {children.length} {children.length === 1 ? 'reply' : 'replies'}
-              </button>
-            )}
-            {children.length > 0 && showReplies && (
-              <button
-                className="comment-action-btn"
-                onClick={() => setShowReplies(false)}
-                style={{ fontSize: 11 }}
-              >
-                Hide replies
-              </button>
-            )}
-          </div>
         </div>
       </div>
 
       {/* Inline reply composer */}
-      {replying && (
+      {replying && !isDeleted && (
         <InlineReplyBox
           postId={postId}
           parentId={comment.id}
@@ -565,7 +588,8 @@ function CommentRow({
         />
       )}
 
-      {/* Nested children */}
+      {/* Nested children — always rendered, even if this comment is deleted,
+          so replies underneath keep their place in the thread. */}
       {children.length > 0 && showReplies && (
         <div className="comment-children">
           {children.map((child: any, i: number) => (
