@@ -714,7 +714,7 @@ function LongFlicksGrid({ videos, onOpen }: { videos: FlickPost[]; onOpen: (v: F
   }
 
   return (
-    <div style={{ paddingTop: 60 }}>
+    <div style={{ paddingTop: 60, maxWidth: 1100, margin: '0 auto' }}>
       {/* Category chip bar — pinned under the tab header, horizontally scrollable */}
       <div
         className="hidden-scrollbar"
@@ -746,20 +746,26 @@ function LongFlicksGrid({ videos, onOpen }: { videos: FlickPost[]; onOpen: (v: F
         })}
       </div>
 
-      {/* 2-column thumbnail grid */}
+      {/* Thumbnail grid — was a hard-coded 2 columns, which on a desktop-width
+          viewport stretched each card to ~half the screen (see screenshot: two
+          huge cards). auto-fill + minmax lets the browser fit as many
+          reasonably-sized cards per row as the viewport allows: still 2 on a
+          phone, naturally more on a tablet/desktop, and the outer maxWidth above
+          keeps things from sprawling edge-to-edge on ultrawide monitors. */}
       {filtered.length === 0 ? (
         <div style={{ paddingTop: 60, textAlign: 'center' }}>
           <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>Nothing in this topic yet.</p>
         </div>
       ) : (
         <div style={{
-          display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10,
-          padding: '4px 10px 32px',
+          display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: 14,
+          padding: '4px 14px 32px',
         }}>
           {filtered.map(v => <LongFlickGridCard key={v.id} video={v} onOpen={onOpen} />)}
         </div>
       )}
     </div>
+
   )
 }
 
@@ -1059,7 +1065,7 @@ function SearchOverlay({ onClose, onSelect }: { onClose: () => void; onSelect: (
       </div>
 
       {/* Body */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '14px' }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '14px', maxWidth: 640, margin: '0 auto', width: '100%' }}>
         {!hasSearched ? (
           <>
             {recent.length > 0 && (
@@ -1125,7 +1131,7 @@ function SearchOverlay({ onClose, onSelect }: { onClose: () => void; onSelect: (
             <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.4)', fontWeight: 600 }}>No flicks found for "{query}"</p>
           </div>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 10 }}>
             {/* Previously this wrapped LongFlickGridCard's own <button> in a <Link>
                 (an <a> wrapping a <button> — invalid HTML, and unpredictable click
                 behavior across browsers). It also navigated to a generic /posts/:id
