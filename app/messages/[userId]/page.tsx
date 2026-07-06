@@ -6,7 +6,7 @@ import { useParams, useRouter } from 'next/navigation'
 import {
   Send, ArrowLeft, ImagePlus, Mic, Video, Sticker,
   X, Loader2, MoreVertical, EyeOff, Eye, ShieldOff, Shield, Flag,
-  Check,
+  Check, Plus,
 } from 'lucide-react'
 import Link from 'next/link'
 import MessageBubble, { ChatMessage } from '@/components/messages/MessageBubble'
@@ -76,6 +76,7 @@ export default function DirectMessagePage() {
 
   const [actionSheetMsg, setActionSheetMsg] = useState<ChatMessage | null>(null)
   const [showGifPicker, setShowGifPicker] = useState(false)
+  const [showAttachTray, setShowAttachTray] = useState(false)
   const [reportTarget, setReportTarget] = useState<{ messageId: string | null } | null>(null)
   const [showMenu, setShowMenu] = useState(false)
   const [amIBlocking, setAmIBlocking] = useState(false)
@@ -648,19 +649,8 @@ export default function DirectMessagePage() {
         </div>
       )}
 
-      {/* VIEW-ONCE TOGGLE PREVIEW */}
-      {pendingViewOnce && !editingId && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 14px', background: 'rgba(91,33,182,0.08)', borderTop: '1px solid var(--border)', flexShrink: 0 }}>
-          <Eye size={13} color="var(--nia-violet)" />
-          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--nia-violet)', flex: 1 }}>Next message disappears after it's opened</span>
-          <button onClick={() => setPendingViewOnce(false)} style={{ width: 22, height: 22, borderRadius: 6, border: 'none', background: 'var(--surface-3)', color: 'var(--text-tertiary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <X size={12} />
-          </button>
-        </div>
-      )}
-
       {/* INPUT BAR */}
-      <div style={{ padding: '10px 12px', borderTop: '1px solid var(--border)', flexShrink: 0, paddingBottom: 'calc(10px + env(safe-area-inset-bottom, 0px))', position: 'relative' }}>
+      <div style={{ padding: '8px 10px', borderTop: '1px solid var(--border)', flexShrink: 0, paddingBottom: 'calc(8px + env(safe-area-inset-bottom, 0px))', position: 'relative' }}>
         {showGifPicker && <ChatGifPicker onPick={sendGif} onClose={() => setShowGifPicker(false)} />}
 
         {isRecording ? (
@@ -671,45 +661,82 @@ export default function DirectMessagePage() {
             <button onClick={stopRecording} style={{ padding: '6px 14px', borderRadius: 10, border: 'none', background: '#ef4444', color: 'white', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Send</button>
           </div>
         ) : (
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
-            <div style={{ display: 'flex', gap: 4, paddingBottom: 2, flexWrap: 'wrap' }}>
-              <button onClick={() => fileRef.current?.click()} className="tap-sm" style={{ width: 38, height: 38, borderRadius: 10, border: 'none', background: 'var(--surface-2)', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <ImagePlus size={16} />
-              </button>
-              <button onClick={() => videoRef.current?.click()} className="tap-sm" style={{ width: 38, height: 38, borderRadius: 10, border: 'none', background: 'var(--surface-2)', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Video size={16} />
-              </button>
-              <button onClick={startRecording} className="tap-sm" style={{ width: 38, height: 38, borderRadius: 10, border: 'none', background: 'var(--surface-2)', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Mic size={16} />
-              </button>
-              <button onClick={() => setShowGifPicker(v => !v)} className="tap-sm" style={{ width: 38, height: 38, borderRadius: 10, border: 'none', background: showGifPicker ? 'var(--surface-3)' : 'var(--surface-2)', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Sticker size={16} />
-              </button>
-              <button onClick={() => setPendingViewOnce(v => !v)} className="tap-sm" style={{ width: 38, height: 38, borderRadius: 10, border: 'none', background: pendingViewOnce ? 'var(--nia-violet)' : 'var(--surface-2)', color: pendingViewOnce ? '#fff' : 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {pendingViewOnce ? <Eye size={16} /> : <EyeOff size={16} />}
-              </button>
-            </div>
+          <>
+            {/* Attachment tray — a single row that only appears when + is tapped,
+                so the default bar never wraps onto a second line. */}
+            {showAttachTray && (
+              <div style={{ display: 'flex', gap: 18, padding: '4px 10px 10px', overflowX: 'auto' }}>
+                {[
+                  { icon: ImagePlus, label: 'Photo', onClick: () => { setShowAttachTray(false); fileRef.current?.click() } },
+                  { icon: Video, label: 'Video', onClick: () => { setShowAttachTray(false); videoRef.current?.click() } },
+                  { icon: Sticker, label: 'GIF', onClick: () => { setShowAttachTray(false); setShowGifPicker(true) } },
+                  { icon: pendingViewOnce ? Eye : EyeOff, label: 'Once', onClick: () => { setPendingViewOnce(v => !v); setShowAttachTray(false) }, active: pendingViewOnce },
+                ].map(({ icon: Icon, label, onClick, active }) => (
+                  <button
+                    key={label}
+                    onClick={onClick}
+                    className="tap-sm"
+                    style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, border: 'none', background: 'none', cursor: 'pointer', flexShrink: 0 }}
+                  >
+                    <span style={{
+                      width: 44, height: 44, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      background: active ? 'var(--nia-violet)' : 'var(--surface-2)', color: active ? '#fff' : 'var(--text-secondary)',
+                    }}>
+                      <Icon size={19} />
+                    </span>
+                    <span style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--text-tertiary)' }}>{label}</span>
+                  </button>
+                ))}
+              </div>
+            )}
 
-            <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, background: 'var(--surface-2)', borderRadius: 20, padding: '0 14px', minHeight: 40 }}>
-              <input
-                ref={inputRef}
-                value={newMessage}
-                onChange={e => handleTypingInput(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendText() } }}
-                placeholder={editingId ? 'Edit message…' : 'Message…'}
-                style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontSize: 14, color: 'var(--text-primary)', fontFamily: 'inherit' }}
-              />
-            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <button
+                onClick={() => setShowAttachTray(v => !v)}
+                className="tap-sm"
+                style={{
+                  width: 38, height: 38, borderRadius: '50%', border: 'none', flexShrink: 0,
+                  background: showAttachTray ? 'var(--surface-3)' : 'var(--surface-2)', color: 'var(--text-secondary)',
+                  cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  transform: showAttachTray ? 'rotate(45deg)' : 'none', transition: 'transform 0.15s',
+                }}
+              >
+                <Plus size={18} />
+              </button>
 
-            <button
-              onClick={sendText}
-              disabled={!newMessage.trim() || sending}
-              className="tap-sm"
-              style={{ width: 40, height: 40, borderRadius: 12, border: 'none', background: 'var(--grad-brand)', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, opacity: !newMessage.trim() || sending ? 0.4 : 1, transition: 'opacity 0.15s' }}
-            >
-              {sending ? <Loader2 size={15} className="animate-spin" /> : editingId ? <Check size={15} /> : <Send size={15} />}
-            </button>
-          </div>
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, background: 'var(--surface-2)', borderRadius: 20, padding: '0 14px', minHeight: 38 }}>
+                {pendingViewOnce && !editingId && <Eye size={13} color="var(--nia-violet)" style={{ flexShrink: 0 }} />}
+                <input
+                  ref={inputRef}
+                  value={newMessage}
+                  onChange={e => handleTypingInput(e.target.value)}
+                  onFocus={() => setShowAttachTray(false)}
+                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendText() } }}
+                  placeholder={editingId ? 'Edit message…' : pendingViewOnce ? 'Disappearing message…' : 'Message…'}
+                  style={{ flex: 1, minWidth: 0, background: 'none', border: 'none', outline: 'none', fontSize: 14.5, color: 'var(--text-primary)', fontFamily: 'inherit' }}
+                />
+              </div>
+
+              {newMessage.trim() ? (
+                <button
+                  onClick={sendText}
+                  disabled={sending}
+                  className="tap-sm"
+                  style={{ width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'var(--grad-brand)', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, opacity: sending ? 0.6 : 1 }}
+                >
+                  {sending ? <Loader2 size={15} className="animate-spin" /> : editingId ? <Check size={15} /> : <Send size={15} />}
+                </button>
+              ) : (
+                <button
+                  onClick={startRecording}
+                  className="tap-sm"
+                  style={{ width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'var(--grad-brand)', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                >
+                  <Mic size={16} />
+                </button>
+              )}
+            </div>
+          </>
         )}
 
         <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={e => handleFileSelect(e, 'image')} />
