@@ -4,62 +4,89 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useParams, useRouter } from 'next/navigation'
 import {
-  Send, ArrowLeft, ImagePlus, Mic, Video,
-  File as FileIcon, Play, Pause, X, Eye,
-  Reply, Loader2, Check, CheckCheck,
+  Send, ArrowLeft, ImagePlus, Mic, Video, Sticker,
+  X, Loader2, MoreVertical, EyeOff, Eye, ShieldOff, Shield, Flag,
+  Check,
 } from 'lucide-react'
 import Link from 'next/link'
+import MessageBubble, { ChatMessage } from '@/components/messages/MessageBubble'
+import MessageActionSheet from '@/components/messages/MessageActionSheet'
+import ChatGifPicker from '@/components/messages/ChatGifPicker'
+import ReportSheet from '@/components/messages/ReportSheet'
 
-function timeAgo(date: string) {
-  const s = Math.floor((Date.now() - new Date(date).getTime()) / 1000)
-  if (s < 60) return `${s}s`
-  if (s < 3600) return `${Math.floor(s / 60)}m`
-  if (s < 86400) return `${Math.floor(s / 3600)}h`
-  return new Date(date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+const PAGE_SIZE = 30
+const TYPING_IDLE_MS = 2500
+
+type Profile = {
+  id: string
+  username: string
+  avatar_url: string | null
+  full_name: string | null
+  last_seen_at?: string | null
 }
 
 function formatDuration(s: number) {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 }
 
-type Message = {
-  id: string
-  sender_id: string
-  recipient_id: string
-  content: string | null
-  media_url: string | null
-  media_type: string | null
-  file_name: string | null
-  view_once: boolean
-  viewed_at: string | null
-  reply_to: string | null
-  is_read: boolean
-  created_at: string
+function presenceLabel(online: boolean, lastSeen: string | null | undefined) {
+  if (online) return 'Online'
+  if (!lastSeen) return null
+  const s = Math.floor((Date.now() - new Date(lastSeen).getTime()) / 1000)
+  if (s < 60) return 'Active just now'
+  if (s < 3600) return `Active ${Math.floor(s / 60)}m ago`
+  if (s < 86400) return `Active ${Math.floor(s / 3600)}h ago`
+  return `Active ${Math.floor(s / 86400)}d ago`
 }
 
-type Profile = { id: string; username: string; avatar_url: string | null; full_name: string | null }
+function normalizeMsg(raw: any): ChatMessage {
+  return {
+    ...raw,
+    reactions: raw.reactions ?? {},
+    edited_at: raw.edited_at ?? null,
+    deleted_at: raw.deleted_at ?? null,
+  }
+}
 
 export default function DirectMessagePage() {
   const supabase = createClient()
   const { userId } = useParams() as { userId?: string }
   const router = useRouter()
+  const recipientId = userId ?? null
 
-  if (!userId) return <div style={{ textAlign: 'center', padding: 32 }}>Invalid conversation</div>
-
-  const recipientId = userId
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [recipient, setRecipient] = useState<Profile | null>(null)
-  const [messages, setMessages] = useState<Message[]>([])
+  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [loading, setLoading] = useState(true)
+  const [hasMore, setHasMore] = useState(true)
+  const [loadingOlder, setLoadingOlder] = useState(false)
+
   const [newMessage, setNewMessage] = useState('')
   const [sending, setSending] = useState(false)
-  const [loading, setLoading] = useState(true)
-  const [replyTo, setReplyTo] = useState<Message | null>(null)
-  const [uploading, setUploading] = useState(false)
+  const [replyTo, setReplyTo] = useState<ChatMessage | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [pendingViewOnce, setPendingViewOnce] = useState(false)
+
   const [isRecording, setIsRecording] = useState(false)
   const [recordDuration, setRecordDuration] = useState(0)
   const [playingAudio, setPlayingAudio] = useState<string | null>(null)
+  const [audioProgress, setAudioProgress] = useState<Record<string, number>>({})
+  const [audioDurations, setAudioDurations] = useState<Record<string, number>>({})
   const [revealedMedia, setRevealedMedia] = useState<Set<string>>(new Set())
 
+  const [actionSheetMsg, setActionSheetMsg] = useState<ChatMessage | null>(null)
+  const [showGifPicker, setShowGifPicker] = useState(false)
+  const [reportTarget, setReportTarget] = useState<{ messageId: string | null } | null>(null)
+  const [showMenu, setShowMenu] = useState(false)
+  const [amIBlocking, setAmIBlocking] = useState(false)
+  const [blockBusy, setBlockBusy] = useState(false)
+
+  const [typingOther, setTypingOther] = useState(false)
+  const [onlineOther, setOnlineOther] = useState(false)
+  const [pendingRequest, setPendingRequest] = useState(false)
+  const [toast, setToast] = useState<string | null>(null)
+
+  const scrollRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const videoRef = useRef<HTMLInputElement>(null)
@@ -68,85 +95,223 @@ export default function DirectMessagePage() {
   const chunksRef = useRef<Blob[]>([])
   const timerRef = useRef<NodeJS.Timeout | null>(null)
   const audioRefs = useRef<Record<string, HTMLAudioElement>>({})
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const presenceChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
+  const stickToBottom = useRef(true)
 
-  // Cleanup on unmount
+  function showToast(msg: string) {
+    setToast(msg)
+    setTimeout(() => setToast(null), 2600)
+  }
+
+  // ---------------------------------------------------------------------
+  // Load conversation history + initial state. Kept separate from the
+  // realtime subscription effect below so the subscription doesn't get
+  // torn down and recreated every time messages/profile data changes.
+  // ---------------------------------------------------------------------
+  useEffect(() => {
+    if (!recipientId) { setLoading(false); return }
+    let cancelled = false
+
+    async function init() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) { router.push('/login'); return }
+      if (cancelled) return
+      setCurrentUserId(user.id)
+
+      const [{ data: profile }, { data: msgs }, { data: blockRow }, { data: reqRow }] = await Promise.all([
+        supabase.from('profiles').select('id, username, avatar_url, full_name, last_seen_at').eq('id', recipientId).single(),
+        supabase.from('messages').select('*')
+          .or(`and(sender_id.eq.${user.id},recipient_id.eq.${recipientId}),and(sender_id.eq.${recipientId},recipient_id.eq.${user.id})`)
+          .order('created_at', { ascending: false })
+          .limit(PAGE_SIZE),
+        supabase.from('blocks').select('*').eq('blocker_id', user.id).eq('blocked_id', recipientId).maybeSingle(),
+        supabase.from('message_requests').select('*').eq('user_id', user.id).eq('other_id', recipientId).maybeSingle(),
+      ])
+      if (cancelled) return
+
+      const ordered = ((msgs as any[]) ?? []).map(normalizeMsg).reverse()
+      setRecipient(profile as Profile)
+      setMessages(ordered)
+      setHasMore(ordered.length === PAGE_SIZE)
+      setAmIBlocking(!!blockRow)
+      setPendingRequest(!!reqRow && reqRow.status === 'pending')
+      setLoading(false)
+
+      await supabase.from('messages').update({ is_read: true })
+        .eq('recipient_id', user.id).eq('sender_id', recipientId).eq('is_read', false)
+      await supabase.from('profiles').update({ last_seen_at: new Date().toISOString() }).eq('id', user.id)
+    }
+    init()
+
+    return () => { cancelled = true }
+  }, [recipientId]) // eslint-disable-line
+
+  // ---------------------------------------------------------------------
+  // Realtime message subscription. Created directly in this effect (not
+  // inside a nested async function) so the cleanup function returned here
+  // is the one React actually registers — the previous version returned
+  // its cleanup from an inner `async function init()`, which React never
+  // sees, so every open conversation leaked a channel forever.
+  // ---------------------------------------------------------------------
+  useEffect(() => {
+    if (!recipientId || !currentUserId) return
+
+    const channel = supabase.channel(`dm-${[currentUserId, recipientId].sort().join('_')}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `recipient_id=eq.${currentUserId}` }, payload => {
+        const msg = normalizeMsg(payload.new)
+        if (msg.sender_id !== recipientId) return
+        setMessages(prev => (prev.some(m => m.id === msg.id) ? prev : [...prev, msg]))
+        supabase.from('messages').update({ is_read: true }).eq('id', msg.id)
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, payload => {
+        const msg = normalizeMsg(payload.new)
+        const involvesUs =
+          (msg.sender_id === currentUserId && msg.recipient_id === recipientId) ||
+          (msg.sender_id === recipientId && msg.recipient_id === currentUserId)
+        if (!involvesUs) return
+        setMessages(prev => prev.map(m => (m.id === msg.id ? msg : m)))
+      })
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
+  }, [currentUserId, recipientId]) // eslint-disable-line
+
+  // ---------------------------------------------------------------------
+  // Presence + typing indicator, shared per conversation pair.
+  // ---------------------------------------------------------------------
+  useEffect(() => {
+    if (!recipientId || !currentUserId) return
+    const roomKey = `presence-${[currentUserId, recipientId].sort().join('_')}`
+    const channel = supabase.channel(roomKey, { config: { presence: { key: currentUserId } } })
+
+    channel
+      .on('presence', { event: 'sync' }, () => {
+        const state = channel.presenceState() as Record<string, unknown[]>
+        setOnlineOther(!!state[recipientId] && state[recipientId].length > 0)
+      })
+      .on('broadcast', { event: 'typing' }, ({ payload }) => {
+        if (payload?.user !== recipientId) return
+        setTypingOther(!!payload.typing)
+        if (payload.typing) {
+          if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
+          typingTimeoutRef.current = setTimeout(() => setTypingOther(false), TYPING_IDLE_MS + 500)
+        }
+      })
+      .subscribe(async status => {
+        if (status === 'SUBSCRIBED') await channel.track({ online: true })
+      })
+
+    presenceChannelRef.current = channel
+    const heartbeat = setInterval(() => {
+      supabase.from('profiles').update({ last_seen_at: new Date().toISOString() }).eq('id', currentUserId)
+    }, 30000)
+
+    return () => {
+      clearInterval(heartbeat)
+      supabase.from('profiles').update({ last_seen_at: new Date().toISOString() }).eq('id', currentUserId)
+      supabase.removeChannel(channel)
+      presenceChannelRef.current = null
+    }
+  }, [currentUserId, recipientId]) // eslint-disable-line
+
+  function broadcastTyping(typing: boolean) {
+    presenceChannelRef.current?.send({ type: 'broadcast', event: 'typing', payload: { user: currentUserId, typing } })
+  }
+
+  function handleTypingInput(value: string) {
+    setNewMessage(value)
+    broadcastTyping(true)
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
+    typingTimeoutRef.current = setTimeout(() => broadcastTyping(false), TYPING_IDLE_MS)
+  }
+
+  // Cleanup timers / audio elements on unmount.
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current)
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
       Object.values(audioRefs.current).forEach(a => { a.pause(); a.src = '' })
     }
   }, [])
 
   useEffect(() => {
-    async function init() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { router.push('/login'); return }
-      setCurrentUserId(user.id)
-
-      const [{ data: profile }, { data: msgs }] = await Promise.all([
-        supabase.from('profiles').select('id, username, avatar_url, full_name').eq('id', recipientId).single(),
-        supabase.from('messages').select('*')
-          .or(`and(sender_id.eq.${user.id},recipient_id.eq.${recipientId}),and(sender_id.eq.${recipientId},recipient_id.eq.${user.id})`)
-          .order('created_at', { ascending: true }),
-      ])
-
-      setRecipient(profile as Profile)
-      setMessages((msgs as Message[]) ?? [])
-      setLoading(false)
-
-      // Mark received messages as read
-      await supabase.from('messages').update({ is_read: true })
-        .eq('recipient_id', user.id).eq('sender_id', recipientId).eq('is_read', false)
-
-      // Real-time subscription
-      const channel = supabase.channel(`dm-${user.id}-${recipientId}`)
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `recipient_id=eq.${user.id}` }, payload => {
-          const msg = payload.new as Message
-          if (msg.sender_id === recipientId) {
-            setMessages(prev => {
-              // Avoid duplicates
-              if (prev.some(m => m.id === msg.id)) return prev
-              return [...prev, msg]
-            })
-            supabase.from('messages').update({ is_read: true }).eq('id', msg.id)
-          }
-        })
-        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, payload => {
-          setMessages(prev => prev.map(m => m.id === payload.new.id ? (payload.new as Message) : m))
-        })
-        .subscribe()
-
-      return () => { supabase.removeChannel(channel) }
-    }
-    init()
-  }, [recipientId, router]) // eslint-disable-line
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    if (stickToBottom.current) bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
+  function handleScroll() {
+    const el = scrollRef.current
+    if (!el) return
+    stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120
+    if (el.scrollTop < 60) loadOlder()
+  }
+
+  const loadOlder = useCallback(async () => {
+    if (!currentUserId || !recipientId || loadingOlder || !hasMore || messages.length === 0) return
+    setLoadingOlder(true)
+    const oldest = messages[0].created_at
+    const { data } = await supabase.from('messages').select('*')
+      .or(`and(sender_id.eq.${currentUserId},recipient_id.eq.${recipientId}),and(sender_id.eq.${recipientId},recipient_id.eq.${currentUserId})`)
+      .lt('created_at', oldest)
+      .order('created_at', { ascending: false })
+      .limit(PAGE_SIZE)
+
+    const older = ((data as any[]) ?? []).map(normalizeMsg).reverse()
+    if (older.length < PAGE_SIZE) setHasMore(false)
+
+    const el = scrollRef.current
+    const prevHeight = el?.scrollHeight ?? 0
+    const prevScrollTop = el?.scrollTop ?? 0
+    setMessages(prev => [...older, ...prev])
+    requestAnimationFrame(() => {
+      if (el) el.scrollTop = prevScrollTop + (el.scrollHeight - prevHeight)
+    })
+    setLoadingOlder(false)
+  }, [currentUserId, recipientId, loadingOlder, hasMore, messages]) // eslint-disable-line
+
   async function uploadFile(file: File) {
-    setUploading(true)
     const ext = file.name.split('.').pop()
     const path = `${currentUserId}/${Date.now()}.${ext}`
     const { error } = await supabase.storage.from('message-media').upload(path, file)
-    if (error) {
-      setUploading(false)
-      alert(`Upload failed: ${error.message}`)
-      return null
-    }
+    if (error) { showToast(`Upload failed: ${error.message}`); return null }
     const { data } = supabase.storage.from('message-media').getPublicUrl(path)
-    setUploading(false)
     return { url: data.publicUrl, name: file.name }
+  }
+
+  async function insertMessage(payload: Record<string, any>, tempId: string) {
+    const { data, error } = await supabase.from('messages').insert(payload).select().single()
+    if (!error && data) {
+      setMessages(prev => prev.map(m => (m.id === tempId ? normalizeMsg(data) : m)))
+    } else {
+      setMessages(prev => prev.filter(m => m.id !== tempId))
+      showToast('Message failed to send')
+    }
   }
 
   async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>, type: string) {
     const file = e.target.files?.[0]
-    if (!file || !currentUserId) return
+    if (!file || !currentUserId || !recipientId) return
     const detectedType = file.type === 'image/gif' ? 'gif' : type
-    const result = await uploadFile(file)
-    if (result) await sendMessage(null, result.url, detectedType, result.name)
+    const tempId = `temp-${Date.now()}`
+    const previewUrl = URL.createObjectURL(file)
+    const viewOnce = pendingViewOnce
+
+    setMessages(prev => [...prev, {
+      id: tempId, sender_id: currentUserId, recipient_id: recipientId,
+      content: null, media_url: previewUrl, media_type: detectedType, file_name: file.name,
+      view_once: viewOnce, viewed_at: null, reply_to: replyTo?.id ?? null, is_read: false,
+      created_at: new Date().toISOString(), reactions: {}, edited_at: null, deleted_at: null,
+    }])
+    setReplyTo(null); setPendingViewOnce(false)
     e.target.value = ''
+
+    const result = await uploadFile(file)
+    if (!result) { setMessages(prev => prev.filter(m => m.id !== tempId)); return }
+    await insertMessage({
+      sender_id: currentUserId, recipient_id: recipientId, content: null,
+      media_url: result.url, media_type: detectedType, file_name: result.name,
+      view_once: viewOnce, reply_to: null, is_read: false,
+    }, tempId)
   }
 
   async function startRecording() {
@@ -156,15 +321,30 @@ export default function DirectMessagePage() {
       mrRef.current = mr; chunksRef.current = []
       mr.ondataavailable = (e: BlobEvent) => { if (e.data.size > 0) chunksRef.current.push(e.data) }
       mr.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop())
+        if (!currentUserId || !recipientId) return
         const blob = new Blob(chunksRef.current, { type: 'audio/webm' })
         const file = new File([blob], `voice_${Date.now()}.webm`, { type: 'audio/webm' })
+        const tempId = `temp-${Date.now()}`
+        const previewUrl = URL.createObjectURL(blob)
+        setMessages(prev => [...prev, {
+          id: tempId, sender_id: currentUserId, recipient_id: recipientId,
+          content: null, media_url: previewUrl, media_type: 'audio', file_name: 'Voice message',
+          view_once: false, viewed_at: null, reply_to: replyTo?.id ?? null, is_read: false,
+          created_at: new Date().toISOString(), reactions: {}, edited_at: null, deleted_at: null,
+        }])
+        setReplyTo(null)
         const result = await uploadFile(file)
-        if (result) await sendMessage(null, result.url, 'audio', 'Voice message')
-        stream.getTracks().forEach(t => t.stop())
+        if (!result) { setMessages(prev => prev.filter(m => m.id !== tempId)); return }
+        await insertMessage({
+          sender_id: currentUserId, recipient_id: recipientId, content: null,
+          media_url: result.url, media_type: 'audio', file_name: 'Voice message',
+          view_once: false, reply_to: null, is_read: false,
+        }, tempId)
       }
       mr.start(); setIsRecording(true)
       timerRef.current = setInterval(() => setRecordDuration(d => d + 1), 1000)
-    } catch { alert('Microphone access denied') }
+    } catch { showToast('Microphone access denied') }
   }
 
   function stopRecording() {
@@ -179,309 +359,235 @@ export default function DirectMessagePage() {
     setIsRecording(false); setRecordDuration(0)
   }
 
-  async function sendMessage(
-    text?: string | null, media_url?: string | null,
-    media_type?: string | null, file_name?: string | null,
-  ) {
-    if ((!text?.trim() && !media_url) || !currentUserId) return
+  async function sendText() {
+    if (!currentUserId || !recipientId) return
+    if (editingId) { await saveEdit(); return }
+    const text = newMessage.trim()
+    if (!text) return
     setSending(true)
-    const payload = {
-      sender_id: currentUserId, recipient_id: recipientId,
-      content: text?.trim() ?? null, media_url: media_url ?? null,
-      media_type: media_type ?? null, file_name: file_name ?? null,
-      view_once: false, reply_to: replyTo?.id ?? null, is_read: false,
-    }
-    // Optimistic
+    broadcastTyping(false)
     const tempId = `temp-${Date.now()}`
-    const optimistic: Message = { id: tempId, ...payload, viewed_at: null, created_at: new Date().toISOString() }
-    setMessages(prev => [...prev, optimistic])
-    setNewMessage(''); setReplyTo(null)
-
-    const { data, error } = await supabase.from('messages').insert(payload).select().single()
-    if (!error && data) {
-      // Replace optimistic with real
-      setMessages(prev => prev.map(m => m.id === tempId ? (data as Message) : m))
-    } else if (error) {
-      // Remove optimistic on failure
-      setMessages(prev => prev.filter(m => m.id !== tempId))
+    const viewOnce = pendingViewOnce
+    const optimistic: ChatMessage = {
+      id: tempId, sender_id: currentUserId, recipient_id: recipientId,
+      content: text, media_url: null, media_type: null, file_name: null,
+      view_once: viewOnce, viewed_at: null, reply_to: replyTo?.id ?? null, is_read: false,
+      created_at: new Date().toISOString(), reactions: {}, edited_at: null, deleted_at: null,
     }
+    setMessages(prev => [...prev, optimistic])
+    setNewMessage(''); setReplyTo(null); setPendingViewOnce(false)
+    await insertMessage({
+      sender_id: currentUserId, recipient_id: recipientId, content: text,
+      media_url: null, media_type: null, file_name: null,
+      view_once: viewOnce, reply_to: optimistic.reply_to, is_read: false,
+    }, tempId)
     setSending(false)
   }
 
+  async function sendGif(url: string) {
+    if (!currentUserId || !recipientId) return
+    setShowGifPicker(false)
+    const tempId = `temp-${Date.now()}`
+    setMessages(prev => [...prev, {
+      id: tempId, sender_id: currentUserId, recipient_id: recipientId,
+      content: null, media_url: url, media_type: 'gif', file_name: null,
+      view_once: false, viewed_at: null, reply_to: replyTo?.id ?? null, is_read: false,
+      created_at: new Date().toISOString(), reactions: {}, edited_at: null, deleted_at: null,
+    }])
+    setReplyTo(null)
+    await insertMessage({
+      sender_id: currentUserId, recipient_id: recipientId, content: null,
+      media_url: url, media_type: 'gif', file_name: null,
+      view_once: false, reply_to: null, is_read: false,
+    }, tempId)
+  }
+
+  function startEdit(msg: ChatMessage) {
+    setEditingId(msg.id)
+    setNewMessage(msg.content ?? '')
+    setReplyTo(null)
+    inputRef.current?.focus()
+  }
+
+  async function saveEdit() {
+    if (!editingId) return
+    const text = newMessage.trim()
+    if (!text) return
+    const editedAt = new Date().toISOString()
+    setMessages(prev => prev.map(m => (m.id === editingId ? { ...m, content: text, edited_at: editedAt } : m)))
+    setEditingId(null); setNewMessage('')
+    await supabase.from('messages').update({ content: text, edited_at: editedAt }).eq('id', editingId)
+  }
+
+  async function unsendMessage(msg: ChatMessage) {
+    const deletedAt = new Date().toISOString()
+    setMessages(prev => prev.map(m => (m.id === msg.id ? { ...m, deleted_at: deletedAt } : m)))
+    await supabase.from('messages').update({ deleted_at: deletedAt }).eq('id', msg.id)
+  }
+
+  async function reactToMessage(msg: ChatMessage, emoji: string) {
+    if (!currentUserId) return
+    const reactions = { ...msg.reactions }
+    if (reactions[currentUserId] === emoji) delete reactions[currentUserId]
+    else reactions[currentUserId] = emoji
+    setMessages(prev => prev.map(m => (m.id === msg.id ? { ...m, reactions } : m)))
+    await supabase.from('messages').update({ reactions }).eq('id', msg.id)
+  }
+
   function toggleAudio(msgId: string, url: string) {
-    if (playingAudio === msgId) {
-      audioRefs.current[msgId]?.pause()
-      setPlayingAudio(null)
-      return
-    }
-    if (playingAudio && audioRefs.current[playingAudio]) {
-      audioRefs.current[playingAudio].pause()
-    }
+    if (playingAudio === msgId) { audioRefs.current[msgId]?.pause(); setPlayingAudio(null); return }
+    if (playingAudio && audioRefs.current[playingAudio]) audioRefs.current[playingAudio].pause()
     if (!audioRefs.current[msgId]) {
-      audioRefs.current[msgId] = new Audio(url)
-      audioRefs.current[msgId].onended = () => setPlayingAudio(null)
+      const audio = new Audio(url)
+      audio.onloadedmetadata = () => setAudioDurations(prev => ({ ...prev, [msgId]: audio.duration }))
+      audio.ontimeupdate = () => setAudioProgress(prev => ({ ...prev, [msgId]: audio.currentTime }))
+      audio.onended = () => setPlayingAudio(null)
+      audioRefs.current[msgId] = audio
     }
     audioRefs.current[msgId].play()
     setPlayingAudio(msgId)
   }
 
-  function renderBubble(msg: Message) {
-    const isOwn = msg.sender_id === currentUserId
-    const replyMsg = messages.find(m => m.id === msg.reply_to)
-    const isTemp = msg.id.startsWith('temp-')
-    const isViewOnceRevealed = revealedMedia.has(msg.id)
+  function seekAudio(msgId: string, fraction: number) {
+    const audio = audioRefs.current[msgId]
+    const duration = audioDurations[msgId]
+    if (!audio || !duration) return
+    audio.currentTime = fraction * duration
+    setAudioProgress(prev => ({ ...prev, [msgId]: audio.currentTime }))
+    if (playingAudio !== msgId) { audio.play(); setPlayingAudio(msgId) }
+  }
 
-    return (
-      <div
-        key={msg.id}
-        style={{
-          display: 'flex',
-          justifyContent: isOwn ? 'flex-end' : 'flex-start',
-          marginBottom: 6,
-          alignItems: 'flex-end',
-          gap: 6,
-        }}
-        className="group"
-      >
-        {/* Recipient avatar */}
-        {!isOwn && (
-          <Link href={`/profile/${recipient?.id}`} style={{ flexShrink: 0, marginBottom: 2 }}>
-            <div style={{
-              width: 26, height: 26, borderRadius: '50%', overflow: 'hidden',
-              background: 'var(--grad-brand)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: 'white', fontWeight: 700, fontSize: 10,
-            }}>
-              {recipient?.avatar_url
-                ? <img src={recipient.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                : recipient?.username?.[0]?.toUpperCase()
-              }
-            </div>
-          </Link>
-        )}
+  async function toggleBlock() {
+    if (!currentUserId || !recipientId) return
+    setBlockBusy(true)
+    if (amIBlocking) {
+      await supabase.from('blocks').delete().eq('blocker_id', currentUserId).eq('blocked_id', recipientId)
+      setAmIBlocking(false)
+      showToast('Unblocked')
+    } else {
+      await supabase.from('blocks').insert({ blocker_id: currentUserId, blocked_id: recipientId })
+      setAmIBlocking(true)
+      showToast('Blocked — they can no longer message you')
+    }
+    setBlockBusy(false)
+    setShowMenu(false)
+  }
 
-        <div style={{ maxWidth: '78%', display: 'flex', flexDirection: 'column', gap: 3, alignItems: isOwn ? 'flex-end' : 'flex-start' }}>
-          {/* Reply preview */}
-          {msg.reply_to && replyMsg && (
-            <div style={{
-              fontSize: 12, padding: '6px 10px', borderRadius: 10,
-              background: 'var(--surface-3)',
-              borderLeft: '3px solid var(--nia-violet)',
-              maxWidth: '100%', opacity: 0.75,
-            }}>
-              <p style={{ fontWeight: 700, color: 'var(--nia-violet)', margin: '0 0 2px' }}>
-                {replyMsg.sender_id === currentUserId ? 'You' : `@${recipient?.username}`}
-              </p>
-              <p style={{ color: 'var(--text-secondary)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {replyMsg.content ?? replyMsg.file_name ?? 'Media'}
-              </p>
-            </div>
-          )}
+  async function submitReport(reason: string) {
+    if (!currentUserId || !recipientId) return
+    await supabase.from('message_reports').insert({
+      reporter_id: currentUserId, reported_user_id: recipientId,
+      message_id: reportTarget?.messageId ?? null, reason,
+    })
+  }
 
-          {/* Bubble */}
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6 }}>
-            {/* Reply button — shown on hover for received */}
-            {!isOwn && (
-              <button
-                onClick={() => setReplyTo(msg)}
-                className="opacity-0 group-hover:opacity-100 tap-sm"
-                style={{
-                  width: 28, height: 28, borderRadius: 8, border: 'none',
-                  background: 'var(--surface-2)', color: 'var(--text-tertiary)',
-                  cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  transition: 'opacity 0.15s',
-                  flexShrink: 0,
-                }}
-              >
-                <Reply size={13} />
-              </button>
-            )}
+  async function acceptRequest() {
+    if (!currentUserId || !recipientId) return
+    setPendingRequest(false)
+    await supabase.from('message_requests').update({ status: 'accepted', updated_at: new Date().toISOString() })
+      .eq('user_id', currentUserId).eq('other_id', recipientId)
+  }
 
-            <div
-              style={{
-                borderRadius: 18,
-                overflow: 'hidden',
-                ...(isOwn
-                  ? { background: 'var(--grad-brand)', color: '#fff', borderBottomRightRadius: 5 }
-                  : { background: 'var(--surface-2)', color: 'var(--text-primary)', borderBottomLeftRadius: 5 }
-                ),
-              }}
-            >
-              {/* Image */}
-              {msg.media_url && (msg.media_type === 'image' || msg.media_type === 'gif') && (
-                msg.view_once && !isViewOnceRevealed ? (
-                  <button
-                    onClick={() => setRevealedMedia(prev => new Set([...prev, msg.id]))}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 8,
-                      padding: '12px 16px', border: 'none',
-                      background: 'transparent', cursor: 'pointer',
-                      color: isOwn ? 'rgba(255,255,255,0.85)' : 'var(--text-secondary)',
-                    }}
-                  >
-                    <Eye size={16} />
-                    <span style={{ fontSize: 13, fontWeight: 600 }}>Tap to view · disappears after</span>
-                  </button>
-                ) : (
-                  <img
-                    src={msg.media_url} alt=""
-                    style={{ display: 'block', width: '100%', maxHeight: 300, objectFit: 'cover', maxWidth: 260 }}
-                  />
-                )
-              )}
+  async function declineRequest() {
+    if (!currentUserId || !recipientId) return
+    await supabase.from('message_requests').update({ status: 'declined', updated_at: new Date().toISOString() })
+      .eq('user_id', currentUserId).eq('other_id', recipientId)
+    router.push('/messages')
+  }
 
-              {/* Video */}
-              {msg.media_url && msg.media_type === 'video' && (
-                <video src={msg.media_url} controls style={{ display: 'block', width: '100%', maxHeight: 300, maxWidth: 260 }} />
-              )}
+  function revealViewOnce(id: string) {
+    setRevealedMedia(prev => new Set([...prev, id]))
+    const msg = messages.find(m => m.id === id)
+    if (msg && msg.sender_id !== currentUserId && !msg.viewed_at) {
+      const viewedAt = new Date().toISOString()
+      setMessages(prev => prev.map(m => (m.id === id ? { ...m, viewed_at: viewedAt } : m)))
+      supabase.from('messages').update({ viewed_at: viewedAt }).eq('id', id)
+    }
+  }
 
-              {/* Audio */}
-              {msg.media_url && msg.media_type === 'audio' && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', minWidth: 160 }}>
-                  <button
-                    onClick={() => toggleAudio(msg.id, msg.media_url!)}
-                    style={{
-                      width: 34, height: 34, borderRadius: '50%', border: 'none',
-                      cursor: 'pointer', flexShrink: 0,
-                      background: isOwn ? 'rgba(255,255,255,0.25)' : 'var(--grad-brand)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    }}
-                  >
-                    {playingAudio === msg.id
-                      ? <Pause size={14} color="white" />
-                      : <Play size={14} color="white" style={{ marginLeft: 2 }} />
-                    }
-                  </button>
-                  <div style={{ flex: 1 }}>
-                    <div style={{
-                      height: 3, borderRadius: 2,
-                      background: isOwn ? 'rgba(255,255,255,0.3)' : 'var(--surface-3)',
-                      marginBottom: 4,
-                    }} />
-                    <span style={{ fontSize: 11, opacity: 0.65 }}>Voice message</span>
-                  </div>
-                </div>
-              )}
+  const presence = presenceLabel(onlineOther, recipient?.last_seen_at)
 
-              {/* File */}
-              {msg.media_url && msg.media_type === 'file' && (
-                <a
-                  href={msg.media_url} target="_blank" rel="noopener noreferrer"
-                  style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', textDecoration: 'none', minWidth: 160 }}
-                >
-                  <div style={{
-                    width: 38, height: 38, borderRadius: 10, flexShrink: 0,
-                    background: isOwn ? 'rgba(255,255,255,0.2)' : 'rgba(91,33,182,0.1)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  }}>
-                    <FileIcon size={17} color={isOwn ? '#fff' : 'var(--nia-violet)'} />
-                  </div>
-                  <div style={{ minWidth: 0 }}>
-                    <p style={{ fontSize: 13, fontWeight: 600, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 140 }}>
-                      {msg.file_name}
-                    </p>
-                    <p style={{ fontSize: 11, opacity: 0.55, margin: 0 }}>Tap to open</p>
-                  </div>
-                </a>
-              )}
-
-              {/* Text */}
-              {msg.content && (
-                <p style={{ padding: '9px 14px', fontSize: 14, lineHeight: 1.55, margin: 0 }}>{msg.content}</p>
-              )}
-
-              {/* Meta row */}
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: 4,
-                padding: '2px 12px 8px',
-                justifyContent: isOwn ? 'flex-end' : 'flex-start',
-              }}>
-                {msg.view_once && <Eye size={10} style={{ opacity: 0.5 }} />}
-                <span style={{ fontSize: 10, opacity: 0.55 }}>{timeAgo(msg.created_at)}</span>
-                {isOwn && (
-                  isTemp
-                    ? <Check size={11} style={{ opacity: 0.4 }} />
-                    : msg.is_read
-                      ? <CheckCheck size={11} color={isOwn ? 'rgba(255,255,255,0.8)' : 'var(--nia-violet)'} />
-                      : <Check size={11} style={{ opacity: 0.55 }} />
-                )}
-              </div>
-            </div>
-
-            {/* Reply button for own messages */}
-            {isOwn && (
-              <button
-                onClick={() => setReplyTo(msg)}
-                className="opacity-0 group-hover:opacity-100 tap-sm"
-                style={{
-                  width: 28, height: 28, borderRadius: 8, border: 'none',
-                  background: 'var(--surface-2)', color: 'var(--text-tertiary)',
-                  cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  transition: 'opacity 0.15s',
-                  flexShrink: 0,
-                }}
-              >
-                <Reply size={13} />
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-    )
+  if (!recipientId) {
+    return <div style={{ textAlign: 'center', padding: 32 }}>Invalid conversation</div>
   }
 
   return (
-    <div style={{
-      display: 'flex', flexDirection: 'column',
-      height: 'calc(100dvh - var(--nav-top))',
-      maxWidth: '42rem', width: '100%', margin: '0 auto',
-    }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100dvh - var(--nav-top))', maxWidth: '42rem', width: '100%', margin: '0 auto', position: 'relative' }}>
       {/* HEADER */}
-      <header style={{
-        display: 'flex', alignItems: 'center', gap: 12,
-        padding: '10px 14px',
-        background: 'var(--surface-0)',
-        borderBottom: '1px solid var(--border)',
-        flexShrink: 0,
-      }}>
-        <button
-          onClick={() => router.back()}
-          className="tap-sm"
-          style={{
-            width: 36, height: 36, borderRadius: 10, border: 'none',
-            background: 'var(--surface-2)', color: 'var(--text-secondary)',
-            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            flexShrink: 0,
-          }}
-        >
+      <header style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: 'var(--surface-0)', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+        <button onClick={() => router.back()} className="tap-sm" style={{ width: 36, height: 36, borderRadius: 10, border: 'none', background: 'var(--surface-2)', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
           <ArrowLeft size={17} />
         </button>
 
         {recipient && (
           <Link href={`/profile/${recipient.id}`} style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, textDecoration: 'none' }}>
-            <div style={{
-              width: 36, height: 36, borderRadius: '50%', overflow: 'hidden', flexShrink: 0,
-              background: 'var(--grad-brand)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: 'white', fontWeight: 700, fontSize: 13,
-            }}>
-              {recipient.avatar_url
-                ? <img src={recipient.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                : recipient.username?.[0]?.toUpperCase()
-              }
+            <div style={{ position: 'relative', flexShrink: 0 }}>
+              <div style={{ width: 36, height: 36, borderRadius: '50%', overflow: 'hidden', background: 'var(--grad-brand)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 700, fontSize: 13 }}>
+                {recipient.avatar_url
+                  ? <img src={recipient.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  : recipient.username?.[0]?.toUpperCase()}
+              </div>
+              {onlineOther && (
+                <div style={{ position: 'absolute', bottom: -1, right: -1, width: 10, height: 10, borderRadius: '50%', background: '#22c55e', border: '2px solid var(--surface-0)' }} />
+              )}
             </div>
             <div style={{ minWidth: 0 }}>
               <p style={{ fontWeight: 700, fontSize: 14, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-primary)' }}>
                 {recipient.full_name || recipient.username}
               </p>
-              <p style={{ fontSize: 12, margin: 0, color: 'var(--text-tertiary)' }}>@{recipient.username}</p>
+              <p style={{ fontSize: 12, margin: 0, color: typingOther ? 'var(--nia-violet)' : 'var(--text-tertiary)', fontWeight: typingOther ? 700 : 400 }}>
+                {typingOther ? 'Typing…' : presence ?? `@${recipient.username}`}
+              </p>
             </div>
           </Link>
         )}
+
+        <div style={{ position: 'relative', flexShrink: 0 }}>
+          <button onClick={() => setShowMenu(v => !v)} className="tap-sm" style={{ width: 36, height: 36, borderRadius: 10, border: 'none', background: 'var(--surface-2)', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <MoreVertical size={17} />
+          </button>
+          {showMenu && (
+            <>
+              <div onClick={() => setShowMenu(false)} style={{ position: 'fixed', inset: 0, zIndex: 40 }} />
+              <div style={{ position: 'absolute', top: '110%', right: 0, zIndex: 50, background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 12, padding: 6, minWidth: 190, boxShadow: '0 6px 20px rgba(0,0,0,0.15)' }}>
+                <button onClick={toggleBlock} disabled={blockBusy} className="tap-sm" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 10px', border: 'none', background: 'transparent', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', color: 'var(--text-primary)', textAlign: 'left' }}>
+                  {amIBlocking ? <Shield size={15} /> : <ShieldOff size={15} />}
+                  {amIBlocking ? 'Unblock' : 'Block'}
+                </button>
+                <button onClick={() => { setReportTarget({ messageId: null }); setShowMenu(false) }} className="tap-sm" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 10px', border: 'none', background: 'transparent', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', color: 'var(--nia-coral)', textAlign: 'left' }}>
+                  <Flag size={15} /> Report
+                </button>
+              </div>
+            </>
+          )}
+        </div>
       </header>
 
+      {/* MESSAGE REQUEST BANNER */}
+      {pendingRequest && (
+        <div style={{ padding: '10px 14px', background: 'var(--surface-1)', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+          <p style={{ fontSize: 12.5, color: 'var(--text-secondary)', margin: '0 0 8px' }}>
+            <strong>@{recipient?.username}</strong> isn't someone you follow. Accept to start chatting, or decline to hide this request.
+          </p>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={acceptRequest} className="tap-sm" style={{ flex: 1, padding: '8px', borderRadius: 10, border: 'none', background: 'var(--grad-brand)', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Accept</button>
+            <button onClick={declineRequest} className="tap-sm" style={{ flex: 1, padding: '8px', borderRadius: 10, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Decline</button>
+          </div>
+        </div>
+      )}
+
       {/* MESSAGES */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '16px 14px' }}>
+      <div ref={scrollRef} onScroll={handleScroll} style={{ flex: 1, overflowY: 'auto', padding: '16px 14px' }}>
+        {loadingOlder && (
+          <div style={{ display: 'flex', justifyContent: 'center', padding: 10 }}>
+            <Loader2 size={16} className="animate-spin" style={{ color: 'var(--text-tertiary)' }} />
+          </div>
+        )}
+        {!loading && !hasMore && messages.length > 0 && (
+          <p style={{ textAlign: 'center', fontSize: 11, color: 'var(--text-tertiary)', margin: '4px 0 12px' }}>
+            Start of your conversation
+          </p>
+        )}
         {loading && (
           <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 32 }}>
             <Loader2 size={22} className="animate-spin" style={{ color: 'var(--text-tertiary)' }} />
@@ -493,154 +599,115 @@ export default function DirectMessagePage() {
             <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 4 }}>Start the conversation</p>
           </div>
         )}
-        {messages.map(renderBubble)}
+        {messages.map(msg => (
+          <MessageBubble
+            key={msg.id}
+            msg={msg}
+            isOwn={msg.sender_id === currentUserId}
+            currentUserId={currentUserId}
+            recipient={recipient}
+            replyMsg={messages.find(m => m.id === msg.reply_to)}
+            isViewOnceRevealed={revealedMedia.has(msg.id)}
+            onRevealViewOnce={revealViewOnce}
+            playingAudio={playingAudio}
+            audioProgress={audioProgress[msg.id] ?? 0}
+            audioDuration={audioDurations[msg.id] ?? 0}
+            onToggleAudio={toggleAudio}
+            onSeekAudio={seekAudio}
+            onSwipeReply={setReplyTo}
+            onLongPress={setActionSheetMsg}
+          />
+        ))}
         <div ref={bottomRef} />
       </div>
 
-      {/* REPLY PREVIEW */}
-      {replyTo && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 10,
-          padding: '8px 14px',
-          background: 'var(--surface-2)',
-          borderTop: '1px solid var(--border)',
-          flexShrink: 0,
-        }}>
-          <div style={{
-            width: 3, borderRadius: 2, alignSelf: 'stretch',
-            background: 'var(--nia-violet)', flexShrink: 0,
-          }} />
+      {/* TOAST */}
+      {toast && (
+        <div style={{ position: 'absolute', bottom: 90, left: '50%', transform: 'translateX(-50%)', background: 'var(--surface-3)', color: 'var(--text-primary)', padding: '8px 16px', borderRadius: 20, fontSize: 12.5, fontWeight: 600, boxShadow: '0 4px 14px rgba(0,0,0,0.2)', zIndex: 55 }}>
+          {toast}
+        </div>
+      )}
+
+      {/* REPLY / EDIT PREVIEW */}
+      {(replyTo || editingId) && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', background: 'var(--surface-2)', borderTop: '1px solid var(--border)', flexShrink: 0 }}>
+          <div style={{ width: 3, borderRadius: 2, alignSelf: 'stretch', background: 'var(--nia-violet)', flexShrink: 0 }} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--nia-violet)', margin: '0 0 2px' }}>
-              Replying to {replyTo.sender_id === currentUserId ? 'yourself' : `@${recipient?.username}`}
+              {editingId ? 'Editing message' : `Replying to ${replyTo!.sender_id === currentUserId ? 'yourself' : `@${recipient?.username}`}`}
             </p>
-            <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {replyTo.content ?? replyTo.file_name ?? 'Media'}
-            </p>
+            {!editingId && (
+              <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {replyTo!.content ?? replyTo!.file_name ?? 'Media'}
+              </p>
+            )}
           </div>
-          <button
-            onClick={() => setReplyTo(null)}
-            style={{
-              width: 24, height: 24, borderRadius: 6, border: 'none',
-              background: 'var(--surface-3)', color: 'var(--text-tertiary)',
-              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-              flexShrink: 0,
-            }}
-          >
+          <button onClick={() => { setReplyTo(null); setEditingId(null); setNewMessage('') }} style={{ width: 24, height: 24, borderRadius: 6, border: 'none', background: 'var(--surface-3)', color: 'var(--text-tertiary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             <X size={13} />
           </button>
         </div>
       )}
 
+      {/* VIEW-ONCE TOGGLE PREVIEW */}
+      {pendingViewOnce && !editingId && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 14px', background: 'rgba(91,33,182,0.08)', borderTop: '1px solid var(--border)', flexShrink: 0 }}>
+          <Eye size={13} color="var(--nia-violet)" />
+          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--nia-violet)', flex: 1 }}>Next message disappears after it's opened</span>
+          <button onClick={() => setPendingViewOnce(false)} style={{ width: 22, height: 22, borderRadius: 6, border: 'none', background: 'var(--surface-3)', color: 'var(--text-tertiary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <X size={12} />
+          </button>
+        </div>
+      )}
+
       {/* INPUT BAR */}
-      <div style={{
-        padding: '10px 12px',
-        borderTop: '1px solid var(--border)',
-        flexShrink: 0,
-        paddingBottom: 'calc(10px + env(safe-area-inset-bottom, 0px))',
-      }}>
+      <div style={{ padding: '10px 12px', borderTop: '1px solid var(--border)', flexShrink: 0, paddingBottom: 'calc(10px + env(safe-area-inset-bottom, 0px))', position: 'relative' }}>
+        {showGifPicker && <ChatGifPicker onPick={sendGif} onClose={() => setShowGifPicker(false)} />}
+
         {isRecording ? (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 10,
-            padding: '10px 14px', borderRadius: 16,
-            background: 'rgba(239,68,68,0.07)',
-            border: '1px solid rgba(239,68,68,0.15)',
-          }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 16, background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.15)' }}>
             <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#ef4444', flexShrink: 0 }} className="animate-pulse" />
-            <span style={{ fontWeight: 700, fontFamily: 'monospace', color: '#ef4444', flex: 1, fontSize: 15 }}>
-              {formatDuration(recordDuration)}
-            </span>
-            <button
-              onClick={cancelRecording}
-              style={{
-                padding: '6px 14px', borderRadius: 10, border: 'none',
-                background: 'var(--surface-3)', color: 'var(--text-secondary)',
-                fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
-              }}
-            >
-              Cancel
-            </button>
-            <button
-              onClick={stopRecording}
-              style={{
-                padding: '6px 14px', borderRadius: 10, border: 'none',
-                background: '#ef4444', color: 'white',
-                fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
-              }}
-            >
-              Send
-            </button>
+            <span style={{ fontWeight: 700, fontFamily: 'monospace', color: '#ef4444', flex: 1, fontSize: 15 }}>{formatDuration(recordDuration)}</span>
+            <button onClick={cancelRecording} style={{ padding: '6px 14px', borderRadius: 10, border: 'none', background: 'var(--surface-3)', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
+            <button onClick={stopRecording} style={{ padding: '6px 14px', borderRadius: 10, border: 'none', background: '#ef4444', color: 'white', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Send</button>
           </div>
         ) : (
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
-            {/* Attachments */}
-            <div style={{ display: 'flex', gap: 4, paddingBottom: 2 }}>
-              {[
-                { ref: fileRef, Icon: ImagePlus, accept: 'image/*', type: 'image' },
-                { ref: videoRef, Icon: Video, accept: 'video/*', type: 'video' },
-              ].map(({ ref, Icon, accept, type }) => (
-                <button
-                  key={type}
-                  onClick={() => (ref as React.RefObject<HTMLInputElement>).current?.click()}
-                  className="tap-sm"
-                  style={{
-                    width: 38, height: 38, borderRadius: 10, border: 'none',
-                    background: 'var(--surface-2)', color: 'var(--text-secondary)',
-                    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  }}
-                >
-                  <Icon size={16} />
-                </button>
-              ))}
-              <button
-                onClick={startRecording}
-                className="tap-sm"
-                style={{
-                  width: 38, height: 38, borderRadius: 10, border: 'none',
-                  background: 'var(--surface-2)', color: 'var(--text-secondary)',
-                  cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}
-              >
+            <div style={{ display: 'flex', gap: 4, paddingBottom: 2, flexWrap: 'wrap' }}>
+              <button onClick={() => fileRef.current?.click()} className="tap-sm" style={{ width: 38, height: 38, borderRadius: 10, border: 'none', background: 'var(--surface-2)', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <ImagePlus size={16} />
+              </button>
+              <button onClick={() => videoRef.current?.click()} className="tap-sm" style={{ width: 38, height: 38, borderRadius: 10, border: 'none', background: 'var(--surface-2)', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Video size={16} />
+              </button>
+              <button onClick={startRecording} className="tap-sm" style={{ width: 38, height: 38, borderRadius: 10, border: 'none', background: 'var(--surface-2)', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <Mic size={16} />
+              </button>
+              <button onClick={() => setShowGifPicker(v => !v)} className="tap-sm" style={{ width: 38, height: 38, borderRadius: 10, border: 'none', background: showGifPicker ? 'var(--surface-3)' : 'var(--surface-2)', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Sticker size={16} />
+              </button>
+              <button onClick={() => setPendingViewOnce(v => !v)} className="tap-sm" style={{ width: 38, height: 38, borderRadius: 10, border: 'none', background: pendingViewOnce ? 'var(--nia-violet)' : 'var(--surface-2)', color: pendingViewOnce ? '#fff' : 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {pendingViewOnce ? <Eye size={16} /> : <EyeOff size={16} />}
               </button>
             </div>
 
-            {/* Text input */}
-            <div style={{
-              flex: 1, display: 'flex', alignItems: 'center', gap: 8,
-              background: 'var(--surface-2)', borderRadius: 20, padding: '0 14px',
-              minHeight: 40,
-            }}>
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, background: 'var(--surface-2)', borderRadius: 20, padding: '0 14px', minHeight: 40 }}>
               <input
                 ref={inputRef}
                 value={newMessage}
-                onChange={e => setNewMessage(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(newMessage) } }}
-                placeholder="Message…"
-                style={{
-                  flex: 1, background: 'none', border: 'none', outline: 'none',
-                  fontSize: 14, color: 'var(--text-primary)', fontFamily: 'inherit',
-                }}
+                onChange={e => handleTypingInput(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendText() } }}
+                placeholder={editingId ? 'Edit message…' : 'Message…'}
+                style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontSize: 14, color: 'var(--text-primary)', fontFamily: 'inherit' }}
               />
             </div>
 
-            {/* Send */}
             <button
-              onClick={() => sendMessage(newMessage)}
-              disabled={!newMessage.trim() || sending || uploading}
+              onClick={sendText}
+              disabled={!newMessage.trim() || sending}
               className="tap-sm"
-              style={{
-                width: 40, height: 40, borderRadius: 12, border: 'none',
-                background: 'var(--grad-brand)', color: 'white', cursor: 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                flexShrink: 0, opacity: !newMessage.trim() || sending || uploading ? 0.4 : 1,
-                transition: 'opacity 0.15s',
-              }}
+              style={{ width: 40, height: 40, borderRadius: 12, border: 'none', background: 'var(--grad-brand)', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, opacity: !newMessage.trim() || sending ? 0.4 : 1, transition: 'opacity 0.15s' }}
             >
-              {sending || uploading
-                ? <Loader2 size={15} className="animate-spin" />
-                : <Send size={15} />
-              }
+              {sending ? <Loader2 size={15} className="animate-spin" /> : editingId ? <Check size={15} /> : <Send size={15} />}
             </button>
           </div>
         )}
@@ -648,6 +715,25 @@ export default function DirectMessagePage() {
         <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={e => handleFileSelect(e, 'image')} />
         <input ref={videoRef} type="file" accept="video/*" style={{ display: 'none' }} onChange={e => handleFileSelect(e, 'video')} />
       </div>
+
+      {actionSheetMsg && (
+        <MessageActionSheet
+          isOwn={actionSheetMsg.sender_id === currentUserId}
+          hasText={!!actionSheetMsg.content}
+          myReaction={currentUserId ? actionSheetMsg.reactions[currentUserId] : null}
+          onClose={() => setActionSheetMsg(null)}
+          onReact={emoji => reactToMessage(actionSheetMsg, emoji)}
+          onReply={() => setReplyTo(actionSheetMsg)}
+          onCopy={actionSheetMsg.content ? () => navigator.clipboard.writeText(actionSheetMsg.content!) : undefined}
+          onEdit={actionSheetMsg.sender_id === currentUserId ? () => startEdit(actionSheetMsg) : undefined}
+          onUnsend={actionSheetMsg.sender_id === currentUserId ? () => unsendMessage(actionSheetMsg) : undefined}
+          onReport={actionSheetMsg.sender_id !== currentUserId ? () => setReportTarget({ messageId: actionSheetMsg.id }) : undefined}
+        />
+      )}
+
+      {reportTarget && (
+        <ReportSheet onClose={() => setReportTarget(null)} onSubmit={submitReport} />
+      )}
     </div>
   )
 }
