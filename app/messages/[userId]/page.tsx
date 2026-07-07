@@ -25,6 +25,13 @@ type Profile = {
   last_seen_at?: string | null
 }
 
+type PendingMedia = {
+  file: File
+  url: string
+  detectedType: string
+  displayType: 'image' | 'video'
+}
+
 function formatDuration(s: number) {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 }
@@ -66,6 +73,8 @@ export default function DirectMessagePage() {
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [pendingViewOnce, setPendingViewOnce] = useState(false)
+  const [pendingMedia, setPendingMedia] = useState<PendingMedia | null>(null)
+  const [mediaCaption, setMediaCaption] = useState('')
 
   const [isRecording, setIsRecording] = useState(false)
   const [recordDuration, setRecordDuration] = useState(0)
@@ -279,44 +288,104 @@ export default function DirectMessagePage() {
     return { url: data.publicUrl, name: file.name }
   }
 
-  async function insertMessage(payload: Record<string, any>, tempId: string) {
+  async function insertMessage(payload: Record<string, any>, tempId: string): Promise<string | null> {
     const { data, error } = await supabase.from('messages').insert(payload).select().single()
     if (!error && data) {
       setMessages(prev => prev.map(m => (m.id === tempId ? normalizeMsg(data) : m)))
+      return data.id as string
     } else {
       setMessages(prev => prev.filter(m => m.id !== tempId))
       showToast('Message failed to send')
+      return null
     }
   }
 
-  async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>, type: string) {
+  // Reads a clip's length directly from its (local or remote) URL, so a
+  // voice note's duration is known before anyone taps play. Previously this
+  // only happened inside toggleAudio, once playback started.
+  function getAudioDuration(url: string): Promise<number> {
+    return new Promise(resolve => {
+      const audio = new Audio()
+      const cleanup = () => {
+        audio.removeEventListener('loadedmetadata', onLoaded)
+        audio.removeEventListener('error', onErr)
+      }
+      const onLoaded = () => { cleanup(); resolve(audio.duration || 0) }
+      const onErr = () => { cleanup(); resolve(0) }
+      audio.addEventListener('loadedmetadata', onLoaded)
+      audio.addEventListener('error', onErr)
+      audio.src = url
+    })
+  }
+
+  // Backfills durations for audio messages that arrive without one already
+  // known — historical voice notes loaded from Supabase, and ones the other
+  // person just sent — so the waveform shows a real length immediately
+  // instead of "Voice message" until someone presses play.
+  useEffect(() => {
+    const missing = messages.filter(
+      m => m.media_type === 'audio' && m.media_url && !m.id.startsWith('temp-') && audioDurations[m.id] === undefined
+    )
+    if (missing.length === 0) return
+    let cancelled = false
+    ;(async () => {
+      for (const m of missing) {
+        const d = await getAudioDuration(m.media_url!)
+        if (cancelled) return
+        setAudioDurations(prev => (prev[m.id] === undefined ? { ...prev, [m.id]: d } : prev))
+      }
+    })()
+    return () => { cancelled = true }
+  }, [messages]) // eslint-disable-line
+
+  async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>, type: 'image' | 'video') {
     const file = e.target.files?.[0]
     if (!file || !currentUserId || !recipientId) return
     const detectedType = file.type === 'image/gif' ? 'gif' : type
-    const tempId = `temp-${Date.now()}`
     const previewUrl = URL.createObjectURL(file)
+    setPendingMedia({ file, url: previewUrl, detectedType, displayType: type })
+    setMediaCaption('')
+    e.target.value = ''
+  }
+
+  function cancelPendingMedia() {
+    if (pendingMedia) URL.revokeObjectURL(pendingMedia.url)
+    setPendingMedia(null)
+    setMediaCaption('')
+  }
+
+  async function confirmSendMedia() {
+    if (!pendingMedia || !currentUserId || !recipientId) return
+    const { file, url: previewUrl, detectedType } = pendingMedia
+    const tempId = `temp-${Date.now()}`
     const viewOnce = pendingViewOnce
+    const replyToId = replyTo?.id ?? null
+    const caption = mediaCaption.trim() || null
 
     setMessages(prev => [...prev, {
       id: tempId, sender_id: currentUserId, recipient_id: recipientId,
-      content: null, media_url: previewUrl, media_type: detectedType, file_name: file.name,
-      view_once: viewOnce, viewed_at: null, reply_to: replyTo?.id ?? null, is_read: false,
+      content: caption, media_url: previewUrl, media_type: detectedType, file_name: file.name,
+      view_once: viewOnce, viewed_at: null, reply_to: replyToId, is_read: false,
       created_at: new Date().toISOString(), reactions: {}, edited_at: null, deleted_at: null,
     }])
     setReplyTo(null); setPendingViewOnce(false)
-    e.target.value = ''
+    setPendingMedia(null); setMediaCaption('')
 
     const result = await uploadFile(file)
     if (!result) { setMessages(prev => prev.filter(m => m.id !== tempId)); return }
     await insertMessage({
-      sender_id: currentUserId, recipient_id: recipientId, content: null,
+      sender_id: currentUserId, recipient_id: recipientId, content: caption,
       media_url: result.url, media_type: detectedType, file_name: result.name,
-      view_once: viewOnce, reply_to: null, is_read: false,
+      view_once: viewOnce, reply_to: replyToId, is_read: false,
     }, tempId)
   }
 
   async function startRecording() {
     try {
+      // Captured once, at the moment recording starts, so the same value is
+      // used for the optimistic bubble and the real insert below — the insert
+      // previously hardcoded reply_to: null, dropping any reply context.
+      const replyToId = replyTo?.id ?? null
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       const mr = new MediaRecorder(stream)
       mrRef.current = mr; chunksRef.current = []
@@ -328,20 +397,34 @@ export default function DirectMessagePage() {
         const file = new File([blob], `voice_${Date.now()}.webm`, { type: 'audio/webm' })
         const tempId = `temp-${Date.now()}`
         const previewUrl = URL.createObjectURL(blob)
+        // Read the length off the local blob right away instead of waiting
+        // for someone to tap play.
+        const duration = await getAudioDuration(previewUrl)
+        setAudioDurations(prev => ({ ...prev, [tempId]: duration }))
         setMessages(prev => [...prev, {
           id: tempId, sender_id: currentUserId, recipient_id: recipientId,
           content: null, media_url: previewUrl, media_type: 'audio', file_name: 'Voice message',
-          view_once: false, viewed_at: null, reply_to: replyTo?.id ?? null, is_read: false,
+          view_once: false, viewed_at: null, reply_to: replyToId, is_read: false,
           created_at: new Date().toISOString(), reactions: {}, edited_at: null, deleted_at: null,
         }])
         setReplyTo(null)
         const result = await uploadFile(file)
-        if (!result) { setMessages(prev => prev.filter(m => m.id !== tempId)); return }
-        await insertMessage({
+        if (!result) {
+          setMessages(prev => prev.filter(m => m.id !== tempId))
+          setAudioDurations(prev => { const { [tempId]: _drop, ...rest } = prev; return rest })
+          return
+        }
+        const realId = await insertMessage({
           sender_id: currentUserId, recipient_id: recipientId, content: null,
           media_url: result.url, media_type: 'audio', file_name: 'Voice message',
-          view_once: false, reply_to: null, is_read: false,
+          view_once: false, reply_to: replyToId, is_read: false,
         }, tempId)
+        if (realId) {
+          setAudioDurations(prev => {
+            const { [tempId]: d, ...rest } = prev
+            return d !== undefined ? { ...rest, [realId]: d } : prev
+          })
+        }
       }
       mr.start(); setIsRecording(true)
       timerRef.current = setInterval(() => setRecordDuration(d => d + 1), 1000)
@@ -389,17 +472,18 @@ export default function DirectMessagePage() {
     if (!currentUserId || !recipientId) return
     setShowGifPicker(false)
     const tempId = `temp-${Date.now()}`
+    const replyToId = replyTo?.id ?? null
     setMessages(prev => [...prev, {
       id: tempId, sender_id: currentUserId, recipient_id: recipientId,
       content: null, media_url: url, media_type: 'gif', file_name: null,
-      view_once: false, viewed_at: null, reply_to: replyTo?.id ?? null, is_read: false,
+      view_once: false, viewed_at: null, reply_to: replyToId, is_read: false,
       created_at: new Date().toISOString(), reactions: {}, edited_at: null, deleted_at: null,
     }])
     setReplyTo(null)
     await insertMessage({
       sender_id: currentUserId, recipient_id: recipientId, content: null,
       media_url: url, media_type: 'gif', file_name: null,
-      view_once: false, reply_to: null, is_read: false,
+      view_once: false, reply_to: replyToId, is_read: false,
     }, tempId)
   }
 
@@ -600,7 +684,21 @@ export default function DirectMessagePage() {
             <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 4 }}>Start the conversation</p>
           </div>
         )}
-        {messages.map(msg => (
+        {messages.map((msg, i) => {
+          // Two messages "cluster" when they're from the same sender and
+          // less than 2 minutes apart. Deleted (unsent) messages always
+          // break a cluster since they render as their own centered pill.
+          const GROUP_WINDOW_MS = 2 * 60 * 1000
+          const prev = messages[i - 1]
+          const next = messages[i + 1]
+          const groupedWithPrev = !!prev && !msg.deleted_at && !prev.deleted_at &&
+            prev.sender_id === msg.sender_id &&
+            new Date(msg.created_at).getTime() - new Date(prev.created_at).getTime() < GROUP_WINDOW_MS
+          const groupedWithNext = !!next && !msg.deleted_at && !next.deleted_at &&
+            next.sender_id === msg.sender_id &&
+            new Date(next.created_at).getTime() - new Date(msg.created_at).getTime() < GROUP_WINDOW_MS
+
+          return (
           <MessageBubble
             key={msg.id}
             msg={msg}
@@ -610,6 +708,8 @@ export default function DirectMessagePage() {
             replyMsg={messages.find(m => m.id === msg.reply_to)}
             isViewOnceRevealed={revealedMedia.has(msg.id)}
             onRevealViewOnce={revealViewOnce}
+            isGroupedWithPrev={groupedWithPrev}
+            isGroupedWithNext={groupedWithNext}
             playingAudio={playingAudio}
             audioProgress={audioProgress[msg.id] ?? 0}
             audioDuration={audioDurations[msg.id] ?? 0}
@@ -617,8 +717,24 @@ export default function DirectMessagePage() {
             onSeekAudio={seekAudio}
             onSwipeReply={setReplyTo}
             onLongPress={setActionSheetMsg}
+            onDoubleTapReact={() => reactToMessage(msg, '❤️')}
           />
-        ))}
+          )
+        })}
+        {typingOther && (
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, marginBottom: 6 }}>
+            <div style={{ width: 26, height: 26, borderRadius: '50%', overflow: 'hidden', background: 'var(--grad-brand)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 700, fontSize: 10 }}>
+              {recipient?.avatar_url
+                ? <img src={recipient.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                : recipient?.username?.[0]?.toUpperCase()}
+            </div>
+            <div className="animate-pop" style={{ display: 'flex', gap: 4, alignItems: 'center', background: 'var(--surface-2)', borderRadius: '18px 18px 18px 5px', padding: '11px 14px' }}>
+              <span className="typing-dot" />
+              <span className="typing-dot" style={{ animationDelay: '0.2s' }} />
+              <span className="typing-dot" style={{ animationDelay: '0.4s' }} />
+            </div>
+          </div>
+        )}
         <div ref={bottomRef} />
       </div>
 
@@ -760,6 +876,52 @@ export default function DirectMessagePage() {
 
       {reportTarget && (
         <ReportSheet onClose={() => setReportTarget(null)} onSubmit={submitReport} />
+      )}
+
+      {pendingMedia && (
+        <div style={{ position: 'absolute', inset: 0, background: 'rgba(10,8,14,0.96)', zIndex: 70, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', flexShrink: 0 }}>
+            <button onClick={cancelPendingMedia} className="tap-sm" style={{ width: 36, height: 36, borderRadius: 10, border: 'none', background: 'rgba(255,255,255,0.12)', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <X size={17} />
+            </button>
+            <span style={{ color: '#fff', fontSize: 13, fontWeight: 700 }}>
+              {pendingMedia.displayType === 'video' ? 'Send video' : 'Send photo'}
+            </span>
+            <button
+              onClick={() => setPendingViewOnce(v => !v)}
+              className="tap-sm"
+              style={{ width: 36, height: 36, borderRadius: 10, border: 'none', background: pendingViewOnce ? 'var(--nia-violet)' : 'rgba(255,255,255,0.12)', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            >
+              {pendingViewOnce ? <Eye size={16} /> : <EyeOff size={16} />}
+            </button>
+          </div>
+
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', padding: '0 14px', minHeight: 0 }}>
+            {pendingMedia.displayType === 'video'
+              ? <video src={pendingMedia.url} controls style={{ maxWidth: '100%', maxHeight: '100%', borderRadius: 12 }} />
+              : <img src={pendingMedia.url} alt="" style={{ maxWidth: '100%', maxHeight: '100%', borderRadius: 12, objectFit: 'contain' }} />}
+          </div>
+
+          <div style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, paddingBottom: 'calc(10px + env(safe-area-inset-bottom, 0px))' }}>
+            <div style={{ flex: 1, background: 'rgba(255,255,255,0.1)', borderRadius: 20, padding: '0 14px', display: 'flex', alignItems: 'center', minHeight: 40 }}>
+              <input
+                value={mediaCaption}
+                onChange={e => setMediaCaption(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); confirmSendMedia() } }}
+                placeholder="Add a caption…"
+                autoFocus
+                style={{ flex: 1, background: 'none', border: 'none', outline: 'none', color: '#fff', fontSize: 14.5, fontFamily: 'inherit' }}
+              />
+            </div>
+            <button
+              onClick={confirmSendMedia}
+              className="tap-sm"
+              style={{ width: 40, height: 40, borderRadius: '50%', border: 'none', background: 'var(--grad-brand)', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+            >
+              <Send size={16} />
+            </button>
+          </div>
+        </div>
       )}
     </div>
   )

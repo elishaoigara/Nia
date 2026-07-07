@@ -58,8 +58,9 @@ const LONG_PRESS_MS = 420
 export default function MessageBubble({
   msg, isOwn, currentUserId, recipient, replyMsg,
   isViewOnceRevealed, onRevealViewOnce,
+  isGroupedWithPrev = false, isGroupedWithNext = false,
   playingAudio, audioProgress, audioDuration, onToggleAudio, onSeekAudio,
-  onSwipeReply, onLongPress,
+  onSwipeReply, onLongPress, onDoubleTapReact,
 }: {
   msg: ChatMessage
   isOwn: boolean
@@ -68,6 +69,11 @@ export default function MessageBubble({
   replyMsg?: ChatMessage
   isViewOnceRevealed: boolean
   onRevealViewOnce: (id: string) => void
+  // True when the previous/next message in the list is from the same sender
+  // and close enough in time to be part of the same visual cluster. Used to
+  // collapse repeated avatars and per-bubble timestamps into one per cluster.
+  isGroupedWithPrev?: boolean
+  isGroupedWithNext?: boolean
   playingAudio: string | null
   audioProgress: number
   audioDuration: number
@@ -75,14 +81,17 @@ export default function MessageBubble({
   onSeekAudio: (id: string, fraction: number) => void
   onSwipeReply: (msg: ChatMessage) => void
   onLongPress: (msg: ChatMessage) => void
+  onDoubleTapReact: (msg: ChatMessage) => void
 }) {
   const isTemp = msg.id.startsWith('temp-')
   const isUploading = isTemp && !!msg.media_url?.startsWith('blob:')
   const [dragX, setDragX] = useState(0)
   const [dragging, setDragging] = useState(false)
+  const [heartBurst, setHeartBurst] = useState(false)
   const touchStart = useRef<{ x: number; y: number } | null>(null)
   const longPressTimer = useRef<NodeJS.Timeout | null>(null)
   const longPressFired = useRef(false)
+  const lastTapAt = useRef(0)
 
   function clearLongPress() {
     if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null }
@@ -116,9 +125,21 @@ export default function MessageBubble({
 
   function handleTouchEnd() {
     clearLongPress()
-    if (Math.abs(dragX) >= SWIPE_THRESHOLD && !longPressFired.current) {
+    const wasSwipe = Math.abs(dragX) >= SWIPE_THRESHOLD && !longPressFired.current
+    if (wasSwipe) {
       onSwipeReply(msg)
       if (navigator.vibrate) navigator.vibrate(6)
+    } else if (!longPressFired.current && Math.abs(dragX) < 10) {
+      const now = Date.now()
+      if (now - lastTapAt.current < 300) {
+        lastTapAt.current = 0
+        onDoubleTapReact(msg)
+        setHeartBurst(true)
+        if (navigator.vibrate) navigator.vibrate(8)
+        setTimeout(() => setHeartBurst(false), 700)
+      } else {
+        lastTapAt.current = now
+      }
     }
     setDragging(false)
     setDragX(0)
@@ -146,7 +167,7 @@ export default function MessageBubble({
 
   return (
     <div
-      style={{ display: 'flex', justifyContent: isOwn ? 'flex-end' : 'flex-start', marginBottom: hasReactions ? 14 : 6, alignItems: 'flex-end', gap: 6, position: 'relative' }}
+      style={{ display: 'flex', justifyContent: isOwn ? 'flex-end' : 'flex-start', marginBottom: hasReactions ? 14 : (isGroupedWithNext ? 2 : 6), alignItems: 'flex-end', gap: 6, position: 'relative' }}
       className="group"
     >
       {/* Swipe-reveal reply icon */}
@@ -161,14 +182,30 @@ export default function MessageBubble({
         </div>
       )}
 
+      {/* Double-tap-to-react heart burst */}
+      {heartBurst && (
+        <span
+          className="float-heart animate-like-pop"
+          style={{ [isOwn ? 'right' : 'left']: 24, bottom: 36, fontSize: 28 } as React.CSSProperties}
+        >
+          ❤️
+        </span>
+      )}
+
       {!isOwn && (
-        <Link href={`/profile/${recipient?.id}`} style={{ flexShrink: 0, marginBottom: 2 }}>
-          <div style={{ width: 26, height: 26, borderRadius: '50%', overflow: 'hidden', background: 'var(--grad-brand)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 700, fontSize: 10 }}>
-            {recipient?.avatar_url
-              ? <img src={recipient.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-              : recipient?.username?.[0]?.toUpperCase()}
-          </div>
-        </Link>
+        isGroupedWithNext ? (
+          // Mid-cluster bubble: reserve the avatar's width so the bubble
+          // column still lines up, without redrawing the avatar every time.
+          <div style={{ width: 26, flexShrink: 0 }} />
+        ) : (
+          <Link href={`/profile/${recipient?.id}`} style={{ flexShrink: 0, marginBottom: 2 }}>
+            <div style={{ width: 26, height: 26, borderRadius: '50%', overflow: 'hidden', background: 'var(--grad-brand)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 700, fontSize: 10 }}>
+              {recipient?.avatar_url
+                ? <img src={recipient.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                : recipient?.username?.[0]?.toUpperCase()}
+            </div>
+          </Link>
+        )
       )}
 
       <div
@@ -210,8 +247,8 @@ export default function MessageBubble({
               style={{
                 borderRadius: 18, overflow: 'hidden', position: 'relative',
                 ...(isOwn
-                  ? { background: 'var(--grad-brand)', color: '#fff', borderBottomRightRadius: 5 }
-                  : { background: 'var(--surface-2)', color: 'var(--text-primary)', borderBottomLeftRadius: 5 }),
+                  ? { background: 'var(--grad-brand)', color: '#fff', borderBottomRightRadius: isGroupedWithNext ? 18 : 5 }
+                  : { background: 'var(--surface-2)', color: 'var(--text-primary)', borderBottomLeftRadius: isGroupedWithNext ? 18 : 5 }),
               }}
             >
               {isUploading && (
@@ -278,27 +315,33 @@ export default function MessageBubble({
                 <p style={{ padding: '8px 12px', fontSize: 14.5, lineHeight: 1.45, margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{msg.content}</p>
               )}
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '0 10px 6px', justifyContent: isOwn ? 'flex-end' : 'flex-start' }}>
-                {msg.view_once && <Eye size={10} style={{ opacity: 0.5 }} />}
-                {msg.edited_at && <span style={{ fontSize: 10, opacity: 0.55 }}>edited</span>}
-                <span style={{ fontSize: 10, opacity: 0.55 }}>{timeAgo(msg.created_at)}</span>
-                {isOwn && (
-                  isTemp
-                    ? <Check size={11} style={{ opacity: 0.4 }} />
-                    : msg.is_read
-                      ? <CheckCheck size={11} color={isOwn ? 'rgba(255,255,255,0.8)' : 'var(--nia-violet)'} />
-                      : <Check size={11} style={{ opacity: 0.55 }} />
-                )}
-              </div>
+              {(!isGroupedWithNext || msg.edited_at) && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '0 10px 6px', justifyContent: isOwn ? 'flex-end' : 'flex-start' }}>
+                  {msg.view_once && <Eye size={10} style={{ opacity: 0.5 }} />}
+                  {msg.edited_at && <span style={{ fontSize: 10, opacity: 0.55 }}>edited</span>}
+                  {!isGroupedWithNext && <span style={{ fontSize: 10, opacity: 0.55 }}>{timeAgo(msg.created_at)}</span>}
+                  {isOwn && !isGroupedWithNext && (
+                    isTemp
+                      ? <Check size={11} style={{ opacity: 0.4 }} />
+                      : msg.is_read
+                        ? <CheckCheck size={11} color={isOwn ? 'rgba(255,255,255,0.8)' : 'var(--nia-violet)'} />
+                        : <Check size={11} style={{ opacity: 0.55 }} />
+                  )}
+                </div>
+              )}
             </div>
 
             {hasReactions && (
-              <div style={{
-                position: 'absolute', bottom: -12, [isOwn ? 'right' : 'left']: 6,
-                display: 'flex', gap: 2, background: 'var(--surface-1)',
-                border: '1px solid var(--border)', borderRadius: 10, padding: '2px 5px',
-                fontSize: 11, boxShadow: '0 1px 3px rgba(0,0,0,0.12)',
-              } as React.CSSProperties}>
+              <div
+                key={Object.keys(reactionCounts).sort().join('-')}
+                className="animate-pop"
+                style={{
+                  position: 'absolute', bottom: -12, [isOwn ? 'right' : 'left']: 6,
+                  display: 'flex', gap: 2, background: 'var(--surface-1)',
+                  border: '1px solid var(--border)', borderRadius: 10, padding: '3px 6px',
+                  fontSize: 13, boxShadow: '0 1px 3px rgba(0,0,0,0.12)',
+                } as React.CSSProperties}
+              >
                 {Object.entries(reactionCounts).map(([emoji, count]) => (
                   <span key={emoji}>{emoji}{count > 1 ? count : ''}</span>
                 ))}
