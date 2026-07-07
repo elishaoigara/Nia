@@ -224,7 +224,6 @@ export default function MessageBubble({
                   <span style={{ fontSize: 12, fontWeight: 600, color: '#fff' }}>Sending…</span>
                 </div>
               )}
-
               {/* Image / GIF */}
               {msg.media_url && (msg.media_type === 'image' || msg.media_type === 'gif') && (
                 msg.view_once && !isViewOnceRevealed ? (
@@ -276,10 +275,10 @@ export default function MessageBubble({
               )}
 
               {msg.content && (
-                <p style={{ padding: '9px 14px', fontSize: 14, lineHeight: 1.55, margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{msg.content}</p>
+                <p style={{ padding: '8px 12px', fontSize: 14.5, lineHeight: 1.45, margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{msg.content}</p>
               )}
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '2px 12px 8px', justifyContent: isOwn ? 'flex-end' : 'flex-start' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '0 10px 6px', justifyContent: isOwn ? 'flex-end' : 'flex-start' }}>
                 {msg.view_once && <Eye size={10} style={{ opacity: 0.5 }} />}
                 {msg.edited_at && <span style={{ fontSize: 10, opacity: 0.55 }}>edited</span>}
                 <span style={{ fontSize: 10, opacity: 0.55 }}>{timeAgo(msg.created_at)}</span>
