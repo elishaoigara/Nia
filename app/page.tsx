@@ -5,12 +5,16 @@ import PostCard           from '@/components/PostCard'
 import LoadMore           from '@/components/LoadMore'
 import FeedTabs           from '@/components/FeedTabs'
 import StoriesBar         from '@/components/StoriesBar'
+import HomeRail           from '@/components/HomeRail'
 import { Suspense }       from 'react'
 import { scorePosts }     from '@/lib/feed-scorer'
+import { scoreFlicks }    from '@/lib/flicks-scorer'
 import type { UserContext, ScorerPost } from '@/lib/feed-scorer'
 
 const PAGE_SIZE      = 15
 const POOL_MULTIPLIER = 6
+const TRENDING_FLICKS_LIMIT = 10
+const TRENDING_WINDOW_HOURS = 72
 
 const BASE_SELECT = `
   *,
@@ -62,6 +66,32 @@ export default async function FeedPage({
   const candidatePool = PAGE_SIZE * POOL_MULTIPLIER * currentPage
   let candidates: ScorerPost[] = []
 
+  // "Your Circles" + "Trending Flicks" for the combined home rail. Both are
+  // independent of the feed tab, so they run once alongside (not blocking)
+  // the tab-specific candidates query below.
+  const trendingSince = new Date(Date.now() - TRENDING_WINDOW_HOURS * 3600_000).toISOString()
+  const [{ data: myCircleRows }, { data: trendingRows }] = await Promise.all([
+    supabase.from('circle_members')
+      .select('circles:circle_id (id, name, slug, category)')
+      .eq('user_id', user.id)
+      .limit(12),
+    supabase.from('posts')
+      .select(`
+        id, user_id, content, media_url, thumbnail_url, created_at, language, video_duration, category,
+        profiles:user_id (id, username, avatar_url, country),
+        likes (user_id),
+        comments (id),
+        reposts (user_id)
+      `)
+      .eq('media_type', 'video')
+      .not('media_url', 'is', null)
+      .gte('created_at', trendingSince)
+      .order('created_at', { ascending: false })
+      .limit(60),
+  ])
+  const myCircles = ((myCircleRows as any[]) ?? []).map(r => r.circles).filter(Boolean)
+  const trendingFlicks = scoreFlicks((trendingRows as any[]) ?? [], ctx).slice(0, TRENDING_FLICKS_LIMIT)
+
   if (currentTab === 'following') {
     if (ctx.followingIds.size > 0) {
       const { data } = await supabase
@@ -111,6 +141,9 @@ export default async function FeedPage({
 
       {/* Stories */}
       <StoriesBar currentUserId={user.id} />
+
+      {/* Your Circles / Trending Flicks — one combined rail, not two */}
+      <HomeRail circles={myCircles as any} flicks={trendingFlicks as any} />
 
       {/* Feed tabs — sticky under top nav */}
       <Suspense fallback={null}>
