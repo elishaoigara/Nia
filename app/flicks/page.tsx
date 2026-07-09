@@ -18,7 +18,12 @@ const FLICK_SELECT = `
   post_views (id)
 `
 
-export default async function ReelsPage() {
+export default async function ReelsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ v?: string }>
+}) {
+  const { v: initialVideoId } = await searchParams
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
@@ -86,5 +91,18 @@ export default async function ReelsPage() {
   const shorts = scoreFlicks(shortsRaw as any, ctx).slice(0, SHORTS_LIMIT) as unknown as FlickPost[]
   const longs = (longRows ?? []) as unknown as FlickPost[]
 
-  return <FlicksClient shorts={shorts} longs={longs} currentUserId={user.id} />
+  // Resolved independently of the shorts/longs pools above — a video linked in
+  // from the home rail's Trending strip may not be among the top-40 in either
+  // list, so we fetch it directly rather than searching for it client-side.
+  let initialVideo: FlickPost | null = null
+  if (initialVideoId) {
+    const { data: row } = await supabase
+      .from('posts')
+      .select(FLICK_SELECT)
+      .eq('id', initialVideoId)
+      .single()
+    if (row) initialVideo = row as unknown as FlickPost
+  }
+
+  return <FlicksClient shorts={shorts} longs={longs} currentUserId={user.id} initialVideo={initialVideo} />
 }

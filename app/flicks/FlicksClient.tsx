@@ -33,6 +33,9 @@ interface FlicksClientProps {
   shorts: FlickPost[]
   longs: FlickPost[]
   currentUserId: string
+  /** Set when arriving via a deep link (e.g. the home rail's Trending strip) —
+   * opens straight into the detail player instead of the default short-form feed. */
+  initialVideo?: FlickPost | null
 }
 
 // How many videos on either side of the active one get a real <video> element.
@@ -406,7 +409,7 @@ function CommentSheet({
 }
 
 // ── Main Flicks Component ─────────────────────────────────────────────────────
-export default function NiaFlicksClient({ shorts, longs, currentUserId }: FlicksClientProps) {
+export default function NiaFlicksClient({ shorts, longs, currentUserId, initialVideo }: FlicksClientProps) {
   const [tab, setTab] = useState<'short' | 'long'>('short')
   const [activeIdx, setActiveIdx] = useState(0)
   // Start muted: iOS/most mobile browsers silently reject unmuted autoplay, which
@@ -425,6 +428,17 @@ export default function NiaFlicksClient({ shorts, longs, currentUserId }: Flicks
   const [searchOpen, setSearchOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
   const slowConnection = useSlowConnection()
+
+  // Deep link from outside Flicks (currently: the home page's Trending rail).
+  // Runs once — if the person closes the detail view, we don't want it
+  // reopening from stale prop state on some unrelated re-render.
+  const openedInitialRef = useRef(false)
+  useEffect(() => {
+    if (initialVideo && !openedInitialRef.current) {
+      openedInitialRef.current = true
+      setOpenDetail(initialVideo)
+    }
+  }, [initialVideo])
 
   useEffect(() => {
     const el = containerRef.current

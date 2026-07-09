@@ -117,7 +117,7 @@ export default function HomeRail({ circles, flicks }: { circles: HomeCircle[]; f
             return (
               <Link
                 key={f.id}
-                href="/flicks"
+                href={`/flicks?v=${f.id}`}
                 className="tap-sm"
                 style={{
                   position: 'relative', flexShrink: 0, width: 108, height: 152, borderRadius: 14,
