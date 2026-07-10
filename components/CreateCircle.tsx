@@ -1,814 +1,257 @@
-// components/CreatePost.tsx
-'use client';
+'use client'
 
-import React, { useState, useRef, useEffect } from 'react';
-import {
-  ImagePlus,
-  Video,
-  X,
-  Loader2,
-  Sparkles,
-  BarChart2,
-  Plus,
-  Trash2,
-  Mic,
-  MicOff,
-} from 'lucide-react';
-import { useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
+import { Plus, X, Lock, Globe, Loader2 } from 'lucide-react'
 
-interface MediaItem {
-  file: File;
-  preview: string;
-  type: 'image' | 'video';
+const CATEGORIES = [
+  { key: 'tech',    label: 'Tech',    emoji: '💻', color: 'var(--nia-sky)' },
+  { key: 'art',     label: 'Art',     emoji: '🎨', color: 'var(--nia-pink)' },
+  { key: 'sports',  label: 'Sports',  emoji: '⚽', color: 'var(--nia-mint)' },
+  { key: 'music',   label: 'Music',   emoji: '🎵', color: 'var(--nia-amber)' },
+  { key: 'science', label: 'Science', emoji: '🔬', color: 'var(--nia-violet)' },
+]
+
+const MAX_NAME = 40
+const MAX_DESC = 160
+
+function slugify(name: string) {
+  return name
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-+|-+$)/g, '')
+    .slice(0, 40)
 }
 
-interface CreatePostProps {
-  userId: string;
-  circleId?: string | null;
-  onPost?: () => void;
-}
+export default function CreateCircle({ userId }: { userId: string }) {
+  const supabase = createClient()
+  const router = useRouter()
 
-interface Profile {
-  username: string;
-  avatar_url: string | null;
-}
+  const [open, setOpen] = useState(false)
+  const [name, setName] = useState('')
+  const [description, setDescription] = useState('')
+  const [university, setUniversity] = useState('')
+  const [category, setCategory] = useState<string | null>(null)
+  const [isPrivate, setIsPrivate] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-interface LanguageOption {
-  code: string;
-  label: string;
-  emoji: string;
-}
+  function reset() {
+    setName(''); setDescription(''); setUniversity('')
+    setCategory(null); setIsPrivate(false); setError(null)
+  }
 
-const AFRICAN_LANGUAGES: LanguageOption[] = [
-  { code: 'english', label: 'English', emoji: '🇬🇧' },
-  { code: 'swahili', label: 'Swahili', emoji: '🇰🇪' },
-  { code: 'yoruba', label: 'Yoruba', emoji: '🇳🇬' },
-  { code: 'zulu', label: 'Zulu', emoji: '🇿🇦' },
-  { code: 'amharic', label: 'Amharic', emoji: '🇪🇹' },
-  { code: 'hausa', label: 'Hausa', emoji: '🇳🇬' },
-  { code: 'igbo', label: 'Igbo', emoji: '🇳🇬' },
-  { code: 'afrikaans', label: 'Afrikaans', emoji: '🇿🇦' },
-];
+  async function handleCreate() {
+    const trimmedName = name.trim()
+    if (!trimmedName) { setError('Give your circle a name'); return }
+    setSubmitting(true)
+    setError(null)
 
-const MAX_MEDIA = 5;
-const MAX_CHARS = 500;
-const MAX_VIDEO_MB = 10;
-const MAX_VIDEO_SEC = 60;
+    const baseSlug = slugify(trimmedName) || `circle-${Date.now()}`
+    // Slugs need to be unique — if the base slug's taken, fall back to a
+    // short random suffix rather than blocking the person on picking a
+    // different name themselves.
+    const { data: clash } = await supabase.from('circles').select('id').eq('slug', baseSlug).maybeSingle()
+    const slug = clash ? `${baseSlug}-${Math.random().toString(36).slice(2, 6)}` : baseSlug
 
-export default function CreatePost({
-  userId,
-  circleId = null,
-  onPost,
-}: CreatePostProps) {
-  const supabase = createClient();
-  const router = useRouter();
-
-  const imageRef = useRef<HTMLInputElement>(null);
-  const videoRef = useRef<HTMLInputElement>(null);
-  const textRef = useRef<HTMLTextAreaElement>(null);
-
-  const [content, setContent] = useState('');
-  const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
-  const [voiceBlob, setVoiceBlob] = useState<Blob | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [captionLoad, setCaptionLoad] = useState(false);
-  const [error, setError] = useState('');
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [language, setLanguage] = useState('english');
-  const [showLang, setShowLang] = useState(false);
-  const [showPoll, setShowPoll] = useState(false);
-  const [pollQ, setPollQ] = useState('');
-  const [pollOpts, setPollOpts] = useState(['', '']);
-  const [pollDur, setPollDur] = useState('24');
-  const [recording, setRecording] = useState(false);
-  const [posted, setPosted] = useState(false);
-
-  const mediaRecRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
-
-  /* fetch own profile for avatar */
-  useEffect(() => {
-    supabase
-      .from('profiles')
-      .select('username, avatar_url')
-      .eq('id', userId)
+    const { data: circle, error: insertError } = await supabase
+      .from('circles')
+      .insert({
+        name: trimmedName,
+        slug,
+        description: description.trim() || null,
+        university: university.trim() || null,
+        category,
+        is_private: isPrivate,
+      })
+      .select()
       .single()
-      .then(({ data }: { data: Profile | null }) => setProfile(data));
-  }, [userId]); // eslint-disable-line
 
-  /* auto-grow textarea */
-  const grow = () => {
-    const el = textRef.current;
-
-    if (el) {
-      el.style.height = 'auto';
-      el.style.height = el.scrollHeight + 'px';
-    }
-  };
-
-  const canAddMore = mediaItems.length < MAX_MEDIA && !voiceBlob;
-  const charsLeft = MAX_CHARS - content.length;
-  const isOver = charsLeft < 0;
-
-  const canPost =
-    !isOver &&
-    (
-      content.trim() ||
-      mediaItems.length > 0 ||
-      voiceBlob ||
-      (
-        showPoll &&
-        pollQ.trim() &&
-        pollOpts.filter(o => o.trim()).length >= 2
-      )
-    );
-
-  /* ── Image pick ──────────────────────────────────── */
-  function handleImagePick(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files ?? []);
-
-    addFiles(files, 'image');
-
-    e.target.value = '';
-  }
-  async function handleVideoPick(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files ?? []);
-
-    for (const f of files) {
-      if (f.size > MAX_VIDEO_MB * 1024 * 1024) {
-        setError(`Video must be under ${MAX_VIDEO_MB} MB.`);
-        continue;
-      }
-
-      const dur = await getVideoDuration(f);
-
-      if (dur > MAX_VIDEO_SEC) {
-        setError(`Videos must be under ${MAX_VIDEO_SEC}s.`);
-        continue;
-      }
-
-      addFiles([f], 'video');
+    if (insertError || !circle) {
+      setError("Couldn't create the circle — try again")
+      setSubmitting(false)
+      return
     }
 
-    e.target.value = '';
+    // Creating a circle makes you its first member — otherwise you'd land on
+    // your own circle's page unable to post in it.
+    await supabase.from('circle_members').insert({ circle_id: circle.id, user_id: userId })
+
+    setSubmitting(false)
+    setOpen(false)
+    reset()
+    router.push(`/circles/${slug}`)
+    router.refresh()
   }
-
-  function addFiles(files: File[], type: 'image' | 'video') {
-    setError('');
-
-    const slots = MAX_MEDIA - mediaItems.length;
-
-    const items: MediaItem[] = files
-      .slice(0, slots)
-      .map(f => ({
-        file: f,
-        preview: URL.createObjectURL(f),
-        type,
-      }));
-
-    setMediaItems(prev => [...prev, ...items]);
-
-    if (items.length) {
-      setVoiceBlob(null);
-    }
-  }
-
-  function removeMedia(idx: number) {
-    setMediaItems(prev => {
-      URL.revokeObjectURL(prev[idx].preview);
-
-      return prev.filter((_, i) => i !== idx);
-    });
-  }
-
-  function getVideoDuration(file: File): Promise<number> {
-    return new Promise(resolve => {
-      const url = URL.createObjectURL(file);
-
-      const v = document.createElement('video');
-
-      v.preload = 'metadata';
-
-      v.onloadedmetadata = () => {
-        URL.revokeObjectURL(url);
-        resolve(v.duration);
-      };
-
-      v.onerror = () => {
-        URL.revokeObjectURL(url);
-        resolve(0);
-      };
-
-      v.src = url;
-    });
-  }
-
-  /* ── Voice recording ─────────────────────────────── */
-  async function toggleRecording() {
-    if (recording) {
-      mediaRecRef.current?.stop();
-      setRecording(false);
-      return;
-    }
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-      });
-
-      const mr = new MediaRecorder(stream);
-
-      chunksRef.current = [];
-
-      mr.ondataavailable = e => {
-        if (e.data.size > 0) {
-          chunksRef.current.push(e.data);
-        }
-      };
-
-      mr.onstop = () => {
-        const blob = new Blob(chunksRef.current, {
-          type: 'audio/webm',
-        });
-
-        setVoiceBlob(blob);
-        setMediaItems([]);
-
-        stream.getTracks().forEach(t => t.stop());
-      };
-
-      mr.start();
-
-      mediaRecRef.current = mr;
-
-      setRecording(true);
-    } catch {
-      setError('Microphone access denied.');
-    }
-  }
-
-  /* ── AI caption ──────────────────────────────────── */
-  async function generateCaption() {
-    if (!content.trim() && mediaItems.length === 0) {
-      return;
-    }
-
-    setCaptionLoad(true);
-
-    try {
-      const res = await fetch('/api/caption', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ content }),
-      });
-
-      const data = await res.json();
-
-      if (data.caption) {
-        setContent(data.caption);
-      }
-    } catch {
-      setError('Caption generation failed.');
-    } finally {
-      setCaptionLoad(false);
-    }
-  }
-
-  function extractTags(text: string) {
-    return (
-      text.match(/#[\w\u00C0-\u024F\u1E00-\u1EFF]+/g) ?? []
-    )
-      .map(t => t.toLowerCase().replace('#', ''));
-  }
-
-  /* ── Submit ──────────────────────────────────────── */
-  async function handlePost() {
-    if (!canPost || loading) {
-      return;
-    }
-
-    setLoading(true);
-    setError('');
-
-    let media_url: string | null = null;
-    let media_type: string | null = null;
-
-    let extra_media: { url: string; type: string }[] = [];
-
-    try {
-      /* Upload voice */
-      if (voiceBlob) {
-        const path = `${userId}/voice_${Date.now()}.webm`;
-
-        const { error: upErr } = await supabase.storage
-          .from('post-media')
-          .upload(path, voiceBlob, {
-            contentType: 'audio/webm',
-          });
-
-        if (upErr) {
-          setError('Voice upload failed.');
-          return;
-        }
-
-        media_url = supabase.storage
-          .from('post-media')
-          .getPublicUrl(path)
-          .data.publicUrl;
-
-        media_type = 'audio';
-
-      /* Upload images/videos */
-      } else if (mediaItems.length > 0) {
-        const uploaded: { url: string; type: string }[] = [];
-
-        for (const item of mediaItems) {
-          const ext =
-            item.file.name.split('.').pop() ??
-            (item.type === 'video' ? 'mp4' : 'jpg');
-
-          const path =
-            `${userId}/${Date.now()}_${Math.random()
-              .toString(36)
-              .slice(2)}.${ext}`;
-
-          const { error: upErr } = await supabase.storage
-            .from('post-media')
-            .upload(path, item.file, {
-              contentType: item.file.type,
-            });
-
-          if (upErr) {
-            setError(`Upload failed: ${upErr.message}`);
-            return;
-          }
-
-          uploaded.push({
-            url: supabase.storage
-              .from('post-media')
-              .getPublicUrl(path)
-              .data.publicUrl,
-            type: item.type,
-          });
-        }
-
-        media_url = uploaded[0].url;
-        media_type = uploaded[0].type;
-        extra_media = uploaded.slice(1);
-      }
-
-      /* Insert post */
-      const { data: post, error: postErr } = await supabase
-        .from('posts')
-        .insert({
-          user_id: userId,
-          circle_id: circleId,
-          content: content.trim() || null,
-          media_url,
-          media_type,
-          extra_media: extra_media.length ? extra_media : null,
-          language,
-        })
-        .select()
-        .single();
-
-      if (postErr) {
-        setError(postErr.message);
-        return;
-      }
-
-      /* Hashtags */
-      if (post && content.trim()) {
-        const tags = extractTags(content);
-
-        if (tags.length) {
-          const { data: prof } = await supabase
-            .from('profiles')
-            .select('country')
-            .eq('id', userId)
-            .single();
-
-          await supabase.from('hashtags').insert(
-            tags.map(tag => ({
-              tag,
-              post_id: post.id,
-              user_id: userId,
-              country: prof?.country ?? null,
-            }))
-          );
-        }
-      }
-
-      /* Poll */
-      const hasPoll =
-        showPoll &&
-        pollQ.trim() &&
-        pollOpts.filter(o => o.trim()).length >= 2;
-
-      if (hasPoll && post) {
-        const validOpts = pollOpts.filter(o => o.trim());
-
-        await supabase.from('polls').insert({
-          post_id: post.id,
-          question: pollQ.trim(),
-          options: validOpts.map((text, i) => ({
-            id: `opt_${i}`,
-            text,
-            votes: 0,
-          })),
-          ends_at: new Date(
-            Date.now() + parseInt(pollDur) * 3_600_000
-          ).toISOString(),
-        });
-      }
-
-      /* Reset */
-      mediaItems.forEach(m => URL.revokeObjectURL(m.preview));
-
-      setContent('');
-      setMediaItems([]);
-      setVoiceBlob(null);
-
-      setShowPoll(false);
-      setPollQ('');
-      setPollOpts(['', '']);
-      setPollDur('24');
-
-      if (textRef.current) {
-        textRef.current.style.height = 'auto';
-      }
-
-      // Show a brief success flash so the user knows the post was submitted,
-      // then refresh. The feed scorer filters out the user's own posts so
-      // it won't appear in the feed, but at least they get clear confirmation.
-      setPosted(true);
-      onPost?.();
-      setTimeout(() => {
-        setPosted(false);
-        router.refresh();
-      }, 1200);
-
-    } catch (err) {
-      console.error(err);
-      setError('Something went wrong.');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  const initials =
-    profile?.username?.[0]?.toUpperCase() ?? '?';
-
-  const mediaCount = mediaItems.length;
-  let mediaGridClass = '';
-  if (mediaCount === 1) mediaGridClass = 'single';
-  else if (mediaCount === 2) mediaGridClass = 'dual';
-  else if (mediaCount === 3) mediaGridClass = 'triple';
-  else if (mediaCount === 4) mediaGridClass = 'quad';
-  else if (mediaCount === 5) mediaGridClass = 'penta';
 
   return (
-    <div className="compose-root">
-      {/* ── Compose row ─────────────────────────── */}
-      <div className="compose-row">
-        <div className="compose-left">
-          <div className="post-avatar">
-            {profile?.avatar_url ? (
-              <img
-                src={profile.avatar_url}
-                alt={profile.username ?? 'Your avatar'}
-              />
-            ) : (
-              <div className="post-avatar-inner">{initials}</div>
-            )}
-          </div>
-        </div>
-        <div className="compose-body">
-          <textarea
-            ref={textRef}
-            className="compose-textarea"
-            placeholder="What's happening?"
-            value={content}
-            onChange={e => {
-              setContent(e.target.value);
-              grow();
+    <>
+      <button
+        onClick={() => setOpen(true)}
+        className="tap-sm"
+        style={{
+          display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderRadius: 14,
+          border: 'none', background: 'var(--grad-brand)', color: '#fff', fontWeight: 700, fontSize: 13.5,
+          cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0,
+        }}
+      >
+        <Plus size={16} /> New Circle
+      </button>
+
+      {open && (
+        <div
+          onClick={() => { if (!submitting) { setOpen(false); reset() } }}
+          style={{ position: 'fixed', inset: 0, zIndex: 70, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              width: '100%', maxWidth: 480, maxHeight: '88vh', overflowY: 'auto',
+              background: 'var(--surface-1)', borderRadius: '20px 20px 0 0',
+              padding: '18px 18px calc(20px + env(safe-area-inset-bottom, 0px))',
             }}
-            rows={1}
-            maxLength={MAX_CHARS * 2}
-          />
-          <button
-            className="btn-post"
-            disabled={!canPost || loading}
-            onClick={handlePost}
-            title={
-              isOver
-                ? 'Post is too long'
-                : !canPost
-                ? 'Write something or add media to post'
-                : undefined
-            }
           >
-            {loading ? (
-              <Loader2 className="animate-spin" size={16} />
-            ) : (
-              'Post'
-            )}
-          </button>
-        </div>
-      </div>
-
-      {/* ── Error ───────────────────────────────── */}
-      {error && (
-        <div className="compose-toolbar" style={{ borderBottom: 'none', paddingTop: 0 }}>
-          <p style={{ color: 'var(--nia-coral)', fontSize: 13, margin: 0 }}>{error}</p>
-        </div>
-      )}
-
-      {/* ── Post success flash ───────────────────── */}
-      {posted && (
-        <div className="compose-toolbar" style={{ borderBottom: 'none', paddingTop: 0 }}>
-          <p style={{ color: 'var(--nia-mint)', fontSize: 13, margin: 0, fontWeight: 600 }}>
-            ✓ Post published!
-          </p>
-        </div>
-      )}
-
-      {/* ── Poll UI ─────────────────────────────── */}
-      {showPoll && (
-        <div style={{ padding: '0 16px 12px', borderBottom: '1px solid var(--divider)' }}>
-          <input
-            className="input"
-            placeholder="Ask a question…"
-            value={pollQ}
-            onChange={e => setPollQ(e.target.value)}
-            style={{ marginBottom: 8 }}
-          />
-          {pollOpts.map((opt, i) => (
-            <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
-              <input
-                className="input"
-                placeholder={`Option ${i + 1}`}
-                value={opt}
-                onChange={e => {
-                  const next = [...pollOpts];
-                  next[i] = e.target.value;
-                  setPollOpts(next);
-                }}
-                style={{ flex: 1 }}
-              />
-              {pollOpts.length > 2 && (
-                <button
-                  className="btn-ghost"
-                  onClick={() => setPollOpts(prev => prev.filter((_, j) => j !== i))}
-                  style={{ padding: '8px 10px' }}
-                >
-                  <X size={14} />
-                </button>
-              )}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <p style={{ fontWeight: 800, fontSize: 17, margin: 0 }}>New Circle</p>
+              <button
+                onClick={() => { setOpen(false); reset() }}
+                disabled={submitting}
+                className="tap-sm"
+                style={{ width: 30, height: 30, borderRadius: 8, border: 'none', background: 'var(--surface-3)', color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+              >
+                <X size={14} />
+              </button>
             </div>
-          ))}
-          {pollOpts.length < 5 && (
-            <button
-              className="btn-ghost"
-              onClick={() => setPollOpts(prev => [...prev, ''])}
-              style={{ fontSize: 13, padding: '6px 14px', marginTop: 4 }}
-            >
-              <Plus size={14} style={{ marginRight: 4 }} /> Add option
-            </button>
-          )}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
-            <label style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-              Poll duration:
-            </label>
-            <select
-              value={pollDur}
-              onChange={e => setPollDur(e.target.value)}
-              style={{
-                background: 'var(--surface-2)',
-                border: '1px solid var(--border)',
-                borderRadius: 8,
-                padding: '4px 10px',
-                fontSize: 13,
-                color: 'var(--text-primary)',
-              }}
-            >
-              <option value="1">1 hour</option>
-              <option value="6">6 hours</option>
-              <option value="12">12 hours</option>
-              <option value="24">24 hours</option>
-              <option value="48">48 hours</option>
-              <option value="72">3 days</option>
-              <option value="168">7 days</option>
-            </select>
-          </div>
-        </div>
-      )}
 
-      {/* ── Media preview grid ──────────────────── */}
-      {mediaItems.length > 0 && (
-        <div style={{ padding: '0 16px 12px' }}>
-          <div className={`post-media ${mediaGridClass}`}>
-            {mediaItems.map((item, idx) => (
-              <div key={idx} style={{ position: 'relative' }}>
-                {item.type === 'image' ? (
-                  <img src={item.preview} alt={`Upload ${idx}`} />
-                ) : (
-                  <video src={item.preview} />
-                )}
-                <button
-                  onClick={() => removeMedia(idx)}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div>
+                <label style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-tertiary)', display: 'block', marginBottom: 6 }}>
+                  Name
+                </label>
+                <input
+                  value={name}
+                  onChange={e => setName(e.target.value.slice(0, MAX_NAME))}
+                  placeholder="e.g. Nairobi Hoopers"
+                  autoFocus
                   style={{
-                    position: 'absolute',
-                    top: 6,
-                    right: 6,
-                    background: 'rgba(0,0,0,0.6)',
-                    border: 'none',
-                    borderRadius: '50%',
-                    width: 26,
-                    height: 26,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    cursor: 'pointer',
-                    color: '#fff',
+                    width: '100%', padding: '11px 14px', borderRadius: 12, border: '1px solid var(--border)',
+                    background: 'var(--surface-0)', color: 'var(--text-primary)', fontSize: 14.5, fontFamily: 'inherit',
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-tertiary)', display: 'block', marginBottom: 6 }}>
+                  Description <span style={{ fontWeight: 400 }}>(optional)</span>
+                </label>
+                <textarea
+                  value={description}
+                  onChange={e => setDescription(e.target.value.slice(0, MAX_DESC))}
+                  placeholder="What's this circle about?"
+                  rows={2}
+                  style={{
+                    width: '100%', padding: '11px 14px', borderRadius: 12, border: '1px solid var(--border)',
+                    background: 'var(--surface-0)', color: 'var(--text-primary)', fontSize: 14, fontFamily: 'inherit',
+                    resize: 'none',
+                  }}
+                />
+                <p style={{ fontSize: 10.5, color: 'var(--text-tertiary)', textAlign: 'right', margin: '3px 2px 0' }}>
+                  {description.length}/{MAX_DESC}
+                </p>
+              </div>
+
+              <div>
+                <label style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-tertiary)', display: 'block', marginBottom: 6 }}>
+                  Category <span style={{ fontWeight: 400 }}>(optional)</span>
+                </label>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {CATEGORIES.map(c => {
+                    const active = category === c.key
+                    return (
+                      <button
+                        key={c.key}
+                        onClick={() => setCategory(active ? null : c.key)}
+                        className="tap-sm"
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 5, padding: '7px 12px', borderRadius: 20,
+                          border: '1px solid ' + (active ? c.color : 'var(--border)'),
+                          background: active ? c.color : 'var(--surface-0)',
+                          color: active ? '#fff' : 'var(--text-secondary)',
+                          fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+                        }}
+                      >
+                        <span>{c.emoji}</span> {c.label}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-tertiary)', display: 'block', marginBottom: 6 }}>
+                  Campus / community <span style={{ fontWeight: 400 }}>(optional)</span>
+                </label>
+                <input
+                  value={university}
+                  onChange={e => setUniversity(e.target.value.slice(0, 60))}
+                  placeholder="e.g. University of Nairobi"
+                  style={{
+                    width: '100%', padding: '11px 14px', borderRadius: 12, border: '1px solid var(--border)',
+                    background: 'var(--surface-0)', color: 'var(--text-primary)', fontSize: 14, fontFamily: 'inherit',
+                  }}
+                />
+              </div>
+
+              <button
+                onClick={() => setIsPrivate(v => !v)}
+                className="tap-sm"
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%',
+                  padding: '12px 14px', borderRadius: 12, border: '1px solid var(--border)',
+                  background: 'var(--surface-0)', cursor: 'pointer', fontFamily: 'inherit',
+                }}
+              >
+                <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13.5, fontWeight: 700, color: 'var(--text-primary)' }}>
+                  {isPrivate ? <Lock size={15} /> : <Globe size={15} />}
+                  {isPrivate ? 'Private — people must request to join' : 'Public — anyone can join'}
+                </span>
+                <span
+                  style={{
+                    width: 38, height: 22, borderRadius: 11, flexShrink: 0, position: 'relative',
+                    background: isPrivate ? 'var(--nia-violet)' : 'var(--surface-3)', transition: 'background 0.15s',
                   }}
                 >
-                  <X size={14} />
-                </button>
-              </div>
-            ))}
+                  <span
+                    style={{
+                      position: 'absolute', top: 2, left: isPrivate ? 18 : 2, width: 18, height: 18, borderRadius: '50%',
+                      background: '#fff', transition: 'left 0.15s', boxShadow: '0 1px 2px rgba(0,0,0,0.2)',
+                    }}
+                  />
+                </span>
+              </button>
+
+              {error && <p style={{ fontSize: 12.5, color: 'var(--nia-coral)', margin: 0, fontWeight: 600 }}>{error}</p>}
+
+              <button
+                onClick={handleCreate}
+                disabled={submitting || !name.trim()}
+                className="tap-sm"
+                style={{
+                  width: '100%', padding: '13px', borderRadius: 14, border: 'none', marginTop: 4,
+                  background: 'var(--grad-brand)', color: 'white', fontWeight: 700, fontSize: 14.5,
+                  cursor: 'pointer', opacity: submitting || !name.trim() ? 0.5 : 1,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                }}
+              >
+                {submitting && <Loader2 size={15} className="animate-spin" />}
+                Create circle
+              </button>
+            </div>
           </div>
         </div>
       )}
-
-      {/* ── Voice recording UI ──────────────────── */}
-      {voiceBlob && (
-        <div style={{ padding: '0 16px 12px' }}>
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-              padding: '10px 14px',
-              background: 'var(--surface-2)',
-              borderRadius: 12,
-            }}
-          >
-            <Mic size={18} style={{ color: 'var(--nia-violet)' }} />
-            <span style={{ fontSize: 14, color: 'var(--text-secondary)' }}>
-              Voice note attached
-            </span>
-            <button
-              onClick={() => setVoiceBlob(null)}
-              className="btn-ghost"
-              style={{
-                marginLeft: 'auto',
-                padding: '4px 10px',
-                fontSize: 12,
-              }}
-            >
-              <Trash2 size={14} />
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ── Language selector ───────────────────── */}
-      {showLang && (
-        <div
-          style={{
-            padding: '0 16px 12px',
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: 6,
-          }}
-        >
-          {AFRICAN_LANGUAGES.map(l => (
-            <button
-              key={l.code}
-              className={language === l.code ? 'btn-primary' : 'btn-ghost'}
-              style={{ fontSize: 13, padding: '4px 12px' }}
-              onClick={() => {
-                setLanguage(l.code);
-                setShowLang(false);
-              }}
-            >
-              {l.emoji} {l.label}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* ── Toolbar ─────────────────────────────── */}
-      <div className="compose-toolbar">
-        <div className="compose-icons">
-          {/* Image picker */}
-          {canAddMore && (
-            <>
-              <button
-                className="compose-icon-btn"
-                onClick={() => imageRef.current?.click()}
-                title="Add image"
-              >
-                <ImagePlus size={20} />
-              </button>
-              <input
-                ref={imageRef}
-                type="file"
-                accept="image/*"
-                onChange={handleImagePick}
-                style={{ display: 'none' }}
-                multiple
-              />
-            </>
-          )}
-
-          {/* Video picker */}
-          {canAddMore && (
-            <>
-              <button
-                className="compose-icon-btn"
-                onClick={() => videoRef.current?.click()}
-                title="Add video"
-              >
-                <Video size={20} />
-              </button>
-              <input
-                ref={videoRef}
-                type="file"
-                accept="video/*"
-                onChange={handleVideoPick}
-                style={{ display: 'none' }}
-                multiple
-              />
-            </>
-          )}
-
-          {/* Voice recording */}
-          <button
-            className="compose-icon-btn"
-            onClick={toggleRecording}
-            title={recording ? 'Stop recording' : 'Record voice'}
-            style={{ color: recording ? 'var(--nia-coral)' : undefined }}
-          >
-            {recording ? <MicOff size={20} /> : <Mic size={20} />}
-          </button>
-
-          {/* AI caption */}
-          <button
-            className="compose-icon-btn"
-            onClick={generateCaption}
-            disabled={captionLoad}
-            title="Generate AI caption"
-          >
-            {captionLoad ? (
-              <Loader2 size={20} className="animate-spin" />
-            ) : (
-              <Sparkles size={20} />
-            )}
-          </button>
-
-          {/* Poll */}
-          <button
-            className="compose-icon-btn"
-            onClick={() => setShowPoll(prev => !prev)}
-            title="Add poll"
-            style={{ color: showPoll ? 'var(--nia-violet)' : undefined }}
-          >
-            <BarChart2 size={20} />
-          </button>
-
-          {/* Language */}
-          <button
-            className="compose-icon-btn"
-            onClick={() => setShowLang(prev => !prev)}
-            title="Select language"
-            style={{ color: showLang ? 'var(--nia-violet)' : undefined }}
-          >
-            <span style={{ fontSize: 18 }}>
-              {AFRICAN_LANGUAGES.find(l => l.code === language)?.emoji ?? '🌍'}
-            </span>
-          </button>
-        </div>
-
-        {/* Character counter */}
-        <span
-          style={{
-            fontSize: 13,
-            fontWeight: 600,
-            color: isOver
-              ? 'var(--nia-coral)'
-              : charsLeft <= 20
-              ? 'var(--nia-amber)'
-              : 'var(--text-tertiary)',
-          }}
-        >
-          {content.length > 0 ? charsLeft : ''}
-        </span>
-      </div>
-    </div>
-  );
+    </>
+  )
 }
