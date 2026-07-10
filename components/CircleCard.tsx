@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Users, Lock, Loader2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 
-const CATEGORY_COLORS: Record<string, string> = {
+export const CATEGORY_COLORS: Record<string, string> = {
   tech:    'var(--nia-sky)',
   art:     'var(--nia-pink)',
   sports:  'var(--nia-mint)',
@@ -15,7 +15,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   default: 'var(--nia-coral)',
 }
 
-const CATEGORY_EMOJI: Record<string, string> = {
+export const CATEGORY_EMOJI: Record<string, string> = {
   tech: '💻', art: '🎨', sports: '⚽', music: '🎵', science: '🔬', default: '✨'
 }
 
@@ -25,6 +25,7 @@ export default function CircleCard({ circle, currentUserId }: any) {
   const isMember = circle.circle_members?.some((m: any) => m.user_id === currentUserId)
   const [joined, setJoined] = useState(isMember)
   const [memberCount, setMemberCount] = useState(circle.circle_members?.length ?? 0)
+  const [requested, setRequested] = useState(false)
   const [loading, setLoading] = useState(false)
 
   const cat = circle.category?.toLowerCase() ?? 'default'
@@ -34,16 +35,28 @@ export default function CircleCard({ circle, currentUserId }: any) {
   async function toggleJoin(e: React.MouseEvent) {
     e.preventDefault()
     e.stopPropagation()
-    
+
     setLoading(true)
     if (joined) {
       await supabase.from('circle_members').delete().match({ circle_id: circle.id, user_id: currentUserId })
       setMemberCount((c: number) => Math.max(0, c - 1))
+      setJoined(false)
+    } else if (circle.is_private) {
+      // Private circles don't get instant membership from the list view —
+      // this opens (or re-opens, after a decline) a pending join request.
+      // The circle's own page shows the fuller "Requested / cancel" state;
+      // here we just optimistically flip the button so it doesn't look
+      // like nothing happened.
+      if (!requested) {
+        await supabase.from('circle_join_requests')
+          .upsert({ circle_id: circle.id, user_id: currentUserId, status: 'pending' }, { onConflict: 'circle_id,user_id' })
+        setRequested(true)
+      }
     } else {
       await supabase.from('circle_members').insert({ circle_id: circle.id, user_id: currentUserId })
       setMemberCount((c: number) => c + 1)
+      setJoined(true)
     }
-    setJoined(!joined)
     setLoading(false)
     router.refresh()
   }
@@ -111,9 +124,9 @@ export default function CircleCard({ circle, currentUserId }: any) {
           {/* Implemented min-w-19 */}
           <button
             onClick={toggleJoin}
-            disabled={loading}
+            disabled={loading || requested}
             className="px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center min-w-19"
-            style={joined
+            style={joined || requested
               ? { background: 'var(--surface-2)', color: 'var(--text-secondary)' }
               : { backgroundColor: color, color: '#fff' }
             }
@@ -122,6 +135,10 @@ export default function CircleCard({ circle, currentUserId }: any) {
               <Loader2 size={13} className="animate-spin" />
             ) : joined ? (
               'Leave'
+            ) : requested ? (
+              'Requested'
+            ) : circle.is_private ? (
+              'Request'
             ) : (
               'Join'
             )}
