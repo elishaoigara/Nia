@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { Play, Heart } from 'lucide-react'
+import CreateCircle from '@/components/CreateCircle'
 
 const CATEGORY_EMOJI: Record<string, string> = {
   tech: '💻', art: '🎨', sports: '⚽', music: '🎵', science: '🔬', default: '✨',
@@ -30,19 +31,16 @@ export interface HomeFlick {
 // Shows "Your Circles" and "Trending" as a single segmented rail rather than
 // two stacked strips, so people see one horizontal row — not three rails of
 // teasers (Stories, Circles, Trending) — before they hit an actual post.
-export default function HomeRail({ circles, flicks }: { circles: HomeCircle[]; flicks: HomeFlick[] }) {
-  const hasCircles = circles.length > 0
+export default function HomeRail({ circles, flicks, currentUserId }: { circles: HomeCircle[]; flicks: HomeFlick[]; currentUserId: string }) {
   const hasFlicks = flicks.length > 0
   const [tab, setTab] = useState<'circles' | 'trending'>(hasFlicks ? 'trending' : 'circles')
 
-  if (!hasCircles && !hasFlicks) return null
-
-  const showCircles = hasCircles && (tab === 'circles' || !hasFlicks)
-  const showFlicks = hasFlicks && (tab === 'trending' || !hasCircles)
+  const showCircles = tab === 'circles' || !hasFlicks
+  const showFlicks = hasFlicks && (tab === 'trending' || false)
 
   return (
     <div style={{ padding: '14px 14px 4px' }}>
-      {hasCircles && hasFlicks ? (
+      {hasFlicks ? (
         <div style={{ display: 'inline-flex', background: 'var(--surface-2)', borderRadius: 12, padding: 3, marginBottom: 12, gap: 2 }}>
           {(['circles', 'trending'] as const).map(key => (
             <button
@@ -64,12 +62,13 @@ export default function HomeRail({ circles, flicks }: { circles: HomeCircle[]; f
         </div>
       ) : (
         <p style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-tertiary)', margin: '0 0 10px' }}>
-          {showFlicks ? '🔥 Trending Flicks' : 'Your Circles'}
+          Your Circles
         </p>
       )}
 
       {showCircles && (
         <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4, WebkitOverflowScrolling: 'touch' } as React.CSSProperties}>
+          <CreateCircle userId={currentUserId} compact />
           {circles.map(c => {
             const cat = c.category?.toLowerCase() ?? 'default'
             const emoji = CATEGORY_EMOJI[cat] ?? CATEGORY_EMOJI.default

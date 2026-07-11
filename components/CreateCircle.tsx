@@ -25,7 +25,7 @@ function slugify(name: string) {
     .slice(0, 40)
 }
 
-export default function CreateCircle({ userId }: { userId: string }) {
+export default function CreateCircle({ userId, compact = false }: { userId: string; compact?: boolean }) {
   const supabase = createClient()
   const router = useRouter()
 
@@ -88,17 +88,39 @@ export default function CreateCircle({ userId }: { userId: string }) {
 
   return (
     <>
-      <button
-        onClick={() => setOpen(true)}
-        className="tap-sm"
-        style={{
-          display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderRadius: 14,
-          border: 'none', background: 'var(--grad-brand)', color: '#fff', fontWeight: 700, fontSize: 13.5,
-          cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0,
-        }}
-      >
-        <Plus size={16} /> New Circle
-      </button>
+      {compact ? (
+        <button
+          onClick={() => setOpen(true)}
+          className="tap-sm"
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0,
+            background: 'var(--surface-1)', border: '1px dashed var(--border)',
+            borderRadius: 20, padding: '6px 12px 6px 6px', cursor: 'pointer', fontFamily: 'inherit',
+          }}
+        >
+          <span style={{
+            width: 24, height: 24, borderRadius: '50%', background: 'var(--grad-brand)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+          }}>
+            <Plus size={13} color="#fff" />
+          </span>
+          <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
+            New Circle
+          </span>
+        </button>
+      ) : (
+        <button
+          onClick={() => setOpen(true)}
+          className="tap-sm"
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderRadius: 14,
+            border: 'none', background: 'var(--grad-brand)', color: '#fff', fontWeight: 700, fontSize: 13.5,
+            cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0,
+          }}
+        >
+          <Plus size={16} /> New Circle
+        </button>
+      )}
 
       {open && (
         <div

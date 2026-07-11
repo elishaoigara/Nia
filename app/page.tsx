@@ -143,7 +143,7 @@ export default async function FeedPage({
       <StoriesBar currentUserId={user.id} />
 
       {/* Your Circles / Trending Flicks — one combined rail, not two */}
-      <HomeRail circles={myCircles as any} flicks={trendingFlicks as any} />
+      <HomeRail circles={myCircles as any} flicks={trendingFlicks as any} currentUserId={user.id} />
 
       {/* Feed tabs — sticky under top nav */}
       <Suspense fallback={null}>
