@@ -74,37 +74,22 @@ export default function ResetPasswordPage() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: 'linear-gradient(135deg, #0B1120 0%, #1E293B 100%)',
+        background: 'var(--surface-0)',
         padding: 24,
         position: 'relative',
         overflow: 'hidden',
       }}
     >
-      {/* Animated particles */}
+      {/* Faint diagonal line pattern — matches login page */}
       <div
         style={{
           position: 'absolute',
           inset: 0,
-          overflow: 'hidden',
           pointerEvents: 'none',
+          backgroundImage:
+            'repeating-linear-gradient(45deg, color-mix(in srgb, var(--nia-violet) 7%, transparent) 0px, color-mix(in srgb, var(--nia-violet) 7%, transparent) 1px, transparent 1px, transparent 34px)',
         }}
-      >
-        {Array.from({ length: 15 }).map((_, i) => (
-          <div
-            key={i}
-            style={{
-              position: 'absolute',
-              width: 4,
-              height: 4,
-              borderRadius: '50%',
-              background: 'rgba(139, 92, 246, 0.3)',
-              left: `${Math.random() * 100}%`,
-              top: `${Math.random() * 100}%`,
-              animation: `fade-in ${2 + Math.random() * 3}s ease ${Math.random() * 2}s infinite alternate`,
-            }}
-          />
-        ))}
-      </div>
+      />
 
       <div
         style={{
@@ -116,19 +101,13 @@ export default function ResetPasswordPage() {
       >
         {/* Logo */}
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
-          <h1
-            style={{
-              fontSize: 36,
-              fontWeight: 800,
-              background: 'linear-gradient(135deg, #8B5CF6, #FF6B6B)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              margin: 0,
-            }}
-          >
-            Nia
-          </h1>
-          <p style={{ color: '#94A3B8', marginTop: 8, fontSize: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 10 }}>
+            <img src="/logo/nia-icon.svg" alt="" width={40} height={40} style={{ borderRadius: 12 }} />
+            <h1 style={{ fontSize: 32, fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
+              Nia
+            </h1>
+          </div>
+          <p style={{ color: 'var(--text-tertiary)', margin: 0, fontSize: 14 }}>
             Choose a new password
           </p>
         </div>
@@ -136,23 +115,23 @@ export default function ResetPasswordPage() {
         {/* Card */}
         <div
           style={{
-            background: '#1E293B',
-            border: '1px solid #334155',
+            background: 'var(--surface-1)',
+            border: '1px solid var(--border)',
             borderRadius: 20,
             padding: 32,
           }}
         >
           {!ready ? (
             <div style={{ textAlign: 'center' }}>
-              <p style={{ color: '#94A3B8', fontSize: 14 }}>
+              <p style={{ color: 'var(--text-tertiary)', fontSize: 14 }}>
                 Verifying reset link…
               </p>
               <div
                 style={{
                   width: 32,
                   height: 32,
-                  border: '3px solid #334155',
-                  borderTopColor: '#8B5CF6',
+                  border: '3px solid var(--border)',
+                  borderTopColor: 'var(--nia-violet)',
                   borderRadius: '50%',
                   margin: '16px auto 0',
                   animation: 'spin 0.8s linear infinite',
@@ -162,32 +141,16 @@ export default function ResetPasswordPage() {
             </div>
           ) : (
             <>
-              <h2
-                style={{
-                  color: '#F1F5F9',
-                  fontSize: 20,
-                  fontWeight: 700,
-                  margin: '0 0 24px',
-                  textAlign: 'center',
-                }}
-              >
+              <h2 style={{ color: 'var(--text-primary)', fontSize: 20, fontWeight: 700, margin: '0 0 24px', textAlign: 'center' }}>
                 Reset your password
               </h2>
 
               <form onSubmit={handleReset}>
                 <div style={{ marginBottom: 14 }}>
-                  <label
-                    style={{
-                      display: 'block',
-                      color: '#94A3B8',
-                      fontSize: 13,
-                      marginBottom: 6,
-                    }}
-                  >
+                  <label style={{ display: 'block', color: 'var(--text-tertiary)', fontSize: 13, marginBottom: 6 }}>
                     New password
                   </label>
                   <input
-                    className="input"
                     type="password"
                     placeholder="At least 6 characters"
                     value={password}
@@ -195,9 +158,9 @@ export default function ResetPasswordPage() {
                     required
                     minLength={6}
                     style={{
-                      background: '#0F172A',
-                      border: '1px solid #334155',
-                      color: '#F1F5F9',
+                      background: 'var(--surface-0)',
+                      border: '1px solid var(--border)',
+                      color: 'var(--text-primary)',
                       width: '100%',
                       padding: '12px 16px',
                       borderRadius: 12,
@@ -209,18 +172,10 @@ export default function ResetPasswordPage() {
                 </div>
 
                 <div style={{ marginBottom: 20 }}>
-                  <label
-                    style={{
-                      display: 'block',
-                      color: '#94A3B8',
-                      fontSize: 13,
-                      marginBottom: 6,
-                    }}
-                  >
+                  <label style={{ display: 'block', color: 'var(--text-tertiary)', fontSize: 13, marginBottom: 6 }}>
                     Confirm new password
                   </label>
                   <input
-                    className="input"
                     type="password"
                     placeholder="Repeat your password"
                     value={confirm}
@@ -228,9 +183,9 @@ export default function ResetPasswordPage() {
                     required
                     minLength={6}
                     style={{
-                      background: '#0F172A',
-                      border: '1px solid #334155',
-                      color: '#F1F5F9',
+                      background: 'var(--surface-0)',
+                      border: '1px solid var(--border)',
+                      color: 'var(--text-primary)',
                       width: '100%',
                       padding: '12px 16px',
                       borderRadius: 12,
@@ -242,14 +197,7 @@ export default function ResetPasswordPage() {
                 </div>
 
                 {error && (
-                  <p
-                    style={{
-                      color: '#FF6B6B',
-                      fontSize: 13,
-                      margin: '0 0 12px',
-                      textAlign: 'center',
-                    }}
-                  >
+                  <p style={{ color: 'var(--nia-coral)', fontSize: 13, margin: '0 0 12px', textAlign: 'center' }}>
                     {error}
                   </p>
                 )}
@@ -257,18 +205,19 @@ export default function ResetPasswordPage() {
                 <button
                   type="submit"
                   disabled={loading}
+                  className="tap-sm"
                   style={{
                     width: '100%',
                     padding: '12px 0',
                     borderRadius: 12,
                     border: 'none',
-                    background: 'linear-gradient(135deg, #8B5CF6, #FF6B6B)',
+                    background: 'var(--grad-brand)',
                     color: '#fff',
                     fontWeight: 700,
                     fontSize: 15,
                     cursor: 'pointer',
                     opacity: loading ? 0.6 : 1,
-                    transition: 'opacity 0.15s',
+                    fontFamily: 'inherit',
                   }}
                 >
                   {loading ? 'Updating…' : 'Update password'}

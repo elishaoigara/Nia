@@ -46,7 +46,7 @@ export default function SignupPage() {
   if (sent) return (
     <div className="min-h-screen flex items-center justify-center px-4" style={{ background: 'var(--surface-0)' }}>
       <div className="card p-8 text-center space-y-4 max-w-sm w-full anim-pop">
-        <div className="w-16 h-16 rounded-3xl mx-auto flex items-center justify-center" style={{ background: 'linear-gradient(135deg,rgba(107,203,77,0.2),rgba(78,205,196,0.2))' }}>
+        <div className="w-16 h-16 rounded-3xl mx-auto flex items-center justify-center" style={{ background: 'color-mix(in srgb, var(--nia-mint) 15%, transparent)' }}>
           <CheckCircle2 size={32} style={{ color: 'var(--nia-mint)' }} />
         </div>
         <h2 className="font-extrabold text-2xl">Check your inbox! 📬</h2>
@@ -61,18 +61,22 @@ export default function SignupPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4 relative overflow-hidden" style={{ background: 'var(--surface-0)' }}>
-      <div className="absolute top-0 right-0 w-64 h-64 rounded-full blur-[120px] opacity-15" style={{ background: 'var(--nia-sky)', transform: 'translate(30%,-30%)' }} />
-      <div className="absolute bottom-0 left-0 w-64 h-64 rounded-full blur-[120px] opacity-15" style={{ background: 'var(--nia-amber)', transform: 'translate(-30%,30%)' }} />
+      <div className="absolute top-0 right-0 w-64 h-64 rounded-full blur-[120px] opacity-15" style={{ background: 'var(--nia-violet)', transform: 'translate(30%,-30%)' }} />
+      <div className="absolute bottom-0 left-0 w-64 h-64 rounded-full blur-[120px] opacity-15" style={{ background: 'var(--nia-violet)', transform: 'translate(-30%,30%)' }} />
 
       <div className="w-full max-w-sm space-y-8 relative z-10">
         <div className="text-center space-y-3">
-          <div className="w-16 h-16 rounded-3xl mx-auto flex items-center justify-center text-white font-black text-3xl" style={{ background: 'var(--grad-brand)', boxShadow: '0 8px 30px rgba(168,85,247,0.4)' }}>
-            N
-          </div>
+          <img
+            src="/logo/nia-icon.svg"
+            alt=""
+            width={64}
+            height={64}
+            style={{ margin: '0 auto', display: 'block', boxShadow: '0 8px 30px rgba(91,33,182,0.4)', borderRadius: 20 }}
+          />
           <div>
             <h1 className="font-extrabold text-3xl tracking-tight">Join Nia 🌍</h1>
             <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>
-              Your pan-African community starts here
+              Africa connects here
             </p>
           </div>
         </div>
@@ -112,7 +116,7 @@ export default function SignupPage() {
           </div>
 
           {error && (
-            <div className="px-3 py-2 rounded-xl text-sm font-semibold text-red-500" style={{ background: 'rgba(239,68,68,0.08)' }}>
+            <div className="px-3 py-2 rounded-xl text-sm font-semibold" style={{ background: 'color-mix(in srgb, var(--nia-coral) 10%, transparent)', color: 'var(--nia-coral)' }}>
               {error}
             </div>
           )}
