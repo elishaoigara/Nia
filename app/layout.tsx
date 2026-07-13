@@ -5,6 +5,21 @@ import { ThemeProvider } from '@/components/ThemeProvider'
 export const metadata = {
   title: 'Nia — Africa Connects Here',
   description: 'Pan-African social platform',
+  icons: {
+    icon: '/icon.png',
+    apple: '/apple-icon.png',
+  },
+  openGraph: {
+    title: 'Nia — Africa Connects Here',
+    description: 'Pan-African social platform',
+    images: ['/logo/og-image.png'],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Nia — Africa Connects Here',
+    description: 'Pan-African social platform',
+    images: ['/logo/og-image.png'],
+  },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -113,12 +113,7 @@ export default function Navbar() {
             className="hide-on-desktop"
             aria-label="Nia home"
           >
-            <div style={{
-              width: 30, height: 30, borderRadius: 10,
-              background: 'var(--grad-brand)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: '#fff', fontWeight: 900, fontSize: 15,
-            }}>N</div>
+            <img src="/logo/nia-icon.svg" alt="" width={30} height={30} style={{ borderRadius: 10 }} />
             <span style={{ fontWeight: 800, fontSize: 17, color: 'var(--text-primary)' }}>Nia</span>
           </Link>
 
@@ -251,12 +246,7 @@ export default function Navbar() {
         }}
       >
         <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', marginBottom: 20, textDecoration: 'none' }}>
-          <div style={{
-            width: 34, height: 34, borderRadius: 10,
-            background: 'var(--grad-brand)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: '#fff', fontWeight: 900, fontSize: 17,
-          }}>N</div>
+          <img src="/logo/nia-icon.svg" alt="" width={34} height={34} style={{ borderRadius: 10 }} />
           <span style={{ fontWeight: 800, fontSize: 18, color: 'var(--text-primary)' }}>Nia</span>
         </Link>
 
