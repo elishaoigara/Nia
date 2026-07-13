@@ -91,7 +91,7 @@ export default function CreateCircle({ userId, compact = false }: { userId: stri
       {compact ? (
         <button
           onClick={() => setOpen(true)}
-          className="tap-sm"
+          className="tap-sm new-circle-pulse"
           style={{
             display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0,
             background: 'var(--surface-1)', border: '1px dashed var(--border)',

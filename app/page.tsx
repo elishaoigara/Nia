@@ -6,6 +6,7 @@ import LoadMore           from '@/components/LoadMore'
 import FeedTabs           from '@/components/FeedTabs'
 import StoriesBar         from '@/components/StoriesBar'
 import HomeRail           from '@/components/HomeRail'
+import WelcomeBanner      from '@/components/WelcomeBanner'
 import { Suspense }       from 'react'
 import { scorePosts }     from '@/lib/feed-scorer'
 import { scoreFlicks }    from '@/lib/flicks-scorer'
@@ -130,14 +131,16 @@ export default async function FeedPage({
   const hasMore = ranked.length > offset + PAGE_SIZE || candidates.length === candidatePool
 
   const EMPTY: Record<string, { emoji: string; title: string; body: string }> = {
-    africa:    { emoji: '🌍', title: 'Be the first!',      body: 'Start the conversation for all of Africa.' },
-    local:     { emoji: '📍', title: 'Nothing local yet',  body: myProfile?.country ? `No posts from ${myProfile.country} yet.` : 'Set your country to see local posts.' },
-    following: { emoji: '👀', title: 'No posts yet',       body: 'Follow people to see their posts here.' },
+    africa:    { emoji: '🌍', title: 'Start the conversation', body: 'Share the first post for all of Africa to see.' },
+    local:     { emoji: '📍', title: 'Your local feed lights up once neighbours join', body: myProfile?.country ? `Be the first to post from ${myProfile.country}.` : 'Set your country in your profile to see local posts.' },
+    following: { emoji: '👀', title: 'Find your circle',    body: 'Follow people or join a Circle to fill this feed.' },
   }
   const empty = EMPTY[currentTab] ?? EMPTY.africa
 
   return (
     <div style={{ maxWidth: 620, margin: '0 auto', width: '100%' }}>
+
+      <WelcomeBanner />
 
       {/* Stories */}
       <StoriesBar currentUserId={user.id} />

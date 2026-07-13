@@ -1033,6 +1033,22 @@ body {
   animation: shimmer 1.4s infinite;
   border-radius: 8px;
 }
+.skeleton-violet {
+  background: linear-gradient(90deg,
+    rgba(91,33,182,0.05) 25%,
+    rgba(91,33,182,0.12) 50%,
+    rgba(91,33,182,0.05) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite;
+  border-radius: 8px;
+}
+
+@keyframes pulse-ring {
+  0%   { box-shadow: 0 0 0 0 rgba(91,33,182,0.35); }
+  100% { box-shadow: 0 0 0 8px rgba(91,33,182,0); }
+}
+.new-circle-pulse { animation: pulse-ring 2s infinite; }
 
 /* Feed stagger */
 @keyframes card-enter {

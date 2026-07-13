@@ -80,7 +80,8 @@ export default function HomeRail({ circles, flicks, currentUserId }: { circles: 
                 className="tap-sm"
                 style={{
                   display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0,
-                  background: 'var(--surface-1)', border: '1px solid var(--border)',
+                  background: `color-mix(in srgb, ${color} 12%, var(--surface-1))`,
+                  border: `1px solid color-mix(in srgb, ${color} 35%, var(--border))`,
                   borderRadius: 20, padding: '6px 12px 6px 6px', textDecoration: 'none',
                 }}
               >
