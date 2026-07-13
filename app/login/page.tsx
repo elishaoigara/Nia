@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
+import UnityLine from '@/components/UnityLine';
 
 export default function LoginPage() {
   const supabase = createClient();
@@ -63,14 +64,20 @@ export default function LoginPage() {
         overflow: 'hidden',
       }}
     >
-      {/* Faint diagonal line pattern — brand texture instead of generic particles */}
+      {/* Faint pan-African flag-color mosaic — texture, not decoration */}
       <div
         style={{
           position: 'absolute',
           inset: 0,
           pointerEvents: 'none',
-          backgroundImage:
-            'repeating-linear-gradient(45deg, color-mix(in srgb, var(--nia-violet) 7%, transparent) 0px, color-mix(in srgb, var(--nia-violet) 7%, transparent) 1px, transparent 1px, transparent 34px)',
+          opacity: 0.06,
+          backgroundImage: `repeating-linear-gradient(115deg,
+            #5B21B6 0px, #5B21B6 40px,
+            #0F6E56 40px, #0F6E56 80px,
+            #BA7517 80px, #BA7517 120px,
+            #993C1D 120px, #993C1D 160px,
+            #7C3AED 160px, #7C3AED 200px
+          )`,
         }}
       />
 
@@ -100,6 +107,7 @@ export default function LoginPage() {
           <p style={{ color: 'var(--text-tertiary)', margin: 0, fontSize: 14 }}>
             Africa connects here.
           </p>
+          <UnityLine />
         </div>
 
         {/* Card — flat, matches app surfaces, no artificial elevation */}
@@ -261,28 +269,44 @@ export default function LoginPage() {
           </form>
 
           {/* Links */}
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'center',
-              gap: 16,
-              marginTop: 20,
-              fontSize: 13,
-            }}
-          >
+          <div style={{ textAlign: 'center', marginTop: 20 }}>
             <Link
               href="/forgot-password"
-              style={{ color: 'var(--nia-violet)', textDecoration: 'none' }}
+              style={{ color: 'var(--text-tertiary)', textDecoration: 'none', fontSize: 13 }}
             >
               Forgot password?
             </Link>
-            <Link
-              href="/signup"
-              style={{ color: 'var(--nia-violet)', textDecoration: 'none' }}
-            >
-              Create account
-            </Link>
           </div>
+        </div>
+
+        {/* New user CTA — separate, more visible than a small text link */}
+        <div
+          style={{
+            marginTop: 16,
+            padding: '14px 16px',
+            borderRadius: 14,
+            border: '1px dashed var(--border)',
+            textAlign: 'center',
+          }}
+        >
+          <p style={{ margin: '0 0 8px', fontSize: 13, color: 'var(--text-tertiary)' }}>
+            New to Nia?
+          </p>
+          <Link
+            href="/signup"
+            style={{
+              display: 'inline-block',
+              padding: '9px 20px',
+              borderRadius: 10,
+              background: 'var(--grad-brand)',
+              color: '#fff',
+              fontWeight: 700,
+              fontSize: 13.5,
+              textDecoration: 'none',
+            }}
+          >
+            Create your account →
+          </Link>
         </div>
       </div>
     </div>

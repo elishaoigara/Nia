@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/client'
 import { getAppUrl } from '@/lib/app-url'
 import Link from 'next/link'
 import { Loader2, ArrowRight, CheckCircle2 } from 'lucide-react'
+import UnityLine from '@/components/UnityLine'
 
 export default function SignupPage() {
   const supabase = createClient()
@@ -61,8 +62,18 @@ export default function SignupPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4 relative overflow-hidden" style={{ background: 'var(--surface-0)' }}>
-      <div className="absolute top-0 right-0 w-64 h-64 rounded-full blur-[120px] opacity-15" style={{ background: 'var(--nia-violet)', transform: 'translate(30%,-30%)' }} />
-      <div className="absolute bottom-0 left-0 w-64 h-64 rounded-full blur-[120px] opacity-15" style={{ background: 'var(--nia-violet)', transform: 'translate(-30%,30%)' }} />
+      <div
+        style={{
+          position: 'absolute', inset: 0, pointerEvents: 'none', opacity: 0.06,
+          backgroundImage: `repeating-linear-gradient(115deg,
+            #5B21B6 0px, #5B21B6 40px,
+            #0F6E56 40px, #0F6E56 80px,
+            #BA7517 80px, #BA7517 120px,
+            #993C1D 120px, #993C1D 160px,
+            #7C3AED 160px, #7C3AED 200px
+          )`,
+        }}
+      />
 
       <div className="w-full max-w-sm space-y-8 relative z-10">
         <div className="text-center space-y-3">
@@ -78,6 +89,7 @@ export default function SignupPage() {
             <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>
               Africa connects here
             </p>
+            <UnityLine />
           </div>
         </div>
 

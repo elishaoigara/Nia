@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { getAppUrl } from '@/lib/app-url';
+import UnityLine from '@/components/UnityLine';
 
 export default function ForgotPasswordPage() {
   const supabase = createClient();
@@ -47,14 +48,19 @@ export default function ForgotPasswordPage() {
         overflow: 'hidden',
       }}
     >
-      {/* Faint diagonal line pattern — matches login page */}
       <div
         style={{
           position: 'absolute',
           inset: 0,
           pointerEvents: 'none',
-          backgroundImage:
-            'repeating-linear-gradient(45deg, color-mix(in srgb, var(--nia-violet) 7%, transparent) 0px, color-mix(in srgb, var(--nia-violet) 7%, transparent) 1px, transparent 1px, transparent 34px)',
+          opacity: 0.06,
+          backgroundImage: `repeating-linear-gradient(115deg,
+            #5B21B6 0px, #5B21B6 40px,
+            #0F6E56 40px, #0F6E56 80px,
+            #BA7517 80px, #BA7517 120px,
+            #993C1D 120px, #993C1D 160px,
+            #7C3AED 160px, #7C3AED 200px
+          )`,
         }}
       />
 
@@ -77,6 +83,7 @@ export default function ForgotPasswordPage() {
           <p style={{ color: 'var(--text-tertiary)', margin: 0, fontSize: 14 }}>
             Reset your password
           </p>
+          <UnityLine />
         </div>
 
         {/* Card */}
