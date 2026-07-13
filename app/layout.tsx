@@ -1,6 +1,7 @@
 import './globals.css'
 import Navbar from '@/components/Navbar'
 import { ThemeProvider } from '@/components/ThemeProvider'
+import SplashScreen from '@/components/SplashScreen'
 
 export const metadata = {
   title: 'Nia — Africa Connects Here',
@@ -27,6 +28,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" suppressHydrationWarning>
       <body className="bg-(--surface-0) text-(--text-primary) antialiased">
         <ThemeProvider>
+          <SplashScreen />
           <Navbar />
           {/*
             page-wrap handles:
