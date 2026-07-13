@@ -74,37 +74,22 @@ export default function LoginPage() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: 'linear-gradient(135deg, #0B1120 0%, #1E293B 100%)',
+        background: 'var(--surface-0)',
         padding: 24,
         position: 'relative',
         overflow: 'hidden',
       }}
     >
-      {/* Animated particles background */}
+      {/* Faint diagonal line pattern — brand texture instead of generic particles */}
       <div
         style={{
           position: 'absolute',
           inset: 0,
-          overflow: 'hidden',
           pointerEvents: 'none',
+          backgroundImage:
+            'repeating-linear-gradient(45deg, color-mix(in srgb, var(--nia-violet) 7%, transparent) 0px, color-mix(in srgb, var(--nia-violet) 7%, transparent) 1px, transparent 1px, transparent 34px)',
         }}
-      >
-        {Array.from({ length: 20 }).map((_, i) => (
-          <div
-            key={i}
-            style={{
-              position: 'absolute',
-              width: 4,
-              height: 4,
-              borderRadius: '50%',
-              background: 'rgba(139, 92, 246, 0.3)',
-              left: `${Math.random() * 100}%`,
-              top: `${Math.random() * 100}%`,
-              animation: `fade-in ${2 + Math.random() * 3}s ease ${Math.random() * 2}s infinite alternate`,
-            }}
-          />
-        ))}
-      </div>
+      />
 
       <div
         style={{
@@ -116,35 +101,36 @@ export default function LoginPage() {
       >
         {/* Logo */}
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
-          <h1
-            style={{
-              fontSize: 36,
-              fontWeight: 800,
-              background: 'linear-gradient(135deg, #8B5CF6, #FF6B6B)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              margin: 0,
-            }}
-          >
-            Nia
-          </h1>
-          <p style={{ color: '#94A3B8', marginTop: 8, fontSize: 14 }}>
-            Welcome back to the African social pulse.
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 10 }}>
+            <img src="/logo/nia-icon.svg" alt="" width={40} height={40} style={{ borderRadius: 12 }} />
+            <h1
+              style={{
+                fontSize: 32,
+                fontWeight: 800,
+                color: 'var(--text-primary)',
+                margin: 0,
+              }}
+            >
+              Nia
+            </h1>
+          </div>
+          <p style={{ color: 'var(--text-tertiary)', margin: 0, fontSize: 14 }}>
+            Africa connects here.
           </p>
         </div>
 
-        {/* Card */}
+        {/* Card — flat, matches app surfaces, no artificial elevation */}
         <div
           style={{
-            background: '#1E293B',
-            border: '1px solid #334155',
+            background: 'var(--surface-1)',
+            border: '1px solid var(--border)',
             borderRadius: 20,
             padding: 32,
           }}
         >
           <h2
             style={{
-              color: '#F1F5F9',
+              color: 'var(--text-primary)',
               fontSize: 20,
               fontWeight: 700,
               margin: '0 0 24px',
@@ -154,11 +140,12 @@ export default function LoginPage() {
             Sign in
           </h2>
 
-          {/* OAuth buttons */}
+          {/* OAuth buttons — kept platform-neutral on purpose */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
             <button
               onClick={handleGoogleLogin}
               disabled={loading}
+              className="tap-sm"
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -167,16 +154,14 @@ export default function LoginPage() {
                 width: '100%',
                 padding: '11px 0',
                 borderRadius: 12,
-                border: '1px solid #334155',
-                background: '#0F172A',
-                color: '#F1F5F9',
+                border: '1px solid var(--border)',
+                background: 'var(--surface-0)',
+                color: 'var(--text-primary)',
                 fontWeight: 600,
                 fontSize: 14,
                 cursor: 'pointer',
-                transition: 'background 0.15s',
+                fontFamily: 'inherit',
               }}
-              onMouseEnter={e => (e.currentTarget.style.background = '#1E293B')}
-              onMouseLeave={e => (e.currentTarget.style.background = '#0F172A')}
             >
               <svg width="18" height="18" viewBox="0 0 24 24">
                 <path
@@ -202,6 +187,7 @@ export default function LoginPage() {
             <button
               onClick={handleFacebookLogin}
               disabled={loading}
+              className="tap-sm"
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -210,16 +196,14 @@ export default function LoginPage() {
                 width: '100%',
                 padding: '11px 0',
                 borderRadius: 12,
-                border: '1px solid #334155',
-                background: '#0F172A',
-                color: '#F1F5F9',
+                border: '1px solid var(--border)',
+                background: 'var(--surface-0)',
+                color: 'var(--text-primary)',
                 fontWeight: 600,
                 fontSize: 14,
                 cursor: 'pointer',
-                transition: 'background 0.15s',
+                fontFamily: 'inherit',
               }}
-              onMouseEnter={e => (e.currentTarget.style.background = '#1E293B')}
-              onMouseLeave={e => (e.currentTarget.style.background = '#0F172A')}
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="#1877F2">
                 <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
@@ -237,25 +221,24 @@ export default function LoginPage() {
               marginBottom: 20,
             }}
           >
-            <div style={{ flex: 1, height: 1, background: '#334155' }} />
-            <span style={{ color: '#64748B', fontSize: 13 }}>or</span>
-            <div style={{ flex: 1, height: 1, background: '#334155' }} />
+            <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+            <span style={{ color: 'var(--text-tertiary)', fontSize: 13 }}>or</span>
+            <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
           </div>
 
           {/* Email form */}
           <form onSubmit={handleEmailLogin}>
             <div style={{ marginBottom: 14 }}>
               <input
-                className="input"
                 type="email"
                 placeholder="Email"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
                 required
                 style={{
-                  background: '#0F172A',
-                  border: '1px solid #334155',
-                  color: '#F1F5F9',
+                  background: 'var(--surface-0)',
+                  border: '1px solid var(--border)',
+                  color: 'var(--text-primary)',
                   width: '100%',
                   padding: '12px 16px',
                   borderRadius: 12,
@@ -267,16 +250,15 @@ export default function LoginPage() {
             </div>
             <div style={{ marginBottom: 20 }}>
               <input
-                className="input"
                 type="password"
                 placeholder="Password"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 required
                 style={{
-                  background: '#0F172A',
-                  border: '1px solid #334155',
-                  color: '#F1F5F9',
+                  background: 'var(--surface-0)',
+                  border: '1px solid var(--border)',
+                  color: 'var(--text-primary)',
                   width: '100%',
                   padding: '12px 16px',
                   borderRadius: 12,
@@ -290,7 +272,7 @@ export default function LoginPage() {
             {error && (
               <p
                 style={{
-                  color: '#FF6B6B',
+                  color: 'var(--nia-coral)',
                   fontSize: 13,
                   margin: '0 0 12px',
                   textAlign: 'center',
@@ -303,18 +285,19 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
+              className="tap-sm"
               style={{
                 width: '100%',
                 padding: '12px 0',
                 borderRadius: 12,
                 border: 'none',
-                background: 'linear-gradient(135deg, #8B5CF6, #FF6B6B)',
+                background: 'var(--grad-brand)',
                 color: '#fff',
                 fontWeight: 700,
                 fontSize: 15,
                 cursor: 'pointer',
                 opacity: loading ? 0.6 : 1,
-                transition: 'opacity 0.15s',
+                fontFamily: 'inherit',
               }}
             >
               {loading ? 'Signing in…' : 'Sign in'}
@@ -333,13 +316,13 @@ export default function LoginPage() {
           >
             <Link
               href="/forgot-password"
-              style={{ color: '#8B5CF6', textDecoration: 'none' }}
+              style={{ color: 'var(--nia-violet)', textDecoration: 'none' }}
             >
               Forgot password?
             </Link>
             <Link
               href="/signup"
-              style={{ color: '#8B5CF6', textDecoration: 'none' }}
+              style={{ color: 'var(--nia-violet)', textDecoration: 'none' }}
             >
               Create account
             </Link>
