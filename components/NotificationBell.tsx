@@ -71,7 +71,7 @@ export default function NotificationBell({ userId }: NotificationBellProps) {
     <Link
       href="/notifications"
       className="relative w-10 h-10 flex items-center justify-center rounded-xl transition-all duration-150 tap-sm active:scale-90 select-none bg-(--surface-2)"
-      style={hasUnread ? { background: 'linear-gradient(135deg, rgba(255,107,107,0.1), rgba(168,85,247,0.1))' } : {}}
+      style={hasUnread ? { background: 'color-mix(in srgb, var(--nia-violet) 10%, transparent)' } : {}}
       aria-label={`${count} unread notification${count !== 1 ? 's' : ''}`}
     >
       <Bell
