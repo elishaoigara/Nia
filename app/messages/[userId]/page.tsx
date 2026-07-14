@@ -6,7 +6,7 @@ import { useParams, useRouter } from 'next/navigation'
 import {
   Send, ArrowLeft, ImagePlus, Mic, Video, Sticker,
   X, Loader2, MoreVertical, EyeOff, Eye, ShieldOff, Shield, Flag,
-  Check, Plus,
+  Check, Plus, File as FileIcon, ChevronDown,
 } from 'lucide-react'
 import Link from 'next/link'
 import MessageBubble, { ChatMessage } from '@/components/messages/MessageBubble'
@@ -29,11 +29,31 @@ type PendingMedia = {
   file: File
   url: string
   detectedType: string
-  displayType: 'image' | 'video'
+  displayType: 'image' | 'video' | 'file'
 }
 
 function formatDuration(s: number) {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+}
+
+// "Today" / "Yesterday" / "20 May" / "20 May 2025" — used for the date
+// dividers inserted between messages sent on different calendar days, so
+// a gap of days/weeks/months reads as a marked pause rather than as
+// unexplained empty space.
+function formatDayLabel(dateStr: string): string {
+  const d = new Date(dateStr)
+  const now = new Date()
+  const startOf = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime()
+  const diffDays = Math.round((startOf(now) - startOf(d)) / 86400000)
+  if (diffDays === 0) return 'Today'
+  if (diffDays === 1) return 'Yesterday'
+  const sameYear = d.getFullYear() === now.getFullYear()
+  return d.toLocaleDateString('en-GB', sameYear ? { day: 'numeric', month: 'long' } : { day: 'numeric', month: 'long', year: 'numeric' })
+}
+
+function isSameDay(a: string, b: string): boolean {
+  const da = new Date(a), db = new Date(b)
+  return da.getFullYear() === db.getFullYear() && da.getMonth() === db.getMonth() && da.getDate() === db.getDate()
 }
 
 function presenceLabel(online: boolean, lastSeen: string | null | undefined) {
@@ -95,11 +115,18 @@ export default function DirectMessagePage() {
   const [onlineOther, setOnlineOther] = useState(false)
   const [pendingRequest, setPendingRequest] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
+  const [showScrollDown, setShowScrollDown] = useState(false)
+
+  // First unread incoming message, captured once at load — used to render a
+  // single "New messages" divider. Stays fixed even after the 1.5s auto
+  // mark-as-read flips is_read locally, so the divider doesn't vanish mid-view.
+  const unreadDividerIdRef = useRef<string | null>(null)
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const videoRef = useRef<HTMLInputElement>(null)
+  const fileDocRef = useRef<HTMLInputElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const mrRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
@@ -141,6 +168,8 @@ export default function DirectMessagePage() {
       if (cancelled) return
 
       const ordered = ((msgs as any[]) ?? []).map(normalizeMsg).reverse()
+      const firstUnread = ordered.find(m => !m.is_read && m.sender_id === recipientId)
+      unreadDividerIdRef.current = firstUnread?.id ?? null
       setRecipient(profile as Profile)
       setMessages(ordered)
       setHasMore(ordered.length === PAGE_SIZE)
@@ -252,8 +281,16 @@ export default function DirectMessagePage() {
   function handleScroll() {
     const el = scrollRef.current
     if (!el) return
-    stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120
+    stickToBottom.current = nearBottom
+    setShowScrollDown(!nearBottom && el.scrollHeight - el.scrollTop - el.clientHeight > 400)
     if (el.scrollTop < 60) loadOlder()
+  }
+
+  function scrollToBottomNow() {
+    stickToBottom.current = true
+    setShowScrollDown(false)
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }
 
   const loadOlder = useCallback(async () => {
@@ -338,10 +375,10 @@ export default function DirectMessagePage() {
     return () => { cancelled = true }
   }, [messages]) // eslint-disable-line
 
-  async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>, type: 'image' | 'video') {
+  async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>, type: 'image' | 'video' | 'file') {
     const file = e.target.files?.[0]
     if (!file || !currentUserId || !recipientId) return
-    const detectedType = file.type === 'image/gif' ? 'gif' : type
+    const detectedType = type === 'file' ? 'file' : (file.type === 'image/gif' ? 'gif' : type)
     const previewUrl = URL.createObjectURL(file)
     setPendingMedia({ file, url: previewUrl, detectedType, displayType: type })
     setMediaCaption('')
@@ -349,7 +386,7 @@ export default function DirectMessagePage() {
   }
 
   function cancelPendingMedia() {
-    if (pendingMedia) URL.revokeObjectURL(pendingMedia.url)
+    if (pendingMedia && pendingMedia.url) URL.revokeObjectURL(pendingMedia.url)
     setPendingMedia(null)
     setMediaCaption('')
   }
@@ -358,7 +395,7 @@ export default function DirectMessagePage() {
     if (!pendingMedia || !currentUserId || !recipientId) return
     const { file, url: previewUrl, detectedType } = pendingMedia
     const tempId = `temp-${Date.now()}`
-    const viewOnce = pendingViewOnce
+    const viewOnce = pendingMedia.displayType === 'file' ? false : pendingViewOnce
     const replyToId = replyTo?.id ?? null
     const caption = mediaCaption.trim() || null
 
@@ -698,27 +735,48 @@ export default function DirectMessagePage() {
             next.sender_id === msg.sender_id &&
             new Date(next.created_at).getTime() - new Date(msg.created_at).getTime() < GROUP_WINDOW_MS
 
+          const showDateDivider = !prev || !isSameDay(prev.created_at, msg.created_at)
+          const showUnreadDivider = unreadDividerIdRef.current === msg.id
+
           return (
-          <MessageBubble
-            key={msg.id}
-            msg={msg}
-            isOwn={msg.sender_id === currentUserId}
-            currentUserId={currentUserId}
-            recipient={recipient}
-            replyMsg={messages.find(m => m.id === msg.reply_to)}
-            isViewOnceRevealed={revealedMedia.has(msg.id)}
-            onRevealViewOnce={revealViewOnce}
-            isGroupedWithPrev={groupedWithPrev}
-            isGroupedWithNext={groupedWithNext}
-            playingAudio={playingAudio}
-            audioProgress={audioProgress[msg.id] ?? 0}
-            audioDuration={audioDurations[msg.id] ?? 0}
-            onToggleAudio={toggleAudio}
-            onSeekAudio={seekAudio}
-            onSwipeReply={setReplyTo}
-            onLongPress={setActionSheetMsg}
-            onDoubleTapReact={() => reactToMessage(msg, '❤️')}
-          />
+          <div key={msg.id}>
+            {showDateDivider && (
+              <div style={{ display: 'flex', justifyContent: 'center', margin: '14px 0' }}>
+                <span style={{
+                  fontSize: 11.5, fontWeight: 700, color: 'var(--text-tertiary)',
+                  background: 'var(--surface-1)', padding: '4px 12px', borderRadius: 12,
+                }}>
+                  {formatDayLabel(msg.created_at)}
+                </span>
+              </div>
+            )}
+            {showUnreadDivider && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '6px 0 14px' }}>
+                <div style={{ flex: 1, height: 1, background: 'var(--nia-coral)', opacity: 0.35 }} />
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--nia-coral)' }}>New messages</span>
+                <div style={{ flex: 1, height: 1, background: 'var(--nia-coral)', opacity: 0.35 }} />
+              </div>
+            )}
+            <MessageBubble
+              msg={msg}
+              isOwn={msg.sender_id === currentUserId}
+              currentUserId={currentUserId}
+              recipient={recipient}
+              replyMsg={messages.find(m => m.id === msg.reply_to)}
+              isViewOnceRevealed={revealedMedia.has(msg.id)}
+              onRevealViewOnce={revealViewOnce}
+              isGroupedWithPrev={groupedWithPrev}
+              isGroupedWithNext={groupedWithNext}
+              playingAudio={playingAudio}
+              audioProgress={audioProgress[msg.id] ?? 0}
+              audioDuration={audioDurations[msg.id] ?? 0}
+              onToggleAudio={toggleAudio}
+              onSeekAudio={seekAudio}
+              onSwipeReply={setReplyTo}
+              onLongPress={setActionSheetMsg}
+              onDoubleTapReact={() => reactToMessage(msg, '❤️')}
+            />
+          </div>
           )
         })}
         {typingOther && (
@@ -737,6 +795,23 @@ export default function DirectMessagePage() {
         )}
         <div ref={bottomRef} />
       </div>
+
+      {showScrollDown && (
+        <button
+          onClick={scrollToBottomNow}
+          className="tap-sm"
+          style={{
+            position: 'absolute', bottom: 84, right: 16, zIndex: 30,
+            width: 36, height: 36, borderRadius: '50%', border: '1px solid var(--border)',
+            background: 'var(--surface-1)', color: 'var(--text-secondary)', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: '0 2px 10px rgba(0,0,0,0.15)',
+          }}
+          aria-label="Scroll to latest messages"
+        >
+          <ChevronDown size={18} />
+        </button>
+      )}
 
       {/* TOAST */}
       {toast && (
@@ -786,6 +861,7 @@ export default function DirectMessagePage() {
                   { icon: ImagePlus, label: 'Photo', onClick: () => { setShowAttachTray(false); fileRef.current?.click() } },
                   { icon: Video, label: 'Video', onClick: () => { setShowAttachTray(false); videoRef.current?.click() } },
                   { icon: Sticker, label: 'GIF', onClick: () => { setShowAttachTray(false); setShowGifPicker(true) } },
+                  { icon: FileIcon, label: 'File', onClick: () => { setShowAttachTray(false); fileDocRef.current?.click() } },
                   { icon: pendingViewOnce ? Eye : EyeOff, label: 'Once', onClick: () => { setPendingViewOnce(v => !v); setShowAttachTray(false) }, active: pendingViewOnce },
                 ].map(({ icon: Icon, label, onClick, active }) => (
                   <button
@@ -857,6 +933,7 @@ export default function DirectMessagePage() {
 
         <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={e => handleFileSelect(e, 'image')} />
         <input ref={videoRef} type="file" accept="video/*" style={{ display: 'none' }} onChange={e => handleFileSelect(e, 'video')} />
+        <input ref={fileDocRef} type="file" style={{ display: 'none' }} onChange={e => handleFileSelect(e, 'file')} />
       </div>
 
       {actionSheetMsg && (
@@ -885,21 +962,35 @@ export default function DirectMessagePage() {
               <X size={17} />
             </button>
             <span style={{ color: '#fff', fontSize: 13, fontWeight: 700 }}>
-              {pendingMedia.displayType === 'video' ? 'Send video' : 'Send photo'}
+              {pendingMedia.displayType === 'video' ? 'Send video' : pendingMedia.displayType === 'file' ? 'Send file' : 'Send photo'}
             </span>
-            <button
-              onClick={() => setPendingViewOnce(v => !v)}
-              className="tap-sm"
-              style={{ width: 36, height: 36, borderRadius: 10, border: 'none', background: pendingViewOnce ? 'var(--nia-violet)' : 'rgba(255,255,255,0.12)', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-            >
-              {pendingViewOnce ? <Eye size={16} /> : <EyeOff size={16} />}
-            </button>
+            {pendingMedia.displayType !== 'file' && (
+              <button
+                onClick={() => setPendingViewOnce(v => !v)}
+                className="tap-sm"
+                style={{ width: 36, height: 36, borderRadius: 10, border: 'none', background: pendingViewOnce ? 'var(--nia-violet)' : 'rgba(255,255,255,0.12)', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >
+                {pendingViewOnce ? <Eye size={16} /> : <EyeOff size={16} />}
+              </button>
+            )}
+            {pendingMedia.displayType === 'file' && <div style={{ width: 36 }} />}
           </div>
 
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', padding: '0 14px', minHeight: 0 }}>
-            {pendingMedia.displayType === 'video'
-              ? <video src={pendingMedia.url} controls style={{ maxWidth: '100%', maxHeight: '100%', borderRadius: 12 }} />
-              : <img src={pendingMedia.url} alt="" style={{ maxWidth: '100%', maxHeight: '100%', borderRadius: 12, objectFit: 'contain' }} />}
+            {pendingMedia.displayType === 'video' ? (
+              <video src={pendingMedia.url} controls style={{ maxWidth: '100%', maxHeight: '100%', borderRadius: 12 }} />
+            ) : pendingMedia.displayType === 'file' ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 20px', borderRadius: 14, background: 'rgba(255,255,255,0.08)', maxWidth: '100%' }}>
+                <div style={{ width: 44, height: 44, borderRadius: 12, flexShrink: 0, background: 'rgba(255,255,255,0.14)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <FileIcon size={20} color="#fff" />
+                </div>
+                <p style={{ color: '#fff', fontSize: 14, fontWeight: 600, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 220 }}>
+                  {pendingMedia.file.name}
+                </p>
+              </div>
+            ) : (
+              <img src={pendingMedia.url} alt="" style={{ maxWidth: '100%', maxHeight: '100%', borderRadius: 12, objectFit: 'contain' }} />
+            )}
           </div>
 
           <div style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, paddingBottom: 'calc(10px + env(safe-area-inset-bottom, 0px))' }}>
