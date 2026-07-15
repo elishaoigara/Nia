@@ -1578,3 +1578,14 @@ body {
   from { opacity: 0; }
   to { opacity: 0.85; }
 }
+.reply-bar-fixed {
+  left: 0;
+  right: 0;
+  max-width: 620px;
+  margin: 0 auto;
+}
+@media (min-width: 640px) {
+  .reply-bar-fixed {
+    left: var(--sidebar-w);
+  }
+}

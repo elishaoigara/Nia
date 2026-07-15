@@ -215,14 +215,10 @@ export default function ReplyBar({ postId, currentUserId, postOwnerId, currentUs
 
   return (
     <div
-      className="reply-bar"
+      className="reply-bar reply-bar-fixed"
       style={{
         position: 'fixed',
         bottom: 'var(--nav-bottom)',
-        left: 0,
-        right: 0,
-        maxWidth: 620,
-        margin: '0 auto',
         zIndex: 40,
       }}
     >
