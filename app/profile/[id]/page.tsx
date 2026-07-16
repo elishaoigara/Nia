@@ -343,9 +343,6 @@ export default function ProfilePage() {
     ? `url(${profile.banner_url}) center/cover no-repeat`
     : `url("${skylineUri}") center/cover no-repeat`
 
-  // Gradient ring colors per country hue
-  const hue = ((profile.country?.charCodeAt(0) ?? 75) * 23 + (profile.username?.charCodeAt(0) ?? 65) * 7) % 360
-  const ringGradient = `conic-gradient(from 0deg, hsl(${hue},80%,55%), hsl(${(hue+90)%360},70%,65%), hsl(${(hue+180)%360},75%,55%), hsl(${hue},80%,55%))`
 
   return (
     <div style={{ maxWidth: 640, margin: '0 auto', minHeight: '100vh' }}>
@@ -417,34 +414,27 @@ export default function ProfilePage() {
           }} />
         </div>
 
-        {/* ── Avatar with gradient ring + country badge ── */}
+        {/* ── Avatar ── */}
         <div style={{
           position: 'absolute', bottom: -44, left: '50%',
           transform: 'translateX(-50%)',
           display: 'flex', flexDirection: 'column', alignItems: 'center',
           zIndex: 2,
         }}>
-          {/* Gradient ring */}
           <div style={{
             width: 108, height: 108, borderRadius: '50%',
-            padding: 3,
-            background: ringGradient,
+            overflow: 'hidden',
+            background: 'var(--grad-brand)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: '#fff', fontWeight: 800, fontSize: 32,
+            border: '3px solid var(--surface-0)',
             boxShadow: '0 8px 32px rgba(0,0,0,0.25)',
             position: 'relative',
           }}>
-            <div style={{
-              width: '100%', height: '100%', borderRadius: '50%',
-              background: 'var(--grad-brand)',
-              overflow: 'hidden',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: '#fff', fontWeight: 800, fontSize: 32,
-              border: '3px solid var(--surface-0)',
-            }}>
-              {profile.avatar_url
-                ? <img src={profile.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                : initials
-              }
-            </div>
+            {profile.avatar_url
+              ? <img src={profile.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              : initials
+            }
             {/* Country badge */}
             {countryFlag && (
               <div style={{
