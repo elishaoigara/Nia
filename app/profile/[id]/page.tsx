@@ -245,6 +245,28 @@ export default function ProfilePage() {
   const [followingCount, setFollowingCount] = useState(0)
   const [isFollowing,    setIsFollowing]    = useState(false)
   const [postCount,      setPostCount]      = useState(0)
+  const [hasActiveStory, setHasActiveStory] = useState(false)
+  const [storyUnseen,    setStoryUnseen]    = useState(false)
+
+  useEffect(() => {
+    if (!id || !currentUserId) return
+    let cancelled = false
+    supabase.from('stories').select('id')
+      .eq('user_id', id)
+      .gte('expires_at', new Date().toISOString())
+      .then(async ({ data: stories }) => {
+        if (cancelled) return
+        if (!stories || stories.length === 0) { setHasActiveStory(false); return }
+        setHasActiveStory(true)
+        const { data: views } = await supabase
+          .from('story_views').select('story_id').eq('viewer_id', currentUserId)
+          .in('story_id', stories.map((s: any) => s.id))
+        if (cancelled) return
+        const viewedCount = (views ?? []).length
+        setStoryUnseen(viewedCount < stories.length)
+      })
+    return () => { cancelled = true }
+  }, [id, currentUserId]) // eslint-disable-line
 
   const isOwner = currentUserId === id
 
@@ -423,18 +445,26 @@ export default function ProfilePage() {
         }}>
           <div style={{
             width: 108, height: 108, borderRadius: '50%',
-            overflow: 'hidden',
-            background: 'var(--grad-brand)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: '#fff', fontWeight: 800, fontSize: 32,
-            border: '3px solid var(--surface-0)',
+            padding: hasActiveStory ? 3 : 0,
+            background: hasActiveStory
+              ? (storyUnseen ? 'var(--grad-brand)' : 'var(--surface-3)')
+              : 'transparent',
             boxShadow: '0 8px 32px rgba(0,0,0,0.25)',
             position: 'relative',
           }}>
-            {profile.avatar_url
-              ? <img src={profile.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-              : initials
-            }
+            <div style={{
+              width: '100%', height: '100%', borderRadius: '50%',
+              overflow: 'hidden',
+              background: 'var(--grad-brand)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: '#fff', fontWeight: 800, fontSize: 32,
+              border: hasActiveStory ? '3px solid var(--surface-0)' : 'none',
+            }}>
+              {profile.avatar_url
+                ? <img src={profile.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                : initials
+              }
+            </div>
             {/* Country badge */}
             {countryFlag && (
               <div style={{
