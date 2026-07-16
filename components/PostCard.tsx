@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { createClient as createClientLocal } from '@/lib/supabase/client';
+import { getStoryRingData } from '@/lib/activeStories';
 import MediaLightbox from './MediaLightbox';
 import FollowButton from './FollowButton';
 import { getFlag } from '@/lib/african-data';
@@ -195,6 +196,24 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
   const profile = post.profiles;
   const circle  = post.circles;
 
+  // Story ring — only shown if this author has a currently-active story,
+  // styled differently depending on whether the viewer has already seen it.
+  // Uses the shared cache so a whole feed of PostCards costs one lookup,
+  // not one query per card.
+  const [hasActiveStory, setHasActiveStory] = useState(false);
+  const [storyUnseen,    setStoryUnseen]    = useState(false);
+
+  useEffect(() => {
+    if (!profile?.id) return;
+    let cancelled = false;
+    getStoryRingData(currentUserId ?? null).then(({ active, unseen }) => {
+      if (cancelled) return;
+      setHasActiveStory(active.has(profile.id));
+      setStoryUnseen(unseen.has(profile.id));
+    });
+    return () => { cancelled = true };
+  }, [profile?.id, currentUserId]);
+
   const allMedia: PostMedia[] = [];
   if (post.media_url && post.media_type) {
     allMedia.push({ url: post.media_url, type: post.media_type as 'image' | 'video' });
@@ -343,7 +362,11 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
       >
         {/* ── Left column ── */}
         <div className="post-left">
-          <Link href={`/profile/${profile?.id ?? '#'}`} onClick={e => e.stopPropagation()} className="post-avatar">
+          <Link
+            href={`/profile/${profile?.id ?? '#'}`}
+            onClick={e => e.stopPropagation()}
+            className={`post-avatar${hasActiveStory ? (storyUnseen ? ' post-ring-unseen' : ' post-ring-seen') : ''}`}
+          >
             {profile?.avatar_url
               ? <img src={profile.avatar_url} alt={profile.username ?? ''} />
               : <div className="post-avatar-inner">{initials}</div>

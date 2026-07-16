@@ -120,19 +120,16 @@ body {
   flex-shrink: 0;
 }
 
-/* Avatar — gradient ring */
+/* Avatar — plain by default; a ring is only added via .post-ring-unseen /
+   .post-ring-seen when the author actually has an active story. */
 .post-avatar {
-  width: var(--post-avatar);      /* 40px */
+  width: var(--post-avatar);
   height: var(--post-avatar);
   border-radius: 50%;
   overflow: hidden;
   flex-shrink: 0;
   position: relative;
-  box-shadow: 0 0 0 2px var(--surface-0), 0 0 0 3px var(--nia-accent-soft);
-  transition: box-shadow 0.2s;
-  background: var(--grad-brand);
-  padding: 2px;
-  transition: opacity 0.15s;
+  transition: opacity 0.15s, box-shadow 0.2s;
 }
 .post-avatar:hover { opacity: 0.88; }
 .post-avatar img,
@@ -148,6 +145,20 @@ body {
   color: #fff;
   font-weight: 700;
   font-size: 15px;
+}
+
+/* Unseen story — violet ring, matches the brand gradient */
+.post-ring-unseen {
+  box-shadow: 0 0 0 2px var(--surface-0), 0 0 0 3px var(--nia-accent-soft);
+  padding: 2px;
+  background: var(--grad-brand);
+}
+
+/* Already-seen story — muted ring, same convention as Instagram/WhatsApp */
+.post-ring-seen {
+  box-shadow: 0 0 0 2px var(--surface-0), 0 0 0 3px var(--surface-3);
+  padding: 2px;
+  background: var(--surface-3);
 }
 
 /* Thread line */
