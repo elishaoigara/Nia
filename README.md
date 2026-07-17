@@ -194,4 +194,5 @@ app-wide, not just in messaging:
   (schema, realtime wiring, UX constants, roadmap)
 
 If you build out a similarly complex area (Flicks, Circles), add a README next to it and link it
-here rather than growing this file indefinitely.
+here rather than growing this file indefinitely.#   N o v e l t y s c h o l a r s  
+ 
