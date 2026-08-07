@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Send, Loader2, ImagePlus, Video, X, Play } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import type { GifApiResult } from '@/types/domain'
 
 interface ReplyBarProps {
   postId:        string
@@ -57,11 +58,6 @@ export default function ReplyBar({ postId, currentUserId, postOwnerId, currentUs
 
   useEffect(() => {
     if (!showGifs) return
-    searchGifs(gifQuery)
-  }, [showGifs, gifQuery]) // eslint-disable-line
-
-  useEffect(() => {
-    if (!showGifs) return
     function handle(e: MouseEvent) {
       if (gifPanelRef.current && !gifPanelRef.current.contains(e.target as Node)) {
         setShowGifs(false)
@@ -71,7 +67,7 @@ export default function ReplyBar({ postId, currentUserId, postOwnerId, currentUs
     return () => document.removeEventListener('mousedown', handle)
   }, [showGifs])
 
-  async function searchGifs(q: string) {
+  const searchGifs = useCallback(async (q: string) => {
     setGifLoading(true)
     try {
       const url = q
@@ -79,18 +75,24 @@ export default function ReplyBar({ postId, currentUserId, postOwnerId, currentUs
         : `https://tenor.googleapis.com/v2/featured?key=${TENOR_KEY}&limit=12&media_filter=gif,tinygif`
       const res = await fetch(url)
       if (!res.ok) { setGifResults(FALLBACK_GIFS); return }
-      const json = await res.json()
-      const results: GifResult[] = (json.results ?? []).map((r: any) => ({
-        url:     r.media_formats?.gif?.url     ?? r.media_formats?.tinygif?.url ?? '',
-        preview: r.media_formats?.tinygif?.url ?? r.media_formats?.gif?.url     ?? '',
-      })).filter((r: GifResult) => r.url)
+      const json = await res.json() as { results?: GifApiResult[] }
+      const results: GifResult[] = (json.results ?? []).map(result => ({
+        url: result.media_formats?.gif?.url ?? result.media_formats?.tinygif?.url ?? '',
+        preview: result.media_formats?.tinygif?.url ?? result.media_formats?.gif?.url ?? '',
+      })).filter(result => result.url)
       setGifResults(results.length ? results : FALLBACK_GIFS)
     } catch {
       setGifResults(FALLBACK_GIFS)
     } finally {
       setGifLoading(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    if (!showGifs) return
+    const timer = window.setTimeout(() => void searchGifs(gifQuery), 200)
+    return () => window.clearTimeout(timer)
+  }, [showGifs, gifQuery, searchGifs])
 
   function pickGif(gif: GifResult) {
     setMedia(prev => [

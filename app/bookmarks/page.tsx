@@ -4,6 +4,7 @@ import PostCard from '@/components/PostCard'
 import { Bookmark } from 'lucide-react'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
+import type { Post } from '@/types/domain'
 
 export default async function BookmarksPage() {
   const supabase = await createClient()
@@ -27,9 +28,10 @@ export default async function BookmarksPage() {
     .eq('user_id', user.id)
     .order('created_at', { ascending: false })
 
-  const posts = (bookmarks ?? [])
-    .map((b: any) => b.posts)
-    .filter(Boolean)
+  const bookmarkRows = (bookmarks ?? []) as unknown as { posts: Post | null }[]
+  const posts = bookmarkRows
+    .map(bookmark => bookmark.posts)
+    .filter((post): post is Post => post !== null)
 
   return (
     <div style={{ maxWidth: 620, margin: '0 auto', minHeight: '100vh' }}>
@@ -69,7 +71,7 @@ export default async function BookmarksPage() {
           </p>
         </div>
       ) : (
-        posts.map((post: any) => (
+        posts.map(post => (
           <PostCard key={post.id} post={post} currentUserId={user.id} />
         ))
       )}

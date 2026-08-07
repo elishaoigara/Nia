@@ -11,6 +11,9 @@ import { Suspense }       from 'react'
 import { scorePosts }     from '@/lib/feed-scorer'
 import { scoreFlicks }    from '@/lib/flicks-scorer'
 import type { UserContext, ScorerPost } from '@/lib/feed-scorer'
+import type { HomeCircle, HomeFlick } from '@/components/HomeRail'
+import type { BlockRow, FollowRow, MuteRow } from '@/types/domain'
+import { hoursAgoIso } from '@/lib/date'
 
 const PAGE_SIZE      = 15
 const POOL_MULTIPLIER = 6
@@ -35,16 +38,18 @@ export default async function FeedPage({
   searchParams: Promise<{ page?: string; tab?: string }>
 }) {
   const { page, tab } = await searchParams
-  const currentPage = parseInt(page ?? '1')
-  const currentTab  = tab ?? 'africa'
-  const offset      = (currentPage - 1) * PAGE_SIZE
+  const parsedPage = Number.parseInt(page ?? '1', 10)
+  const currentPage = Number.isFinite(parsedPage) ? Math.min(Math.max(parsedPage, 1), 100) : 1
+  const currentTab = tab === 'local' || tab === 'following' ? tab : 'africa'
+  const offset = (currentPage - 1) * PAGE_SIZE
 
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: profileCheck } = await supabase
-    .from('profiles').select('id').eq('id', user.id).single()
+  const { data: profileCheck, error: profileCheckError } = await supabase
+    .from('profiles').select('id').eq('id', user.id).maybeSingle()
+  if (profileCheckError) throw profileCheckError
   if (!profileCheck) redirect('/onboarding')
 
   const [profileRes, followsRes, blocksRes, mutesRes] = await Promise.all([
@@ -54,12 +59,15 @@ export default async function FeedPage({
     supabase.from('mutes').select('muted_id').eq('muter_id', user.id),
   ])
 
+  const contextError = profileRes.error ?? followsRes.error ?? blocksRes.error ?? mutesRes.error
+  if (contextError) throw contextError
+
   const myProfile = profileRes.data
   const ctx: UserContext = {
     userId:       user.id,
-    followingIds: new Set(((followsRes.data ?? []) as any[]).map((f: any) => f.following_id)),
-    blockedIds:   new Set(((blocksRes.data  ?? []) as any[]).map((b: any) => b.blocked_id)),
-    mutedIds:     new Set(((mutesRes.data   ?? []) as any[]).map((m: any) => m.muted_id)),
+    followingIds: new Set(((followsRes.data as FollowRow[] | null) ?? []).map(f => f.following_id)),
+    blockedIds: new Set(((blocksRes.data as BlockRow[] | null) ?? []).map(b => b.blocked_id)),
+    mutedIds: new Set(((mutesRes.data as MuteRow[] | null) ?? []).map(m => m.muted_id)),
     country:      myProfile?.country  ?? null,
     language:     myProfile?.language ?? null,
   }
@@ -70,8 +78,8 @@ export default async function FeedPage({
   // "Your Circles" + "Trending Flicks" for the combined home rail. Both are
   // independent of the feed tab, so they run once alongside (not blocking)
   // the tab-specific candidates query below.
-  const trendingSince = new Date(Date.now() - TRENDING_WINDOW_HOURS * 3600_000).toISOString()
-  const [{ data: myCircleRows }, { data: trendingRows }] = await Promise.all([
+  const trendingSince = hoursAgoIso(TRENDING_WINDOW_HOURS)
+  const [circleResponse, trendingResponse] = await Promise.all([
     supabase.from('circle_members')
       .select('circles:circle_id (id, name, slug, category)')
       .eq('user_id', user.id)
@@ -90,43 +98,55 @@ export default async function FeedPage({
       .order('created_at', { ascending: false })
       .limit(60),
   ])
-  const myCircles = ((myCircleRows as any[]) ?? []).map(r => r.circles).filter(Boolean)
-  const trendingFlicks = scoreFlicks((trendingRows as any[]) ?? [], ctx).slice(0, TRENDING_FLICKS_LIMIT)
+  const railError = circleResponse.error ?? trendingResponse.error
+  if (railError) throw railError
+  const circleRows = (circleResponse.data ?? []) as unknown as { circles: HomeCircle | null }[]
+  const myCircles = circleRows
+    .map(row => row.circles)
+    .filter((circle): circle is HomeCircle => circle !== null)
+  const trendingFlicks = scoreFlicks(
+    (trendingResponse.data ?? []) as unknown as ScorerPost[],
+    ctx,
+  ).slice(0, TRENDING_FLICKS_LIMIT) as HomeFlick[]
 
   if (currentTab === 'following') {
     if (ctx.followingIds.size > 0) {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('posts').select(BASE_SELECT)
         .in('user_id', [...ctx.followingIds])
         .order('created_at', { ascending: false })
         .limit(candidatePool)
-      candidates = (data ?? []) as ScorerPost[]
+      if (error) throw error
+      candidates = (data ?? []) as unknown as ScorerPost[]
     }
   } else if (currentTab === 'local' && myProfile?.country) {
-    const { data: countryUsers } = await supabase
+    const { data: countryUsers, error: countryError } = await supabase
       .from('profiles').select('id').eq('country', myProfile.country)
-    const countryIds = (countryUsers ?? []).map((p: any) => p.id)
+    if (countryError) throw countryError
+    const countryIds = ((countryUsers ?? []) as { id: string }[]).map(profile => profile.id)
     if (countryIds.length > 0) {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('posts').select(BASE_SELECT)
         .in('user_id', countryIds)
         .order('created_at', { ascending: false })
         .limit(candidatePool)
-      candidates = (data ?? []) as ScorerPost[]
+      if (error) throw error
+      candidates = (data ?? []) as unknown as ScorerPost[]
     }
   } else {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('posts').select(BASE_SELECT)
       .order('created_at', { ascending: false })
       .limit(candidatePool)
-    candidates = (data ?? []) as ScorerPost[]
+    if (error) throw error
+    candidates = (data ?? []) as unknown as ScorerPost[]
   }
 
   const ranked = scorePosts(candidates, ctx)
   const pageSlice = ranked.slice(offset, offset + PAGE_SIZE)
   const posts = pageSlice.map(p => ({
     ...p,
-    viewer_is_following: ctx.followingIds.has((p as any).user_id),
+    viewer_is_following: ctx.followingIds.has(p.user_id),
   })) as ScorerPost[]
   const hasMore = ranked.length > offset + PAGE_SIZE || candidates.length === candidatePool
 
@@ -146,7 +166,7 @@ export default async function FeedPage({
       <StoriesBar currentUserId={user.id} />
 
       {/* Your Circles / Trending Flicks — one combined rail, not two */}
-      <HomeRail circles={myCircles as any} flicks={trendingFlicks as any} currentUserId={user.id} />
+      <HomeRail circles={myCircles} flicks={trendingFlicks} currentUserId={user.id} />
 
       {/* Feed tabs — sticky under top nav */}
       <Suspense fallback={null}>
@@ -168,16 +188,17 @@ export default async function FeedPage({
       )}
 
       {/* Posts — flat rows, NO wrapping div with margin/padding */}
-      {(posts as ScorerPost[]).map((post: ScorerPost) => (
+      {posts.map(post => (
         <PostCard
           key={post.id}
-          post={post as any}
+          post={post}
           currentUserId={user.id}
         />
       ))}
 
       {hasMore && (
         <LoadMore
+          key={`${currentTab}:${currentPage}`}
           currentPage={currentPage}
           currentTab={currentTab}
           currentUserId={user.id}

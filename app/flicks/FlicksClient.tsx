@@ -10,6 +10,23 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { getFlag } from '@/lib/african-data'
 import { VIDEO_CATEGORIES, getCategoryMeta } from '@/lib/video-categories'
+import type { HashtagRow, ProfileSummary } from '@/types/domain'
+
+interface NetworkInformation {
+  saveData?: boolean
+  effectiveType?: string
+  addEventListener?: (type: 'change', listener: () => void) => void
+  removeEventListener?: (type: 'change', listener: () => void) => void
+}
+
+interface FlickComment {
+  id: string
+  content: string | null
+  created_at: string
+  media_url?: string | null
+  media_type?: string | null
+  profiles?: Pick<ProfileSummary, 'id' | 'username' | 'avatar_url'> | null
+}
 
 export interface FlickPost {
   id: string
@@ -64,14 +81,17 @@ function formatDuration(sec?: number | null) {
 function useSlowConnection() {
   const [slow, setSlow] = useState(false)
   useEffect(() => {
-    const conn = (navigator as any).connection
-    if (!conn) return
+    const connection = (navigator as Navigator & { connection?: NetworkInformation }).connection
+    if (!connection) return
     function update() {
-      setSlow(!!conn.saveData || ['slow-2g', '2g', '3g'].includes(conn.effectiveType))
+      setSlow(
+        Boolean(connection?.saveData) ||
+        ['slow-2g', '2g', '3g'].includes(connection?.effectiveType ?? ''),
+      )
     }
     update()
-    conn.addEventListener?.('change', update)
-    return () => conn.removeEventListener?.('change', update)
+    connection.addEventListener?.('change', update)
+    return () => connection.removeEventListener?.('change', update)
   }, [])
   return slow
 }
@@ -104,7 +124,7 @@ function CommentSheet({
   onCountChange: (n: number) => void
 }) {
   const supabase = createClient()
-  const [comments, setComments] = useState<any[]>([])
+  const [comments, setComments] = useState<FlickComment[]>([])
   const [loading, setLoading] = useState(true)
   const [text, setText] = useState('')
   const [posting, setPosting] = useState(false)
@@ -127,7 +147,7 @@ function CommentSheet({
       .eq('post_id', postId)
       .order('created_at', { ascending: true })
       .then(({ data }) => {
-        setComments(data ?? [])
+        setComments((data ?? []) as unknown as FlickComment[])
         setLoading(false)
         setTimeout(() => {
           listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' })
@@ -138,7 +158,7 @@ function CommentSheet({
           }
         }, 200)
       })
-  }, [postId]) // eslint-disable-line
+  }, [postId, supabase])
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -158,7 +178,13 @@ function CommentSheet({
   async function submit() {
     if (!text.trim() && !mediaPreview) return
     setPosting(true)
-    const payload: any = { post_id: postId, user_id: currentUserId }
+    const payload: {
+      post_id: string
+      user_id: string
+      content?: string
+      media_url?: string
+      media_type?: string
+    } = { post_id: postId, user_id: currentUserId }
     if (text.trim()) payload.content = text.trim()
     if (mediaPreview) { payload.media_url = mediaPreview.url; payload.media_type = mediaPreview.type }
 
@@ -942,16 +968,21 @@ function SearchOverlay({ onClose, onSelect }: { onClose: () => void; onSelect: (
   const [loading, setLoading] = useState(false)
   const [hasSearched, setHasSearched] = useState(false)
   const [trending, setTrending] = useState<{ tag: string; count: number }[]>([])
-  const [recent, setRecent] = useState<string[]>([])
+  const [recent, setRecent] = useState<string[]>(() => {
+    if (typeof window === 'undefined') return []
+    try {
+      const value: unknown = JSON.parse(localStorage.getItem('nia:flicks-recent-searches') ?? '[]')
+      return Array.isArray(value) && value.every(item => typeof item === 'string') ? value : []
+    } catch {
+      return []
+    }
+  })
   const inputRef = useRef<HTMLInputElement>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Focus + load default state (trending tags on video posts, recent searches)
   useEffect(() => {
     inputRef.current?.focus()
-    try {
-      setRecent(JSON.parse(localStorage.getItem('nia:flicks-recent-searches') ?? '[]'))
-    } catch { /* ignore malformed storage */ }
 
     const since = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString()
     supabase
@@ -960,8 +991,8 @@ function SearchOverlay({ onClose, onSelect }: { onClose: () => void; onSelect: (
       .eq('posts.media_type', 'video')
       .gte('created_at', since)
       .then(({ data }) => {
-        const counts = (data ?? []).reduce((acc: Record<string, number>, h: any) => {
-          acc[h.tag] = (acc[h.tag] ?? 0) + 1
+        const counts = ((data ?? []) as HashtagRow[]).reduce((acc: Record<string, number>, hashtag) => {
+          acc[hashtag.tag] = (acc[hashtag.tag] ?? 0) + 1
           return acc
         }, {})
         setTrending(
@@ -969,7 +1000,7 @@ function SearchOverlay({ onClose, onSelect }: { onClose: () => void; onSelect: (
             .map(([tag, count]) => ({ tag, count }))
         )
       })
-  }, []) // eslint-disable-line
+  }, [supabase])
 
   async function runSearch(q: string) {
     const term = q.trim()
@@ -999,8 +1030,8 @@ function SearchOverlay({ onClose, onSelect }: { onClose: () => void; onSelect: (
         .limit(20),
     ])
 
-    let byTag: any[] = []
-    const tagPostIds = [...new Set((tagRows ?? []).map((r: any) => r.post_id))]
+    let byTag: FlickPost[] = []
+    const tagPostIds = [...new Set(((tagRows ?? []) as { post_id: string }[]).map(row => row.post_id))]
     if (tagPostIds.length > 0) {
       const { data } = await supabase
         .from('posts')
@@ -1013,7 +1044,7 @@ function SearchOverlay({ onClose, onSelect }: { onClose: () => void; onSelect: (
         .in('id', tagPostIds)
         .order('created_at', { ascending: false })
         .limit(20)
-      byTag = data ?? []
+      byTag = (data ?? []) as unknown as FlickPost[]
     }
 
     const merged = [...(byContent ?? []), ...byTag]
@@ -1142,7 +1173,7 @@ function SearchOverlay({ onClose, onSelect }: { onClose: () => void; onSelect: (
         ) : results.length === 0 ? (
           <div style={{ textAlign: 'center', paddingTop: 48 }}>
             <div style={{ fontSize: 36, marginBottom: 8 }}>🤔</div>
-            <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.4)', fontWeight: 600 }}>No flicks found for "{query}"</p>
+            <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.4)', fontWeight: 600 }}>No flicks found for “{query}”</p>
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 10 }}>
@@ -1319,7 +1350,7 @@ function FlickItem({
           if (!error) setViewCount(c => c + 1)
         })
     }
-  }, [isActive]) // eslint-disable-line
+  }, [currentUserId, isActive, supabase, video.id])
 
   // Play / pause based on active state (only meaningful once the <video> is mounted)
   useEffect(() => {
@@ -1327,11 +1358,10 @@ function FlickItem({
     if (!v || !shouldMount) return
     if (isActive) {
       v.currentTime = 0
-      v.play().then(() => setPlaying(true)).catch(() => { })
+      void v.play().catch(() => { /* autoplay may be blocked */ })
     } else {
       v.pause()
-      setPlaying(false)
-      setProgress(0)
+      v.currentTime = 0
     }
   }, [isActive, shouldMount])
 
@@ -1438,6 +1468,8 @@ function FlickItem({
             if (v && v.duration) setProgress((v.currentTime / v.duration) * 100)
           }}
           onWaiting={() => setBuffering(true)}
+          onPlay={() => setPlaying(true)}
+          onPause={() => setPlaying(false)}
           onPlaying={() => { setBuffering(false); setErrored(false) }}
           onCanPlay={() => setBuffering(false)}
           onError={() => { setBuffering(false); setErrored(true) }}
@@ -1481,7 +1513,7 @@ function FlickItem({
           background: 'rgba(0,0,0,0.55)',
         }}>
           <AlertCircle size={30} color="rgba(255,255,255,0.75)" />
-          <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: 13, fontWeight: 600 }}>Couldn't load this video</p>
+          <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: 13, fontWeight: 600 }}>Couldn’t load this video</p>
           <button
             onClick={retryVideo}
             style={{

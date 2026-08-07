@@ -1,8 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import PostCard from '@/components/PostCard'
+import { isRecord } from '@/lib/validation'
+import type { Post } from '@/types/domain'
 
 interface LoadMoreProps {
   currentPage:   number
@@ -11,18 +13,11 @@ interface LoadMoreProps {
 }
 
 export default function LoadMore({ currentPage, currentTab, currentUserId }: LoadMoreProps) {
-  const [posts,   setPosts]   = useState<any[]>([])
+  const [posts,   setPosts]   = useState<Post[]>([])
   const [page,    setPage]    = useState(currentPage)
   const [hasMore, setHasMore] = useState(true)
   const [loading, setLoading] = useState(false)
   const [error,   setError]   = useState<string | null>(null)
-
-  useEffect(() => {
-    setPosts([])
-    setPage(currentPage)
-    setHasMore(true)
-    setError(null)
-  }, [currentTab, currentPage])
 
   async function loadMore() {
     if (loading) return
@@ -31,13 +26,16 @@ export default function LoadMore({ currentPage, currentTab, currentUserId }: Loa
     try {
       const res  = await fetch(`/api/feed?tab=${currentTab}&page=${nextPage}`)
       if (!res.ok) throw new Error(`${res.status}`)
-      const data = await res.json()
-      const incoming = data.posts ?? []
+      const data: unknown = await res.json()
+      if (!isRecord(data) || !Array.isArray(data.posts)) {
+        throw new TypeError('Invalid feed response')
+      }
+      const incoming = data.posts as Post[]
       if (incoming.length > 0) {
         setPosts(prev => [...prev, ...incoming])
         setPage(nextPage)
       }
-      setHasMore(data.hasMore ?? incoming.length > 0)
+      setHasMore(typeof data.hasMore === 'boolean' ? data.hasMore : incoming.length > 0)
     } catch {
       setError('Failed to load more posts.')
     } finally {
@@ -48,7 +46,7 @@ export default function LoadMore({ currentPage, currentTab, currentUserId }: Loa
   return (
     <>
       {/* Appended posts */}
-      {posts.map((post: any) => (
+      {posts.map(post => (
         <PostCard key={post.id} post={post} currentUserId={currentUserId} />
       ))}
 

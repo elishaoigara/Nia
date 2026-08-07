@@ -6,9 +6,10 @@ import { useRouter } from 'next/navigation'
 import {
   ArrowLeft, Camera, Upload, Loader2, Check,
   X, Globe, MapPin, Link as LinkIcon,
-  User, FileText, Sparkles, Languages,
+  User, Sparkles,
 } from 'lucide-react'
 import { AFRICAN_COUNTRIES, COUNTRY_FLAGS, AFRICAN_LANGUAGES } from '@/lib/african-data'
+import type { Profile } from '@/types/domain'
 
 const INTERESTS_OPTIONS = [
   'Technology', 'AI', 'Startups', 'Fintech', 'Music', 'Fashion',
@@ -53,7 +54,7 @@ export default function EditProfilePage() {
   const supabase = createClient()
   const router   = useRouter()
 
-  const [profile,        setProfile]        = useState<any>(null)
+  const [profile,        setProfile]        = useState<Profile | null>(null)
   const [loading,        setLoading]        = useState(true)
   const [saving,         setSaving]         = useState(false)
   const [saved,          setSaved]          = useState(false)
@@ -91,7 +92,7 @@ export default function EditProfilePage() {
       if (!user) { router.push('/login'); return }
       const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single()
       if (data) {
-        setProfile(data)
+        setProfile(data as Profile)
         setFullName(data.full_name ?? '')
         setUsername(data.username ?? '')
         setHeadline(data.headline ?? '')
@@ -105,7 +106,7 @@ export default function EditProfilePage() {
       setLoading(false)
     }
     load()
-  }, []) // eslint-disable-line
+  }, [router, supabase])
 
   // Close country dropdown on outside click
   useEffect(() => {
@@ -125,6 +126,7 @@ export default function EditProfilePage() {
   }
 
   async function handleSave() {
+    if (!profile) { setError('Profile is still loading'); return }
     if (!fullName.trim()) { setError('Full name is required'); return }
     if (!username.trim()) { setError('Username is required'); return }
     setSaving(true); setError('')

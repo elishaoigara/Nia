@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { Bell } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
@@ -10,10 +10,7 @@ interface NotificationBellProps {
 }
 
 export default function NotificationBell({ userId }: NotificationBellProps) {
-  // Stable client ref — avoids re-subscriptions when parent re-renders
-  const supabaseRef = useRef(createClient())
-  const supabase = supabaseRef.current
-
+  const supabase = createClient()
   const [count, setCount] = useState(0)
 
   // FIX (Bug 6): wrap in useCallback so useEffect dependency is stable
@@ -30,7 +27,7 @@ export default function NotificationBell({ userId }: NotificationBellProps) {
   useEffect(() => {
     if (!userId) return
 
-    fetchUnreadCount()
+    const timer = window.setTimeout(() => void fetchUnreadCount(), 0)
 
     const channel = supabase
       .channel(`bell-${userId}`)
@@ -61,9 +58,10 @@ export default function NotificationBell({ userId }: NotificationBellProps) {
       .subscribe()
 
     return () => {
-      supabase.removeChannel(channel)
+      window.clearTimeout(timer)
+      void supabase.removeChannel(channel)
     }
-  }, [userId, fetchUnreadCount])
+  }, [userId, fetchUnreadCount, supabase])
 
   const hasUnread = count > 0
 

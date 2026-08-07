@@ -2,7 +2,7 @@
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import { Loader2, ArrowRight, Check } from 'lucide-react'
+import { Loader2, ArrowRight } from 'lucide-react'
 import { AFRICAN_COUNTRIES, COUNTRY_FLAGS } from '@/lib/african-data'
 
 const STEPS = ['Profile', 'Location', 'Bio']
@@ -78,7 +78,7 @@ export default function OnboardingPage() {
           </div>
           <h1 className="font-extrabold text-2xl">Welcome to Nia 🌍</h1>
           <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-            Connecting African youth — let's set up your profile
+            Connecting African youth — let’s set up your profile
           </p>
         </div>
 

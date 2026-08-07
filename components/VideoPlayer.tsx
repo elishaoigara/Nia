@@ -18,6 +18,7 @@ export default function VideoPlayer({ src, poster, className = '' }: VideoPlayer
   const [muted, setMuted] = useState(true)
   const [progress, setProgress] = useState(0)
   const [duration, setDuration] = useState(0)
+  const [currentTime, setCurrentTime] = useState(0)
   const [tapped, setTapped] = useState(false)
   const [lightbox, setLightbox] = useState(false)
   
@@ -95,6 +96,7 @@ export default function VideoPlayer({ src, poster, className = '' }: VideoPlayer
     const rect = e.currentTarget.getBoundingClientRect()
     const clickPositionPositionRatio = (e.clientX - rect.left) / rect.width
     video.currentTime = clickPositionPositionRatio * video.duration
+    setCurrentTime(video.currentTime)
   }
 
   function fmt(seconds: number) {
@@ -119,6 +121,7 @@ export default function VideoPlayer({ src, poster, className = '' }: VideoPlayer
           onTimeUpdate={() => {
             const video = videoRef.current
             if (video && video.duration) {
+              setCurrentTime(video.currentTime)
               setProgress((video.currentTime / video.duration) * 100)
             }
           }}
@@ -128,6 +131,7 @@ export default function VideoPlayer({ src, poster, className = '' }: VideoPlayer
           onEnded={() => {
             setPlaying(false)
             setProgress(0)
+            setCurrentTime(0)
             setTapped(false)
             wasPlayingRef.current = false
           }}
@@ -191,7 +195,7 @@ export default function VideoPlayer({ src, poster, className = '' }: VideoPlayer
             {/* Live Counter Display */}
             {duration > 0 && (
               <span className="text-white/85 text-[11px] tabular-nums min-w-9 text-right font-medium">
-                {fmt(videoRef.current ? videoRef.current.currentTime : 0)} / {fmt(duration)}
+                {fmt(currentTime)} / {fmt(duration)}
               </span>
             )}
 

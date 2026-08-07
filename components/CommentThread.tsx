@@ -2,9 +2,10 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import Link from 'next/link'
-import { Heart, MoreHorizontal, Play, Trash2, MessageCircle, Send, ImagePlus, X, Loader2 } from 'lucide-react'
+import { Heart, MoreHorizontal, Play, Trash2, MessageCircle, ImagePlus, X, Loader2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
+import type { Comment, CommentNode, GifApiResult, UserReference } from '@/types/domain'
 
 interface CommentMedia {
   url:  string
@@ -12,7 +13,7 @@ interface CommentMedia {
 }
 
 interface CommentThreadProps {
-  comments:      any[]
+  comments:      Comment[]
   currentUserId: string
   postId:        string
   postOwnerId?:  string
@@ -46,7 +47,7 @@ function timeAgo(date: string) {
   return `${Math.floor(s / 86400)}d`
 }
 
-function buildMedia(comment: any): CommentMedia[] {
+function buildMedia(comment: Comment): CommentMedia[] {
   const out: CommentMedia[] = []
   if (comment.media_url && comment.media_type) {
     out.push({ url: comment.media_url, type: comment.media_type })
@@ -123,12 +124,6 @@ function InlineReplyBox({
     textRef.current?.setSelectionRange(len, len)
   }, [])
 
-  // Load GIFs when panel opens or query changes
-  useEffect(() => {
-    if (!showGifs) return
-    searchGifs(gifQuery)
-  }, [showGifs, gifQuery]) // eslint-disable-line
-
   // Close GIF panel on outside click
   useEffect(() => {
     if (!showGifs) return
@@ -139,7 +134,7 @@ function InlineReplyBox({
     return () => document.removeEventListener('mousedown', handle)
   }, [showGifs])
 
-  async function searchGifs(q: string) {
+  const searchGifs = useCallback(async (q: string) => {
     setGifLoading(true)
     try {
       const url = q
@@ -147,18 +142,24 @@ function InlineReplyBox({
         : `https://tenor.googleapis.com/v2/featured?key=${TENOR_KEY}&limit=12&media_filter=gif,tinygif`
       const res = await fetch(url)
       if (!res.ok) { setGifResults(FALLBACK_GIFS); return }
-      const json = await res.json()
-      const results: GifResult[] = (json.results ?? []).map((r: any) => ({
-        url:     r.media_formats?.gif?.url     ?? r.media_formats?.tinygif?.url ?? '',
-        preview: r.media_formats?.tinygif?.url ?? r.media_formats?.gif?.url     ?? '',
-      })).filter((r: GifResult) => r.url)
+      const json = await res.json() as { results?: GifApiResult[] }
+      const results: GifResult[] = (json.results ?? []).map(result => ({
+        url: result.media_formats?.gif?.url ?? result.media_formats?.tinygif?.url ?? '',
+        preview: result.media_formats?.tinygif?.url ?? result.media_formats?.gif?.url ?? '',
+      })).filter(result => result.url)
       setGifResults(results.length ? results : FALLBACK_GIFS)
     } catch {
       setGifResults(FALLBACK_GIFS)
     } finally {
       setGifLoading(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    if (!showGifs) return
+    const timer = window.setTimeout(() => void searchGifs(gifQuery), 200)
+    return () => window.clearTimeout(timer)
+  }, [showGifs, gifQuery, searchGifs])
 
   function pickGif(gif: GifResult) {
     // Only one GIF at a time, replaces any existing GIF
@@ -220,7 +221,15 @@ function InlineReplyBox({
         }
       }
 
-      const payload: any = {
+      const payload: {
+        post_id: string
+        user_id: string
+        content: string | null
+        media_url: string | null
+        media_type: string | null
+        extra_media: { url: string; type: string }[] | null
+        parent_id?: string
+      } = {
         post_id:     postId,
         user_id:     currentUserId,
         content:     text.trim() || null,
@@ -397,16 +406,14 @@ function InlineReplyBox({
 function CommentRow({
   comment,
   hasChildren,
-  isLast,
   currentUserId,
   currentUserProfile,
   postId,
   postOwnerId,
   depth,
 }: {
-  comment:             any
+  comment:             CommentNode
   hasChildren:         boolean
-  isLast:              boolean
   currentUserId:       string
   currentUserProfile?: { avatar_url?: string | null; username?: string }
   postId:              string
@@ -416,9 +423,9 @@ function CommentRow({
   const supabase  = createClient()
   const router    = useRouter()
   const profile   = comment.profiles
-  const likesList = (comment.likes ?? []) as any[]
+  const likesList = (comment.likes ?? []) as UserReference[]
 
-  const [liked,       setLiked]       = useState(() => likesList.some((l: any) => l.user_id === currentUserId))
+  const [liked,       setLiked]       = useState(() => likesList.some(like => like.user_id === currentUserId))
   const [likeCount,   setLikeCount]   = useState(likesList.length)
   const [showMenu,    setShowMenu]    = useState(false)
   const [softDeleted, setSoftDeleted] = useState(false)
@@ -440,7 +447,7 @@ function CommentRow({
   }, [showMenu])
 
   const media     = buildMedia(comment)
-  const children  = (comment.children ?? []) as any[]
+  const children = comment.children
   const initials  = profile?.username?.[0]?.toUpperCase() ?? '?'
   const isDeleted = softDeleted || comment.content === DELETED_MARKER
 
@@ -592,12 +599,11 @@ function CommentRow({
           so replies underneath keep their place in the thread. */}
       {children.length > 0 && showReplies && (
         <div className="comment-children">
-          {children.map((child: any, i: number) => (
+          {children.map(child => (
             <CommentRow
               key={child.id}
               comment={child}
               hasChildren={(child.children ?? []).length > 0}
-              isLast={i === children.length - 1}
               currentUserId={currentUserId}
               currentUserProfile={currentUserProfile}
               postId={postId}
@@ -612,9 +618,9 @@ function CommentRow({
 }
 
 /* ── Build tree from flat list ─────────────────────── */
-function buildTree(comments: any[]): any[] {
-  const map = new Map<string, any>()
-  const roots: any[] = []
+export function buildCommentTree(comments: Comment[]): CommentNode[] {
+  const map = new Map<string, CommentNode>()
+  const roots: CommentNode[] = []
 
   // First pass: index all comments
   for (const c of comments) {
@@ -623,9 +629,11 @@ function buildTree(comments: any[]): any[] {
 
   // Second pass: attach children to parents
   for (const c of comments) {
-    const node = map.get(c.id)!
-    if (c.parent_id && map.has(c.parent_id)) {
-      map.get(c.parent_id)!.children.push(node)
+    const node = map.get(c.id)
+    const parent = c.parent_id ? map.get(c.parent_id) : undefined
+    if (!node) continue
+    if (parent) {
+      parent.children.push(node)
     } else {
       roots.push(node)
     }
@@ -636,16 +644,15 @@ function buildTree(comments: any[]): any[] {
 
 /* ── Export ────────────────────────────────────────── */
 export default function CommentThread({ comments, currentUserId, postId, postOwnerId, currentUserProfile }: CommentThreadProps) {
-  const tree = buildTree(comments)
+  const tree = buildCommentTree(comments)
 
   return (
     <div className="comment-section">
-      {tree.map((comment, i) => (
+      {tree.map(comment => (
         <CommentRow
           key={comment.id}
           comment={comment}
           hasChildren={comment.children.length > 0}
-          isLast={i === tree.length - 1}
           currentUserId={currentUserId}
           currentUserProfile={currentUserProfile}
           postId={postId}

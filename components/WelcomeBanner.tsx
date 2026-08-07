@@ -6,7 +6,10 @@ export default function WelcomeBanner() {
   const [show, setShow] = useState(false)
 
   useEffect(() => {
-    if (!localStorage.getItem('nia_welcome_seen')) setShow(true)
+    const frame = requestAnimationFrame(() => {
+      setShow(!localStorage.getItem('nia_welcome_seen'))
+    })
+    return () => cancelAnimationFrame(frame)
   }, [])
 
   if (!show) return null

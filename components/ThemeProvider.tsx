@@ -1,79 +1,65 @@
 'use client'
 
-import { createContext, useContext, useEffect, useState, useCallback } from 'react'
+import { createContext, useContext, useEffect, useSyncExternalStore } from 'react'
 
 export type Theme = 'light' | 'dark' | 'system'
 
+type ResolvedTheme = Exclude<Theme, 'system'>
+
 interface ThemeContextType {
   theme: Theme
-  setTheme: (t: Theme) => void
-  resolvedTheme: 'light' | 'dark'
+  setTheme: (theme: Theme) => void
+  resolvedTheme: ResolvedTheme
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined)
+const THEME_KEY = 'nia-theme'
+const THEME_CHANGE_EVENT = 'nia:theme-change'
 
-function getSystemTheme(): 'light' | 'dark' {
+function getStoredTheme(): Theme {
+  if (typeof window === 'undefined') return 'system'
+  const value = localStorage.getItem(THEME_KEY)
+  return value === 'light' || value === 'dark' || value === 'system' ? value : 'system'
+}
+
+function subscribeToTheme(listener: () => void): () => void {
+  const handleStorage = (event: StorageEvent) => {
+    if (event.key === THEME_KEY) listener()
+  }
+  window.addEventListener('storage', handleStorage)
+  window.addEventListener(THEME_CHANGE_EVENT, listener)
+  return () => {
+    window.removeEventListener('storage', handleStorage)
+    window.removeEventListener(THEME_CHANGE_EVENT, listener)
+  }
+}
+
+function getSystemTheme(): ResolvedTheme {
   if (typeof window === 'undefined') return 'light'
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
 }
 
+function subscribeToSystemTheme(listener: () => void): () => void {
+  const media = window.matchMedia('(prefers-color-scheme: dark)')
+  media.addEventListener('change', listener)
+  return () => media.removeEventListener('change', listener)
+}
+
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  // Initialize state from lazy initializers to avoid mismatches if mounted on client instantly
-  const [theme, setThemeState] = useState<Theme>(() => {
-    if (typeof window !== 'undefined') {
-      return (localStorage.getItem('nia-theme') as Theme) || 'system'
-    }
-    return 'system'
-  })
+  const theme = useSyncExternalStore<Theme>(subscribeToTheme, getStoredTheme, () => 'system')
+  const systemTheme = useSyncExternalStore<ResolvedTheme>(subscribeToSystemTheme, getSystemTheme, () => 'light')
+  const resolvedTheme = theme === 'system' ? systemTheme : theme
 
-  const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('nia-theme') as Theme || 'system'
-      return saved === 'system' ? getSystemTheme() : (saved as 'light' | 'dark')
-    }
-    return 'light'
-  })
-
-  // Synchronize document classes and resolved theme state safely
-  const syncTheme = useCallback((currentTheme: Theme) => {
+  useEffect(() => {
     const root = document.documentElement
     root.classList.remove('dark', 'light')
+    root.classList.add(resolvedTheme)
+  }, [resolvedTheme])
 
-    let actual: 'light' | 'dark' = 'light'
-    if (currentTheme === 'system') {
-      actual = getSystemTheme()
-    } else {
-      actual = currentTheme
-    }
-
-    root.classList.add(actual)
-    setResolvedTheme(actual)
-  }, [])
-
-  // Boot & listen to hardware/OS level preference alterations
-  useEffect(() => {
-    const saved = (localStorage.getItem('nia-theme') as Theme) || 'system'
-    setThemeState(saved)
-    syncTheme(saved)
-
-    const mq = window.matchMedia('(prefers-color-scheme: dark)')
-    
-    const handleSystemChange = () => {
-      // Only react to OS switches if the app is currently mapped to 'system'
-      if (localStorage.getItem('nia-theme') === 'system' || !localStorage.getItem('nia-theme')) {
-        syncTheme('system')
-      }
-    }
-
-    mq.addEventListener('change', handleSystemChange)
-    return () => mq.removeEventListener('change', handleSystemChange)
-  }, [syncTheme])
-
-  const setTheme = useCallback((t: Theme) => {
-    setThemeState(t)
-    localStorage.setItem('nia-theme', t)
-    syncTheme(t)
-  }, [syncTheme])
+  function setTheme(nextTheme: Theme) {
+    localStorage.setItem(THEME_KEY, nextTheme)
+    window.dispatchEvent(new Event(THEME_CHANGE_EVENT))
+  }
 
   return (
     <ThemeContext.Provider value={{ theme, setTheme, resolvedTheme }}>
@@ -82,10 +68,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   )
 }
 
-export const useTheme = () => {
+export function useTheme() {
   const context = useContext(ThemeContext)
-  if (context === undefined) {
-    throw new Error('useTheme must be used within a ThemeProvider')
-  }
+  if (!context) throw new Error('useTheme must be used within a ThemeProvider')
   return context
 }

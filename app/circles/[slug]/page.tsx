@@ -6,6 +6,7 @@ import CircleJoinButton from '@/components/CircleJoinButton'
 import CircleRequestsPanel from '@/components/CircleRequestsPanel'
 import { Users, ArrowLeft, Lock, Globe, School, Calendar } from 'lucide-react'
 import Link from 'next/link'
+import type { Circle, CircleJoinRequest, Post } from '@/types/domain'
 
 interface Props {
   params: Promise<{ slug: string }>
@@ -26,12 +27,13 @@ export default async function CirclePage({ params, searchParams }: Props) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: circle } = await supabase
+  const { data: circleRow } = await supabase
     .from('circles')
     .select('*, circle_members (user_id, profiles:user_id (id, username, avatar_url))')
     .eq('slug', slug)
     .single()
-  if (!circle) notFound()
+  if (!circleRow) notFound()
+  const circle = circleRow as unknown as Circle
 
   const { data: posts } = await supabase.from('posts')
     .select('*, profiles:user_id (id, username, avatar_url, university), likes (user_id), comments (id)')
@@ -39,7 +41,7 @@ export default async function CirclePage({ params, searchParams }: Props) {
     .order('created_at', { ascending: false })
 
   const members = circle.circle_members ?? []
-  const isMember = members.some((m: any) => m.user_id === user.id)
+  const isMember = members.some(member => member.user_id === user.id)
 
   let requestStatus: 'pending' | null = null
   if (circle.is_private && !isMember) {
@@ -55,20 +57,20 @@ export default async function CirclePage({ params, searchParams }: Props) {
   // Only members who are already in the circle can see/act on join requests —
   // matches the "members read circle join requests" RLS policy, so this
   // query just returns empty for non-members rather than erroring.
-  let pendingRequests: any[] = []
+  let pendingRequests: CircleJoinRequest[] = []
   if (circle.is_private && isMember) {
     const { data } = await supabase
       .from('circle_join_requests')
       .select('id, user_id, profiles:user_id (id, username, avatar_url, university)')
       .eq('circle_id', circle.id)
       .eq('status', 'pending')
-    pendingRequests = data ?? []
+    pendingRequests = (data ?? []) as unknown as CircleJoinRequest[]
   }
 
-  const sortedPosts = posts ? [...posts].sort((a: any, b: any) => {
+  const sortedPosts = ((posts ?? []) as unknown as Post[]).sort((a, b) => {
     if (sortMode === 'top') return (b.likes?.length ?? 0) - (a.likes?.length ?? 0)
     return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-  }) : []
+  })
 
   const color = CATEGORY_COLORS[circle.category?.toLowerCase() ?? 'default'] ?? CATEGORY_COLORS.default
   const previewMembers = members.slice(0, 6)
@@ -130,15 +132,15 @@ export default async function CirclePage({ params, searchParams }: Props) {
           {/* Member avatar stack */}
           <div className="flex items-center justify-between gap-3 pt-1">
             <div className="flex items-center">
-              {previewMembers.map((m: any, i: number) => {
-                const p = m.profiles
+              {previewMembers.map((member, index) => {
+                const p = member.profiles
                 return (
                   <div
-                    key={m.user_id}
+                    key={member.user_id}
                     title={p?.username ?? ''}
                     style={{
                       width: 28, height: 28, borderRadius: '50%', overflow: 'hidden',
-                      marginLeft: i === 0 ? 0 : -8, border: '2px solid var(--surface-0)',
+                      marginLeft: index === 0 ? 0 : -8, border: '2px solid var(--surface-0)',
                       background: 'var(--grad-brand)', display: 'flex', alignItems: 'center',
                       justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: 11, flexShrink: 0,
                     }}
@@ -171,7 +173,7 @@ export default async function CirclePage({ params, searchParams }: Props) {
 
       {/* Pending join requests — only visible to existing members of a private circle */}
       {pendingRequests.length > 0 && (
-        <CircleRequestsPanel circleId={circle.id} requests={pendingRequests} />
+        <CircleRequestsPanel requests={pendingRequests} />
       )}
 
       {/* Post creator — only for members */}
@@ -210,7 +212,7 @@ export default async function CirclePage({ params, searchParams }: Props) {
             {!isMember && <p className="text-sm" style={{ color: 'var(--text-tertiary)' }}>Join this circle to post!</p>}
           </div>
         )}
-        {sortedPosts.map((post: any) => <PostCard key={post.id} post={post} currentUserId={user.id} />)}
+        {sortedPosts.map(post => <PostCard key={post.id} post={post} currentUserId={user.id} />)}
       </div>
     </main>
   )

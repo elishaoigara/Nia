@@ -4,10 +4,11 @@
 
 /* ── Tailwind v4 ──────────────────────────────────── */
 @import "tailwindcss";
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
 
 /* ── Color Tokens ──────────────────────────────────── */
 :root {
+  color-scheme: light;
+
   /* ── One accent: deep violet, two shades ── */
   --nia-accent:      #5B21B6;
   --nia-accent-soft: #7C3AED;
@@ -51,6 +52,7 @@
 
 /* ── Dark Mode ─────────────────────────────────────── */
 .dark {
+  color-scheme: dark;
   --surface-0: #0D0C0B;
   --surface-1: #1E1C1A;   /* was #171614 — +10 lightness, more separation */
   --surface-2: #272523;   /* was #232220 — +5 lightness */
@@ -72,6 +74,21 @@
 
 html {
   scroll-behavior: smooth;
+}
+
+:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--nia-accent) 70%, white);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 body {

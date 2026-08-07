@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { X, ChevronLeft, ChevronRight, Play, Pause, Volume2, VolumeX } from 'lucide-react'
 
 interface MediaItem {
@@ -24,6 +24,13 @@ export default function MediaLightbox({ items, startIndex = 0, onClose }: MediaL
 
   const current = items[idx]
 
+  const navigate = useCallback((direction: -1 | 1) => {
+    setPlaying(false)
+    setProgress(0)
+    setDuration(0)
+    setIdx(index => Math.max(0, Math.min(items.length - 1, index + direction)))
+  }, [items.length])
+
   // Lock body scroll while open
   useEffect(() => {
     const prev = document.body.style.overflow
@@ -35,26 +42,15 @@ export default function MediaLightbox({ items, startIndex = 0, onClose }: MediaL
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') onClose()
-      if (e.key === 'ArrowRight') {
-        setIdx(i => Math.min(items.length - 1, i + 1))
-      }
-      if (e.key === 'ArrowLeft') {
-        setIdx(i => Math.max(0, i - 1))
-      }
+      if (e.key === 'ArrowRight') navigate(1)
+      if (e.key === 'ArrowLeft') navigate(-1)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [items.length, onClose])
+  }, [navigate, onClose])
 
-  // Reset video state when switching slides
-  useEffect(() => {
-    setPlaying(false)
-    setProgress(0)
-    setDuration(0)
-  }, [idx])
-
-  function prev() { setIdx(i => Math.max(0, i - 1)) }
-  function next() { setIdx(i => Math.min(items.length - 1, i + 1)) }
+  function prev() { navigate(-1) }
+  function next() { navigate(1) }
 
   function togglePlay() {
     const v = videoRef.current

@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { scorePosts } from '@/lib/feed-scorer'
 import type { UserContext, ScorerPost } from '@/lib/feed-scorer'
+import type { BlockRow, FollowRow, MuteRow } from '@/types/domain'
 
 const PAGE_SIZE = 15
 // Fetch a larger pool per page so the scorer has enough candidates to fill
@@ -24,27 +25,35 @@ const BASE_SELECT = `
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = req.nextUrl
-    const tab  = searchParams.get('tab')  ?? 'africa'
-    const page = parseInt(searchParams.get('page') ?? '1')
+    const requestedTab = searchParams.get('tab') ?? 'africa'
+    const tab = ['africa', 'local', 'following'].includes(requestedTab)
+      ? requestedTab
+      : 'africa'
+    const requestedPage = Number.parseInt(searchParams.get('page') ?? '1', 10)
+    const page = Number.isFinite(requestedPage)
+      ? Math.min(Math.max(requestedPage, 1), 100)
+      : 1
 
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     // ── 1. Query hydration ─────────────────────────────────────────────────
-    const [profileRes, followsRes] = await Promise.all([
+    const [profileRes, followsRes, blocksRes, mutesRes] = await Promise.all([
       supabase.from('profiles').select('country, language').eq('id', user.id).single(),
       supabase.from('follows').select('following_id').eq('follower_id', user.id),
+      supabase.from('blocks').select('blocked_id').eq('blocker_id', user.id),
+      supabase.from('mutes').select('muted_id').eq('muter_id', user.id),
     ])
-    const blocksRes = await supabase.from('blocks').select('blocked_id').eq('blocker_id', user.id)
-    const mutesRes  = await supabase.from('mutes').select('muted_id').eq('muter_id', user.id)
+    const contextError = profileRes.error ?? followsRes.error ?? blocksRes.error ?? mutesRes.error
+    if (contextError) throw contextError
 
     const myProfile = profileRes.data
     const ctx: UserContext = {
       userId:       user.id,
-      followingIds: new Set((followsRes.data ?? []).map((f: any) => f.following_id)),
-      blockedIds:   new Set((blocksRes.data  ?? []).map((b: any) => b.blocked_id)),
-      mutedIds:     new Set((mutesRes.data   ?? []).map((m: any) => m.muted_id)),
+      followingIds: new Set(((followsRes.data as FollowRow[] | null) ?? []).map(f => f.following_id)),
+      blockedIds: new Set(((blocksRes.data as BlockRow[] | null) ?? []).map(b => b.blocked_id)),
+      mutedIds: new Set(((mutesRes.data as MuteRow[] | null) ?? []).map(m => m.muted_id)),
       country:      myProfile?.country  ?? null,
       language:     myProfile?.language ?? null,
     }
@@ -60,33 +69,37 @@ export async function GET(req: NextRequest) {
       if (ctx.followingIds.size === 0) {
         return NextResponse.json({ posts: [], hasMore: false })
       }
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('posts').select(BASE_SELECT)
         .in('user_id', [...ctx.followingIds])
         .order('created_at', { ascending: false })
         .limit(candidatePool)
-      candidates = (data ?? []) as ScorerPost[]
+      if (error) throw error
+      candidates = (data ?? []) as unknown as ScorerPost[]
 
     } else if (tab === 'local' && myProfile?.country) {
-      const { data: countryUsers } = await supabase
+      const { data: countryUsers, error: countryError } = await supabase
         .from('profiles').select('id').eq('country', myProfile.country)
-      const countryIds = (countryUsers ?? []).map((p: any) => p.id)
+      if (countryError) throw countryError
+      const countryIds = ((countryUsers ?? []) as { id: string }[]).map(profile => profile.id)
       if (countryIds.length === 0) {
         return NextResponse.json({ posts: [], hasMore: false })
       }
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('posts').select(BASE_SELECT)
         .in('user_id', countryIds)
         .order('created_at', { ascending: false })
         .limit(candidatePool)
-      candidates = (data ?? []) as ScorerPost[]
+      if (error) throw error
+      candidates = (data ?? []) as unknown as ScorerPost[]
 
     } else {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('posts').select(BASE_SELECT)
         .order('created_at', { ascending: false })
         .limit(candidatePool)
-      candidates = (data ?? []) as ScorerPost[]
+      if (error) throw error
+      candidates = (data ?? []) as unknown as ScorerPost[]
     }
 
     // ── 3. Score + rank ────────────────────────────────────────────────────
@@ -95,7 +108,7 @@ export async function GET(req: NextRequest) {
     const pageSlice = ranked.slice(offset, offset + PAGE_SIZE)
     const posts = pageSlice.map(p => ({
       ...p,
-      viewer_is_following: ctx.followingIds.has((p as any).user_id),
+      viewer_is_following: ctx.followingIds.has(p.user_id),
     }))
     // hasMore is true if there are more ranked posts beyond this page,
     // OR if we hit the candidate pool ceiling (more DB rows likely exist).

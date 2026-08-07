@@ -10,8 +10,11 @@
  *   - Blocked/muted authors hard-filtered to score 0
  */
 
+import type { Post } from '@/types/domain'
+
 // ── Weights (mirrors X's ScoringWeights, tuned for Nia) ──────────────────────
-const W = {
+export const FEED_WEIGHTS = {
+  baseline:    0.10,   // ensures new posts can enter the feed before engagement
   like:        0.30,
   comment:     0.50,   // highest — replies show real engagement
   repost:      0.20,
@@ -32,17 +35,10 @@ const W = {
   age_decay_gravity: 1.2,
 }
 
-export interface ScorerPost {
-  id: string
-  user_id: string
-  created_at: string
-  media_type: string | null
-  language: string | null
+export interface ScorerPost extends Post {
   likes: { user_id: string }[]
   comments: { id: string }[]
   reposts: { user_id: string }[]
-  profiles: { id: string; country: string | null } | null
-  [key: string]: unknown
 }
 
 export interface UserContext {
@@ -55,8 +51,10 @@ export interface UserContext {
 }
 
 // ── Age decay ────────────────────────────────────────────────────────────────
-function ageDecay(createdAt: string, gravity = W.age_decay_gravity): number {
-  const hours = (Date.now() - new Date(createdAt).getTime()) / 3_600_000
+function ageDecay(createdAt: string, gravity = FEED_WEIGHTS.age_decay_gravity): number {
+  const createdAtMs = new Date(createdAt).getTime()
+  if (!Number.isFinite(createdAtMs)) return 0
+  const hours = Math.max(0, (Date.now() - createdAtMs) / 3_600_000)
   return 1 / Math.pow(Math.log(hours + 2), gravity)
 }
 
@@ -67,12 +65,13 @@ function engagementScore(post: ScorerPost): number {
   const reposts  = post.reposts?.length  ?? 0
 
   let score =
-    likes    * W.like +
-    comments * W.comment +
-    reposts  * W.repost
+    FEED_WEIGHTS.baseline +
+    likes    * FEED_WEIGHTS.like +
+    comments * FEED_WEIGHTS.comment +
+    reposts  * FEED_WEIGHTS.repost
 
-  if (post.media_type === 'video') score += W.video_bonus
-  if (post.media_type === 'image') score += W.image_bonus
+  if (post.media_type === 'video') score += FEED_WEIGHTS.video_bonus
+  if (post.media_type === 'image') score += FEED_WEIGHTS.image_bonus
 
   return score
 }
@@ -83,16 +82,16 @@ function networkMultiplier(post: ScorerPost, ctx: UserContext): number {
   if (ctx.blockedIds.has(post.user_id)) return 0      // hard block
   if (ctx.mutedIds.has(post.user_id))  return 0       // hard mute
   return ctx.followingIds.has(post.user_id)
-    ? W.in_network
-    : W.out_of_network
+    ? FEED_WEIGHTS.in_network
+    : FEED_WEIGHTS.out_of_network
 }
 
 // ── Affinity bonuses ─────────────────────────────────────────────────────────
 function affinityMultiplier(post: ScorerPost, ctx: UserContext): number {
   let m = 1.0
   const authorCountry = post.profiles?.country ?? null
-  if (ctx.language && post.language === ctx.language) m *= W.same_language
-  if (ctx.country  && authorCountry === ctx.country)  m *= W.same_country
+  if (ctx.language && post.language === ctx.language) m *= FEED_WEIGHTS.same_language
+  if (ctx.country  && authorCountry === ctx.country)  m *= FEED_WEIGHTS.same_country
   return m
 }
 
@@ -123,9 +122,9 @@ export function scorePosts(
     const count = authorSeen.get(post.user_id) ?? 0
     authorSeen.set(post.user_id, count + 1)
     const multiplier =
-      (1 - W.diversity_floor) *
-      Math.pow(W.diversity_decay, count) +
-      W.diversity_floor
+      (1 - FEED_WEIGHTS.diversity_floor) *
+      Math.pow(FEED_WEIGHTS.diversity_decay, count) +
+      FEED_WEIGHTS.diversity_floor
     return { post, score: score * multiplier }
   })
 

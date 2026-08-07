@@ -1,7 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { scoreFlicks } from '@/lib/flicks-scorer'
-import type { UserContext } from '@/lib/feed-scorer'
+import type { ScorerPost, UserContext } from '@/lib/feed-scorer'
+import type { BlockRow, FollowRow, MuteRow } from '@/types/domain'
 import FlicksClient from './FlicksClient'
 import type { FlickPost } from './FlicksClient'
 
@@ -43,9 +44,9 @@ export default async function ReelsPage({
 
   const ctx: UserContext = {
     userId: user.id,
-    followingIds: new Set((followsRes.data ?? []).map((f: any) => f.following_id)),
-    blockedIds: new Set((blocksRes.data ?? []).map((b: any) => b.blocked_id)),
-    mutedIds: new Set((mutesRes.data ?? []).map((m: any) => m.muted_id)),
+    followingIds: new Set(((followsRes.data as FollowRow[] | null) ?? []).map(f => f.following_id)),
+    blockedIds: new Set(((blocksRes.data as BlockRow[] | null) ?? []).map(b => b.blocked_id)),
+    mutedIds: new Set(((mutesRes.data as MuteRow[] | null) ?? []).map(m => m.muted_id)),
     country: profileRes.data?.country ?? null,
     language: profileRes.data?.language ?? null,
   }
@@ -88,7 +89,10 @@ export default async function ReelsPage({
   // Long Flicks stays chronological for now — it's a browse-by-topic grid, not a
   // "for you" feed, so recency + category filtering is the right mental model.
   // The scorer is there if you want a "Trending" sort option later.
-  const shorts = scoreFlicks(shortsRaw as any, ctx).slice(0, SHORTS_LIMIT) as unknown as FlickPost[]
+  const shorts = scoreFlicks(
+    shortsRaw as unknown as ScorerPost[],
+    ctx,
+  ).slice(0, SHORTS_LIMIT) as unknown as FlickPost[]
   const longs = (longRows ?? []) as unknown as FlickPost[]
 
   // Resolved independently of the shorts/longs pools above — a video linked in

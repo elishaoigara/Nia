@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { Users, Lock, Loader2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import type { Circle, CircleMember } from '@/types/domain'
 
 export const CATEGORY_COLORS: Record<string, string> = {
   tech:    'var(--nia-sky)',
@@ -19,10 +20,15 @@ export const CATEGORY_EMOJI: Record<string, string> = {
   tech: '💻', art: '🎨', sports: '⚽', music: '🎵', science: '🔬', default: '✨'
 }
 
-export default function CircleCard({ circle, currentUserId }: any) {
+interface CircleCardProps {
+  circle: Circle
+  currentUserId: string
+}
+
+export default function CircleCard({ circle, currentUserId }: CircleCardProps) {
   const supabase = createClient()
   const router = useRouter()
-  const isMember = circle.circle_members?.some((m: any) => m.user_id === currentUserId)
+  const isMember = circle.circle_members?.some((member: CircleMember) => member.user_id === currentUserId)
   const [joined, setJoined] = useState(isMember)
   const [memberCount, setMemberCount] = useState(circle.circle_members?.length ?? 0)
   const [requested, setRequested] = useState(false)
@@ -71,7 +77,7 @@ export default function CircleCard({ circle, currentUserId }: any) {
           <div className="flex items-center gap-3 min-w-0">
             <div
               className="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl shrink-0 transition-transform group-hover:scale-105"
-              style={{ backgroundColor: color, bias: 0.12, opacity: 0.15 } as any} 
+              style={{ background: `color-mix(in srgb, ${color} 15%, transparent)` }}
             >
               <span style={{ opacity: 1 }}>{emoji}</span>
             </div>

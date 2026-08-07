@@ -1,52 +1,70 @@
 import { createClient } from '@/lib/supabase/client'
+import type { StoryRow, StoryViewRow } from '@/types/domain'
 
 type StoryRingData = { active: Set<string>; unseen: Set<string> }
 
-// A feed renders many PostCards at once — without this cache, each one
-// would independently query `stories` and `story_views` for the same data.
-// One shared, short-lived cache (with in-flight de-duplication) means a
-// whole screenful of posts costs two queries total, not two-per-post.
-let cache: { viewerId: string | null; data: StoryRingData; expires: number } | null = null
-let inflight: Promise<StoryRingData> | null = null
+type CacheEntry = {
+  viewerId: string | null
+  data: StoryRingData
+  expires: number
+}
+
+type InflightEntry = {
+  viewerId: string | null
+  promise: Promise<StoryRingData>
+}
+
+// A feed renders many PostCards at once. This shared, short-lived cache and
+// in-flight de-duplication keep a screenful of cards to two queries total.
+let cache: CacheEntry | null = null
+let inflight: InflightEntry | null = null
 const TTL_MS = 30_000
 
 export async function getStoryRingData(viewerId: string | null): Promise<StoryRingData> {
   const now = Date.now()
-  if (cache && cache.viewerId === viewerId && cache.expires > now) return cache.data
-  if (inflight) return inflight
+  if (cache?.viewerId === viewerId && cache.expires > now) return cache.data
+  if (inflight?.viewerId === viewerId) return inflight.promise
 
-  inflight = (async () => {
+  const promise = (async () => {
     const supabase = createClient()
-    const { data: stories } = await supabase
+    const { data, error } = await supabase
       .from('stories')
       .select('id, user_id')
       .gte('expires_at', new Date().toISOString())
+    if (error) throw error
 
-    const active = new Set<string>((stories ?? []).map((s: any) => s.user_id))
+    const stories = (data ?? []) as StoryRow[]
+    const active = new Set(stories.map(story => story.user_id))
     const unseen = new Set<string>()
 
-    if (viewerId && stories && stories.length > 0) {
-      const { data: views } = await supabase
+    if (viewerId && stories.length > 0) {
+      const { data: viewData, error: viewsError } = await supabase
         .from('story_views')
         .select('story_id')
         .eq('viewer_id', viewerId)
-      const viewedIds = new Set((views ?? []).map((v: any) => v.story_id))
-      for (const s of stories as any[]) {
-        if (!viewedIds.has(s.id)) unseen.add(s.user_id)
+      if (viewsError) throw viewsError
+
+      const viewedIds = new Set(
+        ((viewData ?? []) as StoryViewRow[]).map(view => view.story_id),
+      )
+      for (const story of stories) {
+        if (!viewedIds.has(story.id)) unseen.add(story.user_id)
       }
     }
 
     const result = { active, unseen }
     cache = { viewerId, data: result, expires: Date.now() + TTL_MS }
-    inflight = null
     return result
   })()
 
-  return inflight
+  inflight = { viewerId, promise }
+  try {
+    return await promise
+  } finally {
+    if (inflight?.promise === promise) inflight = null
+  }
 }
 
-// Call after posting/viewing a story so the next render picks up fresh data
-// instead of waiting out the full TTL.
 export function invalidateStoryRingCache() {
   cache = null
 }

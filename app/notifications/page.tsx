@@ -146,9 +146,7 @@ function partitionNotifications(items: Notification[]) {
 }
 
 export default function Notifications() {
-  // Stable client — never recreated, preserves auth state across renders
-  const supabaseRef = useRef(createClient());
-  const supabase    = supabaseRef.current;
+  const supabase = createClient();
 
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading]             = useState(true);
@@ -168,7 +166,9 @@ export default function Notifications() {
       .select('id, username, avatar_url, full_name')
       .in('id', ids);
     if (!profiles) return items;
-    const map = Object.fromEntries(profiles.map((p: any) => [p.id, p]));
+    const map: Record<string, Actor> = Object.fromEntries(
+      profiles.map(profile => [profile.id, profile as Actor]),
+    );
     return items.map(n => ({
       ...n,
       actor: n.actor_id ? map[n.actor_id] ?? n.actor : n.actor,
@@ -220,7 +220,7 @@ export default function Notifications() {
           if (offset === 0) setFetchError(msg);
           setLoading(false);
           setLoadingMore(false);
-          return;
+          return [];
         }
       }
     }
@@ -229,6 +229,7 @@ export default function Notifications() {
     setNotifications(prev => append ? [...prev, ...(finalData ?? [])] : (finalData ?? []));
     setLoading(false);
     setLoadingMore(false);
+    return finalData ?? [];
   }, [supabase, hydrateActors]);
 
   const handleLoadMore = useCallback(() => {
@@ -260,6 +261,7 @@ export default function Notifications() {
 
   useEffect(() => {
     let channel: ReturnType<typeof supabase.channel> | null = null;
+    let markTimer: ReturnType<typeof setTimeout> | undefined;
     let cancelled = false;
 
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -267,19 +269,11 @@ export default function Notifications() {
       if (!user) { setLoading(false); return; }
       setUserId(user.id);
 
-      fetchNotifications(user.id, 0, false).then(() => {
-        // Show unread state briefly, then mark all read. This still marks
-        // everything fetched as read on a timer — genuinely tracking what
-        // was scrolled into view is a bigger change than this pass covers,
-        // but the delay at least lets people register the unread state
-        // before it clears, rather than it vanishing instantly on load.
-        setTimeout(() => {
-          if (!cancelled) {
-            setNotifications(prev => {
-              markAllRead(user.id, prev);
-              return prev;
-            });
-          }
+      fetchNotifications(user.id, 0, false).then(items => {
+        // Keep the unread state visible briefly before acknowledging the
+        // notifications that were actually fetched for this page.
+        markTimer = setTimeout(() => {
+          if (!cancelled) void markAllRead(user.id, items);
         }, 1500);
       });
 
@@ -302,9 +296,10 @@ export default function Notifications() {
 
     return () => {
       cancelled = true;
-      if (channel) supabase.removeChannel(channel);
+      if (markTimer) clearTimeout(markTimer);
+      if (channel) void supabase.removeChannel(channel);
     };
-  }, []); // eslint-disable-line
+  }, [fetchNotifications, hydrateActors, markAllRead, supabase]);
 
   const filtered = useMemo(
     () => filter === 'all' ? notifications : notifications.filter(n => n.type === filter),
