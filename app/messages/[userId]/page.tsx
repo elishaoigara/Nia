@@ -13,6 +13,7 @@ import MessageBubble, { ChatMessage } from '@/components/messages/MessageBubble'
 import MessageActionSheet from '@/components/messages/MessageActionSheet'
 import ChatGifPicker from '@/components/messages/ChatGifPicker'
 import ReportSheet from '@/components/messages/ReportSheet'
+import { asBoolean, asNullableString, asString, isRecord } from '@/lib/validation'
 
 const PAGE_SIZE = 30
 const TYPING_IDLE_MS = 2500
@@ -66,12 +67,33 @@ function presenceLabel(online: boolean, lastSeen: string | null | undefined) {
   return `Active ${Math.floor(s / 86400)}d ago`
 }
 
-function normalizeMsg(raw: any): ChatMessage {
+function normalizeMsg(raw: unknown): ChatMessage {
+  if (!isRecord(raw)) throw new TypeError('Invalid message payload')
+
+  const reactions = isRecord(raw.reactions)
+    ? Object.fromEntries(
+        Object.entries(raw.reactions).filter(
+          (entry): entry is [string, string] => typeof entry[1] === 'string',
+        ),
+      )
+    : {}
+
   return {
-    ...raw,
-    reactions: raw.reactions ?? {},
-    edited_at: raw.edited_at ?? null,
-    deleted_at: raw.deleted_at ?? null,
+    id: asString(raw.id),
+    sender_id: asString(raw.sender_id),
+    recipient_id: asString(raw.recipient_id),
+    content: asNullableString(raw.content),
+    media_url: asNullableString(raw.media_url),
+    media_type: asNullableString(raw.media_type),
+    file_name: asNullableString(raw.file_name),
+    view_once: asBoolean(raw.view_once),
+    viewed_at: asNullableString(raw.viewed_at),
+    reply_to: asNullableString(raw.reply_to),
+    is_read: asBoolean(raw.is_read),
+    created_at: asString(raw.created_at),
+    reactions,
+    edited_at: asNullableString(raw.edited_at),
+    deleted_at: asNullableString(raw.deleted_at),
   }
 }
 
@@ -167,7 +189,7 @@ export default function DirectMessagePage() {
       ])
       if (cancelled) return
 
-      const ordered = ((msgs as any[]) ?? []).map(normalizeMsg).reverse()
+      const ordered = (msgs ?? []).map(normalizeMsg).reverse()
       const firstUnread = ordered.find(m => !m.is_read && m.sender_id === recipientId)
       unreadDividerIdRef.current = firstUnread?.id ?? null
       setRecipient(profile as Profile)
@@ -184,7 +206,7 @@ export default function DirectMessagePage() {
     init()
 
     return () => { cancelled = true }
-  }, [recipientId]) // eslint-disable-line
+  }, [recipientId, router, supabase])
 
   // ---------------------------------------------------------------------
   // Realtime message subscription. Created directly in this effect (not
@@ -214,7 +236,7 @@ export default function DirectMessagePage() {
       .subscribe()
 
     return () => { supabase.removeChannel(channel) }
-  }, [currentUserId, recipientId]) // eslint-disable-line
+  }, [currentUserId, recipientId, supabase])
 
   // ---------------------------------------------------------------------
   // Presence + typing indicator, shared per conversation pair.
@@ -252,7 +274,7 @@ export default function DirectMessagePage() {
       supabase.removeChannel(channel)
       presenceChannelRef.current = null
     }
-  }, [currentUserId, recipientId]) // eslint-disable-line
+  }, [currentUserId, recipientId, supabase])
 
   function broadcastTyping(typing: boolean) {
     presenceChannelRef.current?.send({ type: 'broadcast', event: 'typing', payload: { user: currentUserId, typing } })
@@ -267,16 +289,17 @@ export default function DirectMessagePage() {
 
   // Cleanup timers / audio elements on unmount.
   useEffect(() => {
+    const audioElements = audioRefs.current
     return () => {
       if (timerRef.current) clearInterval(timerRef.current)
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
-      Object.values(audioRefs.current).forEach(a => { a.pause(); a.src = '' })
+      Object.values(audioElements).forEach(audio => { audio.pause(); audio.src = '' })
     }
   }, [])
 
   useEffect(() => {
     if (stickToBottom.current) bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+  }, [audioDurations, messages])
 
   function handleScroll() {
     const el = scrollRef.current
@@ -303,7 +326,7 @@ export default function DirectMessagePage() {
       .order('created_at', { ascending: false })
       .limit(PAGE_SIZE)
 
-    const older = ((data as any[]) ?? []).map(normalizeMsg).reverse()
+    const older = (data ?? []).map(normalizeMsg).reverse()
     if (older.length < PAGE_SIZE) setHasMore(false)
 
     const el = scrollRef.current
@@ -314,7 +337,7 @@ export default function DirectMessagePage() {
       if (el) el.scrollTop = prevScrollTop + (el.scrollHeight - prevHeight)
     })
     setLoadingOlder(false)
-  }, [currentUserId, recipientId, loadingOlder, hasMore, messages]) // eslint-disable-line
+  }, [currentUserId, recipientId, loadingOlder, hasMore, messages, supabase])
 
   async function uploadFile(file: File) {
     const ext = file.name.split('.').pop()
@@ -325,7 +348,7 @@ export default function DirectMessagePage() {
     return { url: data.publicUrl, name: file.name }
   }
 
-  async function insertMessage(payload: Record<string, any>, tempId: string): Promise<string | null> {
+  async function insertMessage(payload: Record<string, unknown>, tempId: string): Promise<string | null> {
     const { data, error } = await supabase.from('messages').insert(payload).select().single()
     if (!error && data) {
       setMessages(prev => prev.map(m => (m.id === tempId ? normalizeMsg(data) : m)))
@@ -373,7 +396,7 @@ export default function DirectMessagePage() {
       }
     })()
     return () => { cancelled = true }
-  }, [messages]) // eslint-disable-line
+  }, [audioDurations, messages])
 
   async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>, type: 'image' | 'video' | 'file') {
     const file = e.target.files?.[0]
@@ -448,7 +471,11 @@ export default function DirectMessagePage() {
         const result = await uploadFile(file)
         if (!result) {
           setMessages(prev => prev.filter(m => m.id !== tempId))
-          setAudioDurations(prev => { const { [tempId]: _drop, ...rest } = prev; return rest })
+          setAudioDurations(prev => {
+            const next = { ...prev }
+            delete next[tempId]
+            return next
+          })
           return
         }
         const realId = await insertMessage({
@@ -689,7 +716,7 @@ export default function DirectMessagePage() {
       {pendingRequest && (
         <div style={{ padding: '10px 14px', background: 'var(--surface-1)', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
           <p style={{ fontSize: 12.5, color: 'var(--text-secondary)', margin: '0 0 8px' }}>
-            <strong>@{recipient?.username}</strong> isn't someone you follow. Accept to start chatting, or decline to hide this request.
+            <strong>@{recipient?.username}</strong> isn’t someone you follow. Accept to start chatting, or decline to hide this request.
           </p>
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={acceptRequest} className="tap-sm" style={{ flex: 1, padding: '8px', borderRadius: 10, border: 'none', background: 'var(--grad-brand)', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Accept</button>
@@ -728,9 +755,6 @@ export default function DirectMessagePage() {
           const GROUP_WINDOW_MS = 2 * 60 * 1000
           const prev = messages[i - 1]
           const next = messages[i + 1]
-          const groupedWithPrev = !!prev && !msg.deleted_at && !prev.deleted_at &&
-            prev.sender_id === msg.sender_id &&
-            new Date(msg.created_at).getTime() - new Date(prev.created_at).getTime() < GROUP_WINDOW_MS
           const groupedWithNext = !!next && !msg.deleted_at && !next.deleted_at &&
             next.sender_id === msg.sender_id &&
             new Date(next.created_at).getTime() - new Date(msg.created_at).getTime() < GROUP_WINDOW_MS
@@ -765,7 +789,6 @@ export default function DirectMessagePage() {
               replyMsg={messages.find(m => m.id === msg.reply_to)}
               isViewOnceRevealed={revealedMedia.has(msg.id)}
               onRevealViewOnce={revealViewOnce}
-              isGroupedWithPrev={groupedWithPrev}
               isGroupedWithNext={groupedWithNext}
               playingAudio={playingAudio}
               audioProgress={audioProgress[msg.id] ?? 0}

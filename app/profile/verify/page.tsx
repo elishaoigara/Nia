@@ -40,7 +40,8 @@ export default function VerifyPage() {
         body: JSON.stringify({
           phone: phone.trim(),
           amount: 260,
-          recipientUserId: user.id,   // fixed: was `userId`
+          recipientUserId: user.id,
+          purpose: 'verification',
         }),
       })
       const data = await res.json()
@@ -60,13 +61,21 @@ export default function VerifyPage() {
 
   async function confirmPayment() {
     setLoading(true)
-    const res = await fetch('/api/verify', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ payment_ref: paymentRef }),
-    })
-    if (res.ok) setStep('done')
-    setLoading(false)
+    setError('')
+    try {
+      const res = await fetch('/api/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ payment_ref: paymentRef }),
+      })
+      const data = await res.json() as { error?: string }
+      if (res.ok) setStep('done')
+      else setError(data.error ?? 'Payment could not be confirmed yet.')
+    } catch {
+      setError('Could not confirm payment. Try again.')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (

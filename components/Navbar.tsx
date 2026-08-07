@@ -71,7 +71,7 @@ export default function Navbar() {
 
       return () => { supabase.removeChannel(ch) }
     })
-  }, []) // eslint-disable-line
+  }, [supabase])
 
   const isFlicks   = pathname === '/flicks'
   const isDmThread = pathname.startsWith('/messages/') && pathname.split('/').length === 3

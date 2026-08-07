@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { MessageSquare, Search, ArrowRight, Loader2, Inbox } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import type { BlockRow, ConversationMessageRow, MessageRequestRow } from '@/types/domain'
 
 function timeAgo(date: string) {
   const s = Math.floor((Date.now() - new Date(date).getTime()) / 1000)
@@ -15,7 +16,7 @@ function timeAgo(date: string) {
 }
 
 type Convo = {
-  profile: { id: string; username: string; avatar_url: string | null; full_name: string | null }
+  profile: { id: string; username: string; avatar_url: string | null; full_name?: string | null }
   lastMsg: string
   time: string
   unread: boolean
@@ -51,17 +52,21 @@ export default function MessagesPage() {
         supabase.from('message_requests').select('other_id, status').eq('user_id', user.id),
       ])
 
-      const blockedIds = new Set((blocks ?? []).map((b: any) => b.blocked_id))
-      const requestStatus = new Map<string, string>((requests ?? []).map((r: any) => [r.other_id, r.status]))
+      const blockedIds = new Set(((blocks ?? []) as BlockRow[]).map(block => block.blocked_id))
+      const requestStatus = new Map<string, string>(
+        ((requests ?? []) as MessageRequestRow[]).map(request => [request.other_id, request.status]),
+      )
+      const sentRows = (sent ?? []) as unknown as ConversationMessageRow[]
+      const receivedRows = (received ?? []) as unknown as ConversationMessageRow[]
 
       const map = new Map<string, Convo>()
 
-      for (const m of sent ?? []) {
+      for (const m of sentRows) {
         const pid = m.recipient_id
         if (blockedIds.has(pid)) continue
         if (!map.has(pid)) {
           map.set(pid, {
-            profile: (m as any).profiles,
+            profile: m.profiles,
             lastMsg: m.content ?? '📎 Media',
             time: m.created_at,
             unread: false,
@@ -70,7 +75,7 @@ export default function MessagesPage() {
         }
       }
 
-      for (const m of received ?? []) {
+      for (const m of receivedRows) {
         const pid = m.sender_id
         if (blockedIds.has(pid)) continue
         const status = requestStatus.get(pid)
@@ -79,10 +84,10 @@ export default function MessagesPage() {
         const isRequest = status === 'pending'
         if (!existing || new Date(m.created_at) > new Date(existing.time)) {
           map.set(pid, {
-            profile: (m as any).profiles,
+            profile: m.profiles,
             lastMsg: m.content ?? '📎 Media',
             time: m.created_at,
-            unread: !(m as any).is_read,
+            unread: !m.is_read,
             isRequest: existing ? existing.isRequest && isRequest : isRequest,
           })
         }
@@ -105,7 +110,7 @@ export default function MessagesPage() {
       .subscribe()
 
     return () => { supabase.removeChannel(channel) }
-  }, []) // eslint-disable-line
+  }, [router, supabase])
 
   async function accept(otherId: string) {
     if (!currentUserId) return
@@ -203,21 +208,21 @@ export default function MessagesPage() {
         <div style={{ textAlign: 'center', padding: '64px 24px' }}>
           {query ? (
             <>
-              <p style={{ fontWeight: 700, fontSize: 16 }}>No results for "{query}"</p>
+              <p style={{ fontWeight: 700, fontSize: 16 }}>No results for “{query}”</p>
               <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 4 }}>Try a different name</p>
             </>
           ) : tab === 'requests' ? (
             <>
               <Inbox size={40} style={{ color: 'var(--text-tertiary)', marginBottom: 10 }} />
               <p style={{ fontWeight: 700, fontSize: 16 }}>No message requests</p>
-              <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 4 }}>DMs from people you don't follow will land here.</p>
+              <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 4 }}>DMs from people you don’t follow will land here.</p>
             </>
           ) : (
             <>
               <div style={{ fontSize: 44, marginBottom: 10 }}>💬</div>
               <p style={{ fontWeight: 700, fontSize: 17 }}>No messages yet</p>
               <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 4, marginBottom: 20 }}>
-                Visit someone's profile and tap <strong>Message</strong> to start a conversation.
+                Visit someone’s profile and tap <strong>Message</strong> to start a conversation.
               </p>
               <Link href="/explore" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '10px 20px', borderRadius: 20, background: 'var(--grad-brand)', color: 'white', fontWeight: 700, fontSize: 14, textDecoration: 'none' }}>
                 Find people <ArrowRight size={14} />

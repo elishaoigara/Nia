@@ -58,7 +58,7 @@ const LONG_PRESS_MS = 420
 export default function MessageBubble({
   msg, isOwn, currentUserId, recipient, replyMsg,
   isViewOnceRevealed, onRevealViewOnce,
-  isGroupedWithPrev = false, isGroupedWithNext = false,
+  isGroupedWithNext = false,
   playingAudio, audioProgress, audioDuration, onToggleAudio, onSeekAudio,
   onSwipeReply, onLongPress, onDoubleTapReact,
 }: {
@@ -72,7 +72,6 @@ export default function MessageBubble({
   // True when the previous/next message in the list is from the same sender
   // and close enough in time to be part of the same visual cluster. Used to
   // collapse repeated avatars and per-bubble timestamps into one per cluster.
-  isGroupedWithPrev?: boolean
   isGroupedWithNext?: boolean
   playingAudio: string | null
   audioProgress: number

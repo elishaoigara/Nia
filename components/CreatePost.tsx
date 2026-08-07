@@ -99,7 +99,7 @@ export default function CreatePost({
       .eq('id', userId)
       .single()
       .then(({ data }: { data: Profile | null }) => setProfile(data));
-  }, [userId]); // eslint-disable-line
+  }, [supabase, userId]);
 
   /* auto-grow textarea */
   const grow = () => {

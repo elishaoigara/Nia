@@ -5,6 +5,7 @@ import CommentThread from '@/components/CommentThread'
 import ReplyBar from '@/components/ReplyBar'
 import { ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
+import type { Comment, Post } from '@/types/domain'
 
 interface Props { params: Promise<{ id: string }> }
 
@@ -54,14 +55,14 @@ export default async function PostDetailPage({ params }: Props) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  let post: any = null
+  let post: Post | null = null
 
   // Try full select first
   const { data: fullData, error: fullErr } = await supabase
     .from('posts').select(FULL_SELECT).eq('id', id).single()
 
   if (!fullErr && fullData) {
-    post = fullData
+    post = fullData as unknown as Post
   } else {
     // Genuine "row not found" — no point trying fallbacks
     if (fullErr?.code === 'PGRST116') notFound()
@@ -71,7 +72,7 @@ export default async function PostDetailPage({ params }: Props) {
       .from('posts').select(SAFE_SELECT).eq('id', id).single()
 
     if (!safeErr && safeData) {
-      post = safeData
+      post = safeData as unknown as Post
     } else {
       if (safeErr?.code === 'PGRST116') notFound()
 
@@ -80,7 +81,7 @@ export default async function PostDetailPage({ params }: Props) {
         .from('posts').select(BARE_SELECT).eq('id', id).single()
 
       if (bareErr || !bareData) notFound()
-      post = bareData
+      post = bareData as unknown as Post
     }
   }
 
@@ -109,7 +110,7 @@ export default async function PostDetailPage({ params }: Props) {
     viewerIsFollowing = !!followRow
   }
 
-  const comments = ((post.comments ?? []) as any[]).sort(
+  const comments = ((post.comments ?? []) as unknown as Comment[]).sort(
     (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
   )
 

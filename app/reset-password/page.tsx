@@ -17,24 +17,29 @@ export default function ResetPasswordPage() {
 
   /* Wait for the session to be set via the URL hash token */
   useEffect(() => {
+    let cancelled = false;
+    let attempt: ReturnType<typeof setTimeout> | undefined;
+
     const checkSession = async () => {
       const { data } = await supabase.auth.getSession();
-
+      if (cancelled) return;
       if (data?.session) {
         setReady(true);
-      } else {
-        /* If no session yet, try to wait briefly */
-        const attempt = setTimeout(async () => {
-          const { data: d2 } = await supabase.auth.getSession();
-          if (d2?.session) setReady(true);
-        }, 1500);
-
-        return () => clearTimeout(attempt);
+        return;
       }
+
+      attempt = setTimeout(async () => {
+        const { data: retryData } = await supabase.auth.getSession();
+        if (!cancelled && retryData?.session) setReady(true);
+      }, 1500);
     };
 
-    checkSession();
-  }, []); // eslint-disable-line
+    void checkSession();
+    return () => {
+      cancelled = true;
+      if (attempt) clearTimeout(attempt);
+    };
+  }, [supabase.auth]);
 
   async function handleReset(e: React.FormEvent) {
     e.preventDefault();

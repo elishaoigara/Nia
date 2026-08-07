@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { Search, Loader2 } from 'lucide-react'
+import type { GifApiResult } from '@/types/domain'
 
 const TENOR_KEY = process.env.NEXT_PUBLIC_TENOR_API_KEY ?? ''
 
@@ -26,8 +27,6 @@ export default function ChatGifPicker({
   const [loading, setLoading] = useState(false)
   const panelRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => { search(query) }, [query]) // eslint-disable-line
-
   useEffect(() => {
     function handle(e: MouseEvent) {
       if (panelRef.current && !panelRef.current.contains(e.target as Node)) onClose()
@@ -36,7 +35,7 @@ export default function ChatGifPicker({
     return () => document.removeEventListener('mousedown', handle)
   }, [onClose])
 
-  async function search(q: string) {
+  const search = useCallback(async (q: string) => {
     setLoading(true)
     try {
       const url = q
@@ -44,18 +43,23 @@ export default function ChatGifPicker({
         : `https://tenor.googleapis.com/v2/featured?key=${TENOR_KEY}&limit=15&media_filter=gif,tinygif`
       const res = await fetch(url)
       if (!res.ok) { setResults(FALLBACK_GIFS); return }
-      const json = await res.json()
-      const mapped: GifResult[] = (json.results ?? []).map((r: any) => ({
-        url: r.media_formats?.gif?.url ?? r.media_formats?.tinygif?.url ?? '',
-        preview: r.media_formats?.tinygif?.url ?? r.media_formats?.gif?.url ?? '',
-      })).filter((r: GifResult) => r.url)
+      const json = await res.json() as { results?: GifApiResult[] }
+      const mapped: GifResult[] = (json.results ?? []).map(result => ({
+        url: result.media_formats?.gif?.url ?? result.media_formats?.tinygif?.url ?? '',
+        preview: result.media_formats?.tinygif?.url ?? result.media_formats?.gif?.url ?? '',
+      })).filter(result => result.url)
       setResults(mapped.length ? mapped : FALLBACK_GIFS)
     } catch {
       setResults(FALLBACK_GIFS)
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => void search(query), 200)
+    return () => window.clearTimeout(timer)
+  }, [query, search])
 
   return (
     <div

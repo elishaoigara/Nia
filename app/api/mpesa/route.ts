@@ -1,50 +1,87 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { getMpesaEnv } from '@/lib/env'
+import { getAppUrl } from '@/lib/app-url'
+import { isRecord, readJsonObject } from '@/lib/validation'
 
-// ── Daraja OAuth ─────────────────────────────────────────────────────────────
-async function getDarajaToken(): Promise<string> {
-  const consumerKey = process.env.MPESA_CONSUMER_KEY!
-  const consumerSecret = process.env.MPESA_CONSUMER_SECRET!
-  const credentials = Buffer.from(`${consumerKey}:${consumerSecret}`).toString('base64')
+const MIN_TIP_KES = 1
+const MAX_TIP_KES = 150_000
+const KENYAN_PHONE = /^254(?:1|7)\d{8}$/
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
-  const res = await fetch(
-    'https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials',
-    { headers: { Authorization: `Basic ${credentials}` } }
-  )
-  const data = await res.json()
-  return data.access_token
+function normalizePhone(value: string): string {
+  return value.replace(/[\s()-]/g, '').replace(/^0/, '254').replace(/^\+/, '')
 }
 
-// ── STK Push ─────────────────────────────────────────────────────────────────
+function darajaOrigin(environment: 'sandbox' | 'production'): string {
+  return environment === 'production'
+    ? 'https://api.safaricom.co.ke'
+    : 'https://sandbox.safaricom.co.ke'
+}
+
+async function getDarajaToken(): Promise<string> {
+  const { consumerKey, consumerSecret, environment } = getMpesaEnv()
+  const credentials = Buffer.from(`${consumerKey}:${consumerSecret}`).toString('base64')
+  const response = await fetch(
+    `${darajaOrigin(environment)}/oauth/v1/generate?grant_type=client_credentials`,
+    {
+      headers: { Authorization: `Basic ${credentials}` },
+      cache: 'no-store',
+      signal: AbortSignal.timeout(10_000),
+    },
+  )
+
+  const body: unknown = await response.json()
+  if (!response.ok || !isRecord(body) || typeof body.access_token !== 'string') {
+    throw new Error('Daraja authentication failed')
+  }
+  return body.access_token
+}
+
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { recipientUserId, amount, phone } = await req.json()
+  const body = await readJsonObject(req)
+  const recipientUserId = body?.recipientUserId
+  const amount = body?.amount
+  const phone = body?.phone
+  const purpose = body?.purpose === 'verification' ? 'verification' : 'tip'
 
-  if (!recipientUserId || !amount || !phone) {
-    return NextResponse.json({ error: 'Missing fields: recipientUserId, amount, phone' }, { status: 400 })
+  if (
+    typeof recipientUserId !== 'string' || !UUID.test(recipientUserId) ||
+    typeof amount !== 'number' || !Number.isFinite(amount) ||
+    amount < MIN_TIP_KES || amount > MAX_TIP_KES ||
+    typeof phone !== 'string'
+  ) {
+    return NextResponse.json({ error: 'Invalid recipient, amount, or phone number' }, { status: 400 })
   }
 
-  const shortcode = process.env.MPESA_SHORTCODE!
-  const passkey = process.env.MPESA_PASSKEY!
+  if (purpose === 'tip' && recipientUserId === user.id) {
+    return NextResponse.json({ error: 'You cannot tip your own account' }, { status: 400 })
+  }
+  if (purpose === 'verification' && recipientUserId !== user.id) {
+    return NextResponse.json({ error: 'Invalid verification account' }, { status: 400 })
+  }
 
-  // Generate timestamp and password
-  const timestamp = new Date()
-    .toISOString()
-    .replace(/[-T:.Z]/g, '')
-    .slice(0, 14)
-  const password = Buffer.from(`${shortcode}${passkey}${timestamp}`).toString('base64')
-
-  // Normalise phone number to 254...
-  const normalizedPhone = phone.replace(/^0/, '254').replace(/^\+/, '')
+  const normalizedPhone = normalizePhone(phone)
+  if (!KENYAN_PHONE.test(normalizedPhone)) {
+    return NextResponse.json({ error: 'Enter a valid Kenyan M-Pesa number' }, { status: 400 })
+  }
 
   try {
+    const config = getMpesaEnv()
     const token = await getDarajaToken()
+    const timestamp = new Date().toISOString().replace(/[-T:.Z]/g, '').slice(0, 14)
+    const password = Buffer.from(
+      `${config.shortcode}${config.passkey}${timestamp}`,
+    ).toString('base64')
+    const callbackUrl = new URL('/api/mpesa/callback', getAppUrl())
+    callbackUrl.searchParams.set('token', config.callbackToken)
 
-    const stkRes = await fetch(
-      'https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest',
+    const response = await fetch(
+      `${darajaOrigin(config.environment)}/mpesa/stkpush/v1/processrequest`,
       {
         method: 'POST',
         headers: {
@@ -52,45 +89,46 @@ export async function POST(req: NextRequest) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          BusinessShortCode: shortcode,
+          BusinessShortCode: config.shortcode,
           Password: password,
           Timestamp: timestamp,
           TransactionType: 'CustomerPayBillOnline',
           Amount: Math.round(amount),
           PartyA: normalizedPhone,
-          PartyB: shortcode,
+          PartyB: config.shortcode,
           PhoneNumber: normalizedPhone,
-          CallBackURL: `${process.env.NEXT_PUBLIC_APP_URL}/api/mpesa/callback`,
-          AccountReference: `NiaTip-${recipientUserId.slice(0, 8)}`,
-          TransactionDesc: 'Nia creator tip',
+          CallBackURL: callbackUrl.toString(),
+          AccountReference: `${purpose === 'verification' ? 'NiaVerify' : 'NiaTip'}-${recipientUserId.slice(0, 8)}`,
+          TransactionDesc: purpose === 'verification' ? 'Nia verification' : 'Nia creator tip',
         }),
-      }
+        signal: AbortSignal.timeout(15_000),
+      },
     )
 
-    const stkData = await stkRes.json()
-
-    if (stkData.ResponseCode !== '0') {
-      return NextResponse.json(
-        { error: stkData.errorMessage ?? 'STK push failed' },
-        { status: 400 }
-      )
+    const stkData: unknown = await response.json()
+    if (
+      !response.ok || !isRecord(stkData) || stkData.ResponseCode !== '0' ||
+      typeof stkData.CheckoutRequestID !== 'string'
+    ) {
+      return NextResponse.json({ error: 'M-Pesa could not start this payment' }, { status: 502 })
     }
 
-    // Record pending tip in DB
-    await supabase.from('tips').insert({
+    const { error: insertError } = await supabase.from('tips').insert({
       sender_id: user.id,
       recipient_id: recipientUserId,
-      amount,
+      amount: Math.round(amount),
       phone: normalizedPhone,
       checkout_request_id: stkData.CheckoutRequestID,
       status: 'pending',
     })
+    if (insertError) throw insertError
 
     return NextResponse.json({
       message: 'STK push sent. Check your phone.',
       checkoutRequestId: stkData.CheckoutRequestID,
     })
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message ?? 'Unknown error' }, { status: 500 })
+  } catch (error: unknown) {
+    console.error('[mpesa] STK push failed', error)
+    return NextResponse.json({ error: 'Payment service is temporarily unavailable' }, { status: 503 })
   }
 }

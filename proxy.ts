@@ -1,7 +1,14 @@
 import { type NextRequest } from 'next/server';
 import { updateSession } from '@/lib/supabase/middleware';
 
-const publicPaths = ['/login', '/signup', '/auth/callback', '/onboarding'];
+const publicPaths = [
+  '/login',
+  '/signup',
+  '/forgot-password',
+  '/reset-password',
+  '/auth/callback',
+  '/api/mpesa/callback',
+];
 
 export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;

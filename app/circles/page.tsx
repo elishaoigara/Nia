@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import CircleCard, { CATEGORY_COLORS, CATEGORY_EMOJI } from '@/components/CircleCard'
 import CreateCircle from '@/components/CreateCircle'
 import { Search, Users, Loader2 } from 'lucide-react'
+import type { Circle } from '@/types/domain'
 
 const CATEGORIES = ['tech', 'art', 'sports', 'music', 'science']
 
@@ -14,7 +15,7 @@ export default function CirclesPage() {
   const router = useRouter()
 
   const [userId, setUserId] = useState<string | null>(null)
-  const [circles, setCircles] = useState<any[]>([])
+  const [circles, setCircles] = useState<Circle[]>([])
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState<string | null>(null)
@@ -34,17 +35,17 @@ export default function CirclesPage() {
         .order('created_at', { ascending: false })
 
       if (!cancelled) {
-        setCircles(data ?? [])
+        setCircles((data ?? []) as unknown as Circle[])
         setLoading(false)
       }
     }
 
     load()
     return () => { cancelled = true }
-  }, [])
+  }, [router, supabase])
 
   const yourCircles = useMemo(
-    () => circles.filter(c => c.circle_members?.some((m: any) => m.user_id === userId)),
+    () => circles.filter(circle => circle.circle_members?.some(member => member.user_id === userId)),
     [circles, userId]
   )
 

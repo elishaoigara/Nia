@@ -15,7 +15,7 @@ interface RequestRow {
 // Any current member can moderate — circles has no creator_id/admin role
 // today, so "whoever's already in the circle can vet who joins" is the
 // deliberately simple v1 rather than building out a roles system.
-export default function CircleRequestsPanel({ circleId, requests }: { circleId: string; requests: RequestRow[] }) {
+export default function CircleRequestsPanel({ requests }: { requests: RequestRow[] }) {
   const supabase = createClient()
   const router = useRouter()
   const [hidden, setHidden] = useState<Set<string>>(new Set())

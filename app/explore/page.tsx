@@ -10,27 +10,31 @@ import {
   MapPin, Globe2, Compass, Loader2,
 } from 'lucide-react'
 import { AFRICAN_REGIONS, getFlag } from '@/lib/african-data'
+import type { Circle, HashtagRow, ProfileSummary } from '@/types/domain'
 
 type Tab = 'trending' | 'search'
+type LocationProfile = Pick<ProfileSummary, 'country' | 'city'>
+type ExplorePerson = Pick<ProfileSummary, 'id' | 'username' | 'avatar_url' | 'country' | 'city' | 'bio'>
+type SearchPerson = Pick<ProfileSummary, 'id' | 'username' | 'full_name' | 'avatar_url' | 'university'>
 
 export default function ExplorePage() {
   const supabase = createClient()
 
   const [tab,          setTab]          = useState<Tab>('trending')
   const [userId,       setUserId]       = useState<string | null>(null)
-  const [myProfile,    setMyProfile]    = useState<any>(null)
+  const [myProfile,    setMyProfile]    = useState<LocationProfile | null>(null)
 
   // trending state
   const [trending,        setTrending]        = useState<{ tag: string; count: number }[]>([])
-  const [trendingCircles, setTrendingCircles] = useState<any[]>([])
-  const [localCircles,    setLocalCircles]    = useState<any[]>([])
-  const [africanUsers,    setAfricanUsers]    = useState<any[]>([])
+  const [trendingCircles, setTrendingCircles] = useState<Circle[]>([])
+  const [localCircles,    setLocalCircles]    = useState<Circle[]>([])
+  const [africanUsers,    setAfricanUsers]    = useState<ExplorePerson[]>([])
   const [loadingTrending, setLoadingTrending] = useState(true)
 
   // search state
   const [query,       setQuery]       = useState('')
-  const [users,       setUsers]       = useState<any[]>([])
-  const [circles,     setCircles]     = useState<any[]>([])
+  const [users,       setUsers]       = useState<SearchPerson[]>([])
+  const [circles,     setCircles]     = useState<Circle[]>([])
   const [hasSearched, setHasSearched] = useState(false)
   const [isPending,   startTransition] = useTransition()
 
@@ -42,13 +46,13 @@ export default function ExplorePage() {
 
       const { data: profile } = await supabase
         .from('profiles').select('country, city').eq('id', user.id).single()
-      setMyProfile(profile)
+      setMyProfile(profile as LocationProfile | null)
 
       const since = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString()
       const { data: tags } = await supabase
         .from('hashtags').select('tag').gte('created_at', since)
-      const counts = (tags ?? []).reduce((acc: Record<string, number>, h: any) => {
-        acc[h.tag] = (acc[h.tag] ?? 0) + 1; return acc
+      const counts = ((tags ?? []) as HashtagRow[]).reduce((acc: Record<string, number>, hashtag) => {
+        acc[hashtag.tag] = (acc[hashtag.tag] ?? 0) + 1; return acc
       }, {})
       setTrending(
         Object.entries(counts).sort(([, a], [, b]) => b - a).slice(0, 10)
@@ -58,24 +62,24 @@ export default function ExplorePage() {
       const { data: circles } = await supabase
         .from('circles').select('*, circle_members (user_id)')
         .order('created_at', { ascending: false }).limit(6)
-      setTrendingCircles(circles ?? [])
+      setTrendingCircles((circles ?? []) as unknown as Circle[])
 
       if (profile?.country) {
-        const ids = circles?.map((c: any) => c.id) ?? []
+        const ids = circles?.map(circle => circle.id) ?? []
         const q = supabase.from('circles').select('*, circle_members (user_id)')
           .eq('country', profile.country).limit(4)
         if (ids.length > 0) q.not('id', 'in', `(${ids.join(',')})`)
         const { data: local } = await q
-        setLocalCircles(local ?? [])
+        setLocalCircles((local ?? []) as unknown as Circle[])
       }
 
       const { data: people } = await supabase
         .from('profiles').select('id, username, avatar_url, country, city, bio')
         .neq('id', user.id).not('country', 'is', null).limit(8)
-      setAfricanUsers(people ?? [])
+      setAfricanUsers((people ?? []) as ExplorePerson[])
       setLoadingTrending(false)
     })
-  }, []) // eslint-disable-line
+  }, [supabase])
 
   // ── search handler ─────────────────────────────────────
   async function handleSearch(q: string) {
@@ -87,8 +91,8 @@ export default function ExplorePage() {
         supabase.from('profiles').select('id, username, full_name, avatar_url, university').ilike('username', term).limit(10),
         supabase.from('circles').select('id, name, slug, description, university, category, circle_members(user_id)').ilike('name', term).limit(10),
       ])
-      setUsers(foundUsers ?? [])
-      setCircles(foundCircles ?? [])
+      setUsers((foundUsers ?? []) as SearchPerson[])
+      setCircles((foundCircles ?? []) as unknown as Circle[])
       setHasSearched(true)
     })
   }
@@ -222,7 +226,7 @@ export default function ExplorePage() {
                     <h2 style={{ fontWeight: 800, fontSize: 15 }}>People across Africa</h2>
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
-                    {africanUsers.map((p: any) => (
+                    {africanUsers.map(p => (
                       <Link
                         key={p.id}
                         href={`/profile/${p.id}`}
@@ -242,7 +246,7 @@ export default function ExplorePage() {
                         </div>
                         <div style={{ minWidth: 0, width: '100%' }}>
                           <p style={{ fontWeight: 700, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>@{p.username}</p>
-                          <p style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>{getFlag(p.country)} {p.city ?? p.country}</p>
+                          <p style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>{getFlag(p.country ?? '')} {p.city ?? p.country}</p>
                         </div>
                       </Link>
                     ))}
@@ -307,7 +311,7 @@ export default function ExplorePage() {
             users.length === 0 && circles.length === 0 ? (
               <div className="card" style={{ textAlign: 'center', padding: '48px 24px' }}>
                 <div style={{ fontSize: 40, marginBottom: 12 }}>🤔</div>
-                <p style={{ fontWeight: 700 }}>No results for "{query}"</p>
+                <p style={{ fontWeight: 700 }}>No results for “{query}”</p>
                 <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 4 }}>Try a different search term</p>
               </div>
             ) : (

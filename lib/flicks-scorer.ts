@@ -2,6 +2,7 @@
 import type { ScorerPost, UserContext } from './feed-scorer'
 
 export const FLICKS_WEIGHTS = {
+  baseline: 0.10,        // lets newly uploaded videos enter discovery
   like: 0.25,
   comment: 0.42,
   repost: 0.18,
@@ -17,7 +18,9 @@ export const FLICKS_WEIGHTS = {
 }
 
 function ageDecay(createdAt: string): number {
-  const hours = (Date.now() - new Date(createdAt).getTime()) / 3600000
+  const createdAtMs = new Date(createdAt).getTime()
+  if (!Number.isFinite(createdAtMs)) return 0
+  const hours = Math.max(0, (Date.now() - createdAtMs) / 3_600_000)
   return 1 / Math.pow(Math.log(hours + 3), FLICKS_WEIGHTS.age_gravity)
 }
 
@@ -34,6 +37,7 @@ export function scoreFlicks(
     }
 
     const engagement =
+      FLICKS_WEIGHTS.baseline +
       (flick.likes?.length ?? 0) * FLICKS_WEIGHTS.like +
       (flick.comments?.length ?? 0) * FLICKS_WEIGHTS.comment +
       (flick.reposts?.length ?? 0) * FLICKS_WEIGHTS.repost
@@ -52,8 +56,11 @@ export function scoreFlicks(
     return { flick, score }
   })
 
-  // Author diversity
-  const authorCount = new Map()
+  // Apply diversity to the highest-scoring item from each author first. The
+  // input is usually chronological, so sorting here avoids penalising a
+  // strong item merely because an older item appeared earlier in the query.
+  scored.sort((a, b) => b.score - a.score)
+  const authorCount = new Map<string, number>()
   const final = scored.map(({ flick, score }) => {
     const count = authorCount.get(flick.user_id) ?? 0
     authorCount.set(flick.user_id, count + 1)

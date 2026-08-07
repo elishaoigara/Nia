@@ -13,6 +13,11 @@ import {
   Loader2, Link as LinkIcon, Globe, Languages,
 } from 'lucide-react'
 import { getFlag } from '@/lib/african-data'
+import type { Comment, Post, Profile, StoryRow } from '@/types/domain'
+
+interface ProfileReply extends Comment {
+  posts?: Post | null
+}
 
 const BASE_SELECT = `
   *,
@@ -196,7 +201,7 @@ function getCitySkyline(city?: string | null, country?: string | null): string {
 }
 
 // Profile strength calculation
-function calcStrength(profile: any): { score: number; missing: string[] } {
+function calcStrength(profile: Profile): { score: number; missing: string[] } {
   const checks = [
     { done: !!profile.avatar_url,  label: 'Add a profile photo' },
     { done: !!profile.banner_url,  label: 'Add a cover photo' },
@@ -213,7 +218,7 @@ function calcStrength(profile: any): { score: number; missing: string[] } {
 }
 
 // Parse interests/tags from bio or dedicated field
-function parseTags(profile: any): string[] {
+function parseTags(profile: Profile): string[] {
   const tags: string[] = []
   if (profile.interests) {
     if (Array.isArray(profile.interests)) tags.push(...profile.interests)
@@ -234,10 +239,10 @@ export default function ProfilePage() {
   const supabase = createClient()
 
   const [currentUserId,  setCurrentUserId]  = useState<string | null>(null)
-  const [profile,        setProfile]        = useState<any>(null)
-  const [posts,          setPosts]          = useState<any[]>([])
-  const [replies,        setReplies]        = useState<any[]>([])
-  const [saved,          setSaved]          = useState<any[]>([])
+  const [profile,        setProfile]        = useState<Profile | null>(null)
+  const [posts,          setPosts]          = useState<Post[]>([])
+  const [replies,        setReplies]        = useState<ProfileReply[]>([])
+  const [saved,          setSaved]          = useState<Post[]>([])
   const [tab,            setTab]            = useState<Tab>('posts')
   const [loading,        setLoading]        = useState(true)
   const [tabLoading,     setTabLoading]     = useState(false)
@@ -260,50 +265,49 @@ export default function ProfilePage() {
         setHasActiveStory(true)
         const { data: views } = await supabase
           .from('story_views').select('story_id').eq('viewer_id', currentUserId)
-          .in('story_id', stories.map((s: any) => s.id))
+          .in('story_id', (stories as StoryRow[]).map(story => story.id))
         if (cancelled) return
         const viewedCount = (views ?? []).length
         setStoryUnseen(viewedCount < stories.length)
       })
     return () => { cancelled = true }
-  }, [id, currentUserId]) // eslint-disable-line
+  }, [id, currentUserId, supabase])
 
   const isOwner = currentUserId === id
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setCurrentUserId(data.user?.id ?? null))
-  }, []) // eslint-disable-line
+  }, [supabase.auth])
 
   useEffect(() => {
     if (!id) return
-    setLoading(true)
     Promise.all([
       supabase.from('profiles').select('*').eq('id', id).single(),
       supabase.from('follows').select('follower_id', { count: 'exact', head: true }).eq('following_id', id),
       supabase.from('follows').select('following_id', { count: 'exact', head: true }).eq('follower_id', id),
       supabase.from('posts').select('id', { count: 'exact', head: true }).eq('user_id', id),
     ]).then(([profileRes, followersRes, followingRes, postsRes]) => {
-      setProfile(profileRes.data)
+      setProfile(profileRes.data as Profile | null)
       setFollowerCount(followersRes.count ?? 0)
       setFollowingCount(followingRes.count ?? 0)
       setPostCount(postsRes.count ?? 0)
       setLoading(false)
     })
-  }, [id]) // eslint-disable-line
+  }, [id, supabase])
 
   useEffect(() => {
     if (!currentUserId || !id || currentUserId === id) return
     supabase.from('follows').select('follower_id')
       .eq('follower_id', currentUserId).eq('following_id', id)
       .maybeSingle().then(({ data }) => setIsFollowing(!!data))
-  }, [currentUserId, id]) // eslint-disable-line
+  }, [currentUserId, id, supabase])
 
   useEffect(() => {
     if (!id) return
     supabase.from('posts').select(BASE_SELECT).eq('user_id', id)
       .order('created_at', { ascending: false }).limit(30)
-      .then(({ data }) => setPosts(data ?? []))
-  }, [id]) // eslint-disable-line
+      .then(({ data }) => setPosts((data ?? []) as unknown as Post[]))
+  }, [id, supabase])
 
   const loadReplies = useCallback(async () => {
     if (replies.length > 0) return
@@ -312,9 +316,9 @@ export default function ProfilePage() {
       *, profiles:user_id (id, username, full_name, avatar_url),
       posts:post_id (*, profiles:user_id (id, username, full_name, avatar_url))
     `).eq('user_id', id).order('created_at', { ascending: false }).limit(30)
-    setReplies(data ?? [])
+    setReplies((data ?? []) as unknown as ProfileReply[])
     setTabLoading(false)
-  }, [id, replies.length]) // eslint-disable-line
+  }, [id, replies.length, supabase])
 
   const loadSaved = useCallback(async () => {
     if (saved.length > 0) return
@@ -328,9 +332,14 @@ export default function ProfilePage() {
         polls (id, question, options, ends_at)
       )
     `).eq('user_id', currentUserId!).order('created_at', { ascending: false }).limit(30)
-    setSaved((data ?? []).map((b: any) => b.posts).filter(Boolean))
+    const bookmarkRows = (data ?? []) as unknown as { posts: Post | null }[]
+    setSaved(
+      bookmarkRows
+        .map(bookmark => bookmark.posts)
+        .filter((post): post is Post => post !== null),
+    )
     setTabLoading(false)
-  }, [currentUserId, saved.length]) // eslint-disable-line
+  }, [currentUserId, saved.length, supabase])
 
   function handleTabChange(t: Tab) {
     setTab(t)
@@ -775,7 +784,7 @@ export default function ProfilePage() {
           {tab === 'replies' && (
             replies.length === 0
               ? <EmptyState emoji="💬" message="No replies yet" />
-              : replies.map((reply: any) => (
+              : replies.map(reply => (
                   <div key={reply.id} style={{ borderBottom: '1px solid var(--divider)', padding: '14px 16px' }}>
                     {reply.posts && (
                       <Link href={`/posts/${reply.post_id}`} style={{ textDecoration: 'none' }}>

@@ -3,6 +3,7 @@
 import { useState, type CSSProperties } from 'react'
 import { LogOut, Loader2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import { useRouter } from 'next/navigation'
 
 interface LogoutButtonProps {
   className?: string
@@ -13,12 +14,14 @@ interface LogoutButtonProps {
 export default function LogoutButton({ className = '', variant = 'full', style }: LogoutButtonProps) {
   const [loading, setLoading] = useState(false)
   const supabase = createClient()
+  const router = useRouter()
 
   async function handleLogout() {
     if (loading) return
     setLoading(true)
     await supabase.auth.signOut()
-    window.location.href = '/login'
+    router.replace('/login')
+    router.refresh()
   }
 
   if (variant === 'icon') {

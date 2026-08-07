@@ -17,70 +17,20 @@ import {
   Trash2,
   Link2,
   Check,
-  X,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
-import { createClient as createClientLocal } from '@/lib/supabase/client';
 import { getStoryRingData } from '@/lib/activeStories';
+import type { Poll, Post } from '@/types/domain';
 import MediaLightbox from './MediaLightbox';
 import FollowButton from './FollowButton';
 import { getFlag } from '@/lib/african-data';
 
 /* ── Types ──────────────────────────────────── */
 
-interface Profile {
-  id: string;
-  username: string;
-  full_name: string | null;
-  avatar_url: string | null;
-  country: string | null;
-}
+type PostMedia = { url: string; type: 'image' | 'video' };
 
-interface PostMedia {
-  url: string;
-  type: 'image' | 'video';
-}
-
-interface CircleInfo {
-  id: string;
-  name: string;
-}
-
-interface PollOption {
-  id: string;
-  text: string;
-  votes: number;
-}
-
-interface PollInfo {
-  id: string;
-  question: string;
-  options: PollOption[];
-  ends_at: string;
-}
-
-interface PostCardProps {
-  post: {
-    id: string;
-    content: string | null;
-    media_url: string | null;
-    media_type: string | null;
-    extra_media: PostMedia[] | null;
-    language: string | null;
-    created_at: string;
-    user_id: string;
-    profiles: Profile | null;
-    circles: CircleInfo | null;
-    likes_count?: number;
-    comments_count?: number;
-    lomi_count?: number;
-    reposts_count?: number;
-    polls: PollInfo[] | null;
-    likes?: { user_id: string }[];
-    reposts?: { user_id: string }[];
-    bookmarks?: { user_id: string }[];
-    viewer_is_following?: boolean;
-  };
+export interface PostCardProps {
+  post: Post;
   currentUserId?: string | null;
   onDelete?: (postId: string) => void;
   showLine?: boolean;
@@ -161,13 +111,13 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
     !!currentUserId && Array.isArray(post.likes) && post.likes.some(l => l.user_id === currentUserId)
   );
   const [likesCount,         setLikesCount]         = useState(
-    post.likes_count ?? (Array.isArray((post as any).likes) ? (post as any).likes.length : 0)
+    post.likes_count ?? post.likes?.length ?? 0
   );
-  const [commentsCount,      setCommentsCount]      = useState(
-    post.comments_count ?? (Array.isArray((post as any).comments) ? (post as any).comments.length : 0)
+  const [commentsCount] = useState(
+    post.comments_count ?? post.comments?.length ?? 0
   );
   const [repostsCount,       setRepostsCount]       = useState(
-    post.reposts_count ?? (Array.isArray((post as any).reposts) ? (post as any).reposts.length : 0)
+    post.reposts_count ?? post.reposts?.length ?? 0
   );
   const [reposted,           setReposted]           = useState(
     !!currentUserId && Array.isArray(post.reposts) && post.reposts.some(r => r.user_id === currentUserId)
@@ -216,16 +166,21 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
 
   const allMedia: PostMedia[] = [];
   if (post.media_url && post.media_type) {
-    allMedia.push({ url: post.media_url, type: post.media_type as 'image' | 'video' });
+    const type = post.media_type === 'video' ? 'video' : 'image';
+    allMedia.push({ url: post.media_url, type });
   }
   if (post.extra_media && Array.isArray(post.extra_media)) {
-    allMedia.push(...post.extra_media);
+    allMedia.push(...post.extra_media.map(media => ({
+      url: media.url,
+      type: media.type === 'video' ? 'video' as const : 'image' as const,
+    })));
   }
 
   // Is this post within the 15-min edit window?
-  const isOwner     = currentUserId === post.user_id;
-  const minsOld     = (Date.now() - new Date(post.created_at).getTime()) / 60000;
-  const canEdit     = isOwner && minsOld <= EDIT_WINDOW_MINS;
+  const isOwner = currentUserId === post.user_id;
+  const [renderedAt] = useState(() => Date.now());
+  const minsOld = (renderedAt - new Date(post.created_at).getTime()) / 60000;
+  const canEdit = isOwner && minsOld <= EDIT_WINDOW_MINS;
   const editCharsLeft = MAX_EDIT_CHARS - editContent.length;
 
   /* Note: liked / reposted / bookmarked / following state are derived
@@ -274,7 +229,7 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
         });
       }
     }
-  }, [currentUserId, liked, post.id, post.user_id, profile?.username]); // eslint-disable-line
+  }, [currentUserId, liked, post.id, post.user_id, profile?.username, supabase]);
 
   const handleRepost = useCallback(async () => {
     if (!currentUserId) return;
@@ -297,7 +252,7 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
         });
       }
     }
-  }, [currentUserId, reposted, post.id, post.user_id, profile?.username]); // eslint-disable-line
+  }, [currentUserId, reposted, post.id, post.user_id, profile?.username, supabase]);
 
   const handleBookmark = useCallback(async () => {
     if (!currentUserId) return;
@@ -307,7 +262,7 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
     } else {
       await supabase.from('bookmarks').insert({ post_id: post.id, user_id: currentUserId });
     }
-  }, [currentUserId, bookmarked, post.id]); // eslint-disable-line
+  }, [currentUserId, bookmarked, post.id, supabase]);
 
   const handleDelete = useCallback(async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -316,7 +271,7 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
     await supabase.from('posts').delete().eq('id', post.id);
     onDelete?.(post.id);
     router.refresh();
-  }, [post.id, onDelete, router]); // eslint-disable-line
+  }, [post.id, onDelete, router, supabase]);
 
   const handleEditSave = useCallback(async () => {
     if (!canEdit || editLoading) return;
@@ -327,7 +282,7 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
       .eq('id', post.id);
     setEditLoading(false);
     if (!error) { setEditing(false); router.refresh(); }
-  }, [canEdit, editContent, editCharsLeft, editLoading, post.id, router]); // eslint-disable-line
+  }, [canEdit, editContent, editCharsLeft, editLoading, post.id, router, supabase]);
 
   const handleCopyLink = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -671,29 +626,29 @@ function menuItemStyle(color = 'var(--text-primary)'): React.CSSProperties {
 function PollCard({
   poll, postId, currentUserId,
 }: {
-  poll: PollInfo; postId: string; currentUserId?: string | null;
+  poll: Poll; postId: string; currentUserId?: string | null;
 }) {
-  const supabase = createClientLocal();
+  const supabase = createClient();
   const [voted,    setVoted]    = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [results,  setResults]  = useState<Record<string, number>>({});
+
+  const loadResults = useCallback(async () => {
+    const { data } = await supabase.from('poll_votes').select('option_id').eq('poll_id', poll.id);
+    if (data) {
+      const counts: Record<string, number> = {};
+      data.forEach(vote => { counts[vote.option_id] = (counts[vote.option_id] ?? 0) + 1; });
+      setResults(counts);
+    }
+  }, [poll.id, supabase]);
 
   useEffect(() => {
     if (!currentUserId) return;
     supabase.from('poll_votes').select('option_id').eq('poll_id', poll.id).eq('user_id', currentUserId)
       .maybeSingle().then(({ data }) => {
-        if (data) { setVoted(true); setSelected(data.option_id); loadResults(); }
+        if (data) { setVoted(true); setSelected(data.option_id); void loadResults(); }
       });
-  }, [currentUserId, poll.id]); // eslint-disable-line
-
-  async function loadResults() {
-    const { data } = await supabase.from('poll_votes').select('option_id').eq('poll_id', poll.id);
-    if (data) {
-      const counts: Record<string, number> = {};
-      data.forEach(v => { counts[v.option_id] = (counts[v.option_id] ?? 0) + 1; });
-      setResults(counts);
-    }
-  }
+  }, [currentUserId, loadResults, poll.id, supabase]);
 
   async function handleVote(optionId: string) {
     if (!currentUserId || voted) return;
