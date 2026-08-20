@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
+import { friendlyAuthError } from '@/lib/auth-errors';
 import UnityLine from '@/components/UnityLine';
 
 export default function LoginPage() {
@@ -26,7 +27,7 @@ export default function LoginPage() {
     });
 
     if (signInError) {
-      setError(signInError.message);
+      setError(friendlyAuthError(signInError.message));
       setLoading(false);
       return;
     }
@@ -46,7 +47,7 @@ export default function LoginPage() {
     });
 
     if (oauthError) {
-      setError(oauthError.message);
+      setError(friendlyAuthError(oauthError.message));
       setLoading(false);
     }
   }
@@ -195,6 +196,8 @@ export default function LoginPage() {
             <div style={{ marginBottom: 14 }}>
               <input
                 type="email"
+                inputMode="email"
+                autoComplete="email"
                 placeholder="Email"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
@@ -215,6 +218,7 @@ export default function LoginPage() {
             <div style={{ marginBottom: 20 }}>
               <input
                 type="password"
+                autoComplete="current-password"
                 placeholder="Password"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
@@ -235,6 +239,8 @@ export default function LoginPage() {
 
             {error && (
               <p
+                role="alert"
+                aria-live="polite"
                 style={{
                   color: 'var(--nia-coral)',
                   fontSize: 13,

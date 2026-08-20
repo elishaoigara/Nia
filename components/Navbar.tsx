@@ -11,6 +11,7 @@ import NotificationBell from '@/components/NotificationBell'
 import ThemeToggle      from '@/components/ThemeToggle'
 import LogoutButton     from '@/components/LogoutButton'
 import { createClient } from '@/lib/supabase/client'
+import { useUnreadCounts } from '@/lib/hooks/useUnreadCounts'
 
 /* ── 5 nav items only ─────────────────────────────────────
    Discover absorbed Search → /explore
@@ -30,8 +31,8 @@ export default function Navbar() {
   const router   = useRouter()
   const supabase = createClient()
 
-  const [userId,         setUserId]         = useState<string | null>(null)
-  const [unreadMessages, setUnreadMessages] = useState(0)
+  const [userId, setUserId] = useState<string | null>(null)
+  const { unreadMessages, unreadNotifications } = useUnreadCounts(userId)
 
   function scrollToCompose() {
     if (pathname !== '/') { router.push('/#compose'); return }
@@ -44,33 +45,11 @@ export default function Navbar() {
   }
 
   useEffect(() => {
+    let cancelled = false
     supabase.auth.getUser().then(({ data: { user } }) => {
-      if (!user) return
-      setUserId(user.id)
-
-      const fetchUnread = async () => {
-        const { count } = await supabase
-          .from('messages')
-          .select('*', { count: 'exact', head: true })
-          .eq('recipient_id', user.id)
-          .eq('is_read', false)
-        setUnreadMessages(count ?? 0)
-      }
-      fetchUnread()
-
-      const ch = supabase.channel('nav-msgs')
-        .on('postgres_changes', {
-          event: 'INSERT', schema: 'public', table: 'messages',
-          filter: `recipient_id=eq.${user.id}`,
-        }, () => setUnreadMessages(p => p + 1))
-        .on('postgres_changes', {
-          event: 'UPDATE', schema: 'public', table: 'messages',
-          filter: `recipient_id=eq.${user.id}`,
-        }, fetchUnread)
-        .subscribe()
-
-      return () => { supabase.removeChannel(ch) }
+      if (!cancelled && user) setUserId(user.id)
     })
+    return () => { cancelled = true }
   }, [supabase])
 
   const isFlicks   = pathname === '/flicks'
@@ -120,7 +99,7 @@ export default function Navbar() {
           {/* Right cluster — notification + post only (ThemeToggle → sidebar, Logout → sidebar) */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 'auto' }}>
             <ThemeToggle />
-            {userId && <NotificationBell userId={userId} />}
+            {userId && <NotificationBell unreadCount={unreadNotifications} />}
             <button
               onClick={scrollToCompose}
               style={{

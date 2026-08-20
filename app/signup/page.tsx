@@ -1,6 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { friendlyAuthError } from '@/lib/auth-errors'
 import { getAppUrl } from '@/lib/app-url'
 import Link from 'next/link'
 import { Loader2, ArrowRight, CheckCircle2 } from 'lucide-react'
@@ -37,7 +38,7 @@ export default function SignupPage() {
     })
 
     if (error) {
-      setError(error.message)
+      setError(friendlyAuthError(error.message))
       setLoading(false)
     } else {
       setSent(true)
@@ -98,6 +99,8 @@ export default function SignupPage() {
             <label className="text-sm font-bold">Email</label>
             <input 
               type="email" 
+              inputMode="email"
+              autoComplete="email"
               value={email} 
               onChange={e => setEmail(e.target.value)} 
               placeholder="you@email.com" 
@@ -109,6 +112,8 @@ export default function SignupPage() {
             <label className="text-sm font-bold">Password</label>
             <input 
               type="password" 
+              autoComplete="new-password"
+              minLength={8}
               value={password} 
               onChange={e => setPassword(e.target.value)} 
               placeholder="at least 8 characters" 
@@ -119,6 +124,8 @@ export default function SignupPage() {
             <label className="text-sm font-bold">Confirm password</label>
             <input 
               type="password" 
+              autoComplete="new-password"
+              minLength={8}
               value={confirmPassword} 
               onChange={e => setConfirmPassword(e.target.value)} 
               placeholder="repeat password" 
@@ -128,7 +135,7 @@ export default function SignupPage() {
           </div>
 
           {error && (
-            <div className="px-3 py-2 rounded-xl text-sm font-semibold" style={{ background: 'color-mix(in srgb, var(--nia-coral) 10%, transparent)', color: 'var(--nia-coral)' }}>
+            <div role="alert" aria-live="polite" className="px-3 py-2 rounded-xl text-sm font-semibold" style={{ background: 'color-mix(in srgb, var(--nia-coral) 10%, transparent)', color: 'var(--nia-coral)' }}>
               {error}
             </div>
           )}

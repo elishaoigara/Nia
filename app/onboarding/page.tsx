@@ -116,6 +116,7 @@ export default function OnboardingPage() {
 
   return (
     <div
+      data-testid="onboarding-page"
       className="min-h-screen flex items-center justify-center px-4 py-12 relative overflow-hidden"
       style={{ background: 'var(--surface-0)' }}
     >
@@ -339,7 +340,7 @@ export default function OnboardingPage() {
 
           {/* Step 3 — Recommended Circles */}
           {step === 3 && (
-            <>
+            <div data-testid="onboarding-circles-step">
               <div>
                 <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 4 }}>Find your people</h2>
                 <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginBottom: 12 }}>
@@ -358,6 +359,7 @@ export default function OnboardingPage() {
                     return (
                       <button
                         key={circle.id}
+                        data-testid={`circle-option-${circle.id}`}
                         type="button"
                         aria-pressed={selected}
                         onClick={() => setSelectedCircleIds(current => selected
@@ -412,7 +414,7 @@ export default function OnboardingPage() {
                   {loading ? 'Joining…' : selectedCircleIds.length > 0 ? `Join ${selectedCircleIds.length} Circle${selectedCircleIds.length === 1 ? '' : 's'}` : 'Skip for now'}
                 </button>
               </div>
-            </>
+            </div>
           )}
         </div>
 

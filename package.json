@@ -8,7 +8,9 @@
     "start": "next start --hostname 0.0.0.0",
     "lint": "eslint . --max-warnings=0",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "vitest run --exclude e2e/**",
+    "e2e": "playwright test",
+    "e2e:ui": "playwright test --ui",
     "check": "npm run lint && npm run typecheck && npm run test && npm run build"
   },
   "dependencies": {
@@ -23,6 +25,7 @@
     "tailwind-merge": "3.6.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.55.1",
     "@tailwindcss/postcss": "4.3.3",
     "@types/node": "22.20.1",
     "@types/react": "19.2.18",
