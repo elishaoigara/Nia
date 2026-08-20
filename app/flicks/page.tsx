@@ -2,8 +2,9 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { scoreFlicks } from '@/lib/flicks-scorer'
 import type { ScorerPost, UserContext } from '@/lib/feed-scorer'
-import type { BlockRow, FollowRow, MuteRow } from '@/types/domain'
+import type { BlockRow, FollowRow } from '@/types/domain'
 import FlicksClient from './FlicksClient'
+import { getMutedIds } from '@/lib/supabase/mutes'
 import type { FlickPost } from './FlicksClient'
 
 const SHORT_FLICK_SEC = 60
@@ -35,18 +36,18 @@ export default async function ReelsPage({
   // but was never actually called anywhere, so Flicks has just been reverse-
   // chronological this whole time — none of the completion-rate/watch-time/
   // diversity-decay logic was doing anything.
-  const [profileRes, followsRes, blocksRes, mutesRes] = await Promise.all([
+  const [profileRes, followsRes, blocksRes, mutedIds] = await Promise.all([
     supabase.from('profiles').select('country, language').eq('id', user.id).single(),
     supabase.from('follows').select('following_id').eq('follower_id', user.id),
     supabase.from('blocks').select('blocked_id').eq('blocker_id', user.id),
-    supabase.from('mutes').select('muted_id').eq('muter_id', user.id),
+    getMutedIds(supabase),
   ])
 
   const ctx: UserContext = {
     userId: user.id,
     followingIds: new Set(((followsRes.data as FollowRow[] | null) ?? []).map(f => f.following_id)),
     blockedIds: new Set(((blocksRes.data as BlockRow[] | null) ?? []).map(b => b.blocked_id)),
-    mutedIds: new Set(((mutesRes.data as MuteRow[] | null) ?? []).map(m => m.muted_id)),
+    mutedIds: new Set(mutedIds),
     country: profileRes.data?.country ?? null,
     language: profileRes.data?.language ?? null,
   }

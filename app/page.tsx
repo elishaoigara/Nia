@@ -12,8 +12,9 @@ import { scorePosts }     from '@/lib/feed-scorer'
 import { scoreFlicks }    from '@/lib/flicks-scorer'
 import type { UserContext, ScorerPost } from '@/lib/feed-scorer'
 import type { HomeCircle, HomeFlick } from '@/components/HomeRail'
-import type { BlockRow, FollowRow, MuteRow } from '@/types/domain'
+import type { BlockRow, FollowRow } from '@/types/domain'
 import { hoursAgoIso } from '@/lib/date'
+import { getMutedIds } from '@/lib/supabase/mutes'
 
 const PAGE_SIZE      = 15
 const POOL_MULTIPLIER = 6
@@ -52,14 +53,14 @@ export default async function FeedPage({
   if (profileCheckError) throw profileCheckError
   if (!profileCheck) redirect('/onboarding')
 
-  const [profileRes, followsRes, blocksRes, mutesRes] = await Promise.all([
+  const [profileRes, followsRes, blocksRes, mutedIds] = await Promise.all([
     supabase.from('profiles').select('country, language').eq('id', user.id).single(),
     supabase.from('follows').select('following_id').eq('follower_id', user.id),
     supabase.from('blocks').select('blocked_id').eq('blocker_id', user.id),
-    supabase.from('mutes').select('muted_id').eq('muter_id', user.id),
+    getMutedIds(supabase),
   ])
 
-  const contextError = profileRes.error ?? followsRes.error ?? blocksRes.error ?? mutesRes.error
+  const contextError = profileRes.error ?? followsRes.error ?? blocksRes.error
   if (contextError) throw contextError
 
   const myProfile = profileRes.data
@@ -67,7 +68,7 @@ export default async function FeedPage({
     userId:       user.id,
     followingIds: new Set(((followsRes.data as FollowRow[] | null) ?? []).map(f => f.following_id)),
     blockedIds: new Set(((blocksRes.data as BlockRow[] | null) ?? []).map(b => b.blocked_id)),
-    mutedIds: new Set(((mutesRes.data as MuteRow[] | null) ?? []).map(m => m.muted_id)),
+    mutedIds: new Set(mutedIds),
     country:      myProfile?.country  ?? null,
     language:     myProfile?.language ?? null,
   }
