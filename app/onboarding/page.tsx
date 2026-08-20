@@ -6,7 +6,12 @@ import { Loader2, ArrowRight } from 'lucide-react'
 import { AFRICAN_COUNTRIES, COUNTRY_FLAGS } from '@/lib/african-data'
 import { isValidUsername, normalizeUsername, usernameValidationMessage } from '@/lib/validation'
 
-const STEPS = ['Profile', 'Location', 'Bio']
+const STEPS = ['Profile', 'Location', 'Interests & bio']
+
+const INTERESTS = [
+  'Music', 'Fashion', 'Tech', 'Business', 'Sports', 'Campus life',
+  'Culture', 'Gaming', 'Creative work', 'Food', 'Travel', 'Community',
+] as const
 
 export default function OnboardingPage() {
   const supabase = createClient()
@@ -17,6 +22,7 @@ export default function OnboardingPage() {
   const [country, setCountry] = useState('')
   const [city, setCity] = useState('')
   const [bio, setBio] = useState('')
+  const [selectedInterests, setSelectedInterests] = useState<string[]>([])
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [countrySearch, setCountrySearch] = useState('')
@@ -52,6 +58,7 @@ export default function OnboardingPage() {
       country,
       city: city.trim() || null,
       bio: bio.trim() || null,
+      interests: selectedInterests,
       // keep university column null for non-campus users
     })
 
@@ -208,9 +215,47 @@ export default function OnboardingPage() {
             </>
           )}
 
-          {/* Step 2 — Bio */}
+          {/* Step 2 — Interests + bio */}
           {step === 2 && (
             <>
+              <div>
+                <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 4 }}>Make Nia yours</h2>
+                <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginBottom: 12 }}>
+                  Pick at least three interests so your feed and communities feel relevant from the start.
+                </p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {INTERESTS.map(interest => {
+                    const selected = selectedInterests.includes(interest)
+                    return (
+                      <button
+                        key={interest}
+                        type="button"
+                        onClick={() => setSelectedInterests(current => selected
+                          ? current.filter(item => item !== interest)
+                          : [...current, interest]
+                        )}
+                        aria-pressed={selected}
+                        style={{
+                          border: `1px solid ${selected ? 'var(--nia-violet)' : 'var(--border)'}`,
+                          background: selected ? 'rgba(91,33,182,0.12)' : 'var(--surface-1)',
+                          color: selected ? 'var(--nia-violet)' : 'var(--text-secondary)',
+                          borderRadius: 999,
+                          padding: '8px 12px',
+                          fontSize: 13,
+                          fontWeight: selected ? 700 : 600,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {interest}
+                      </button>
+                    )
+                  })}
+                </div>
+                <p className="text-xs" style={{ color: selectedInterests.length >= 3 ? 'var(--nia-violet)' : 'var(--text-tertiary)', marginTop: 10 }}>
+                  {selectedInterests.length} selected · choose at least 3
+                </p>
+              </div>
+
               <div className="space-y-1.5">
                 <label className="text-sm font-bold">
                   Bio <span className="font-normal" style={{ color: 'var(--text-tertiary)' }}>(optional)</span>
@@ -218,8 +263,9 @@ export default function OnboardingPage() {
                 <textarea
                   value={bio}
                   onChange={e => setBio(e.target.value)}
-                  placeholder="Developer from Nairobi. Building Africa's future ✊🌍"
+                  placeholder="Tell your new community what you care about…"
                   rows={3}
+                  maxLength={500}
                   className="input resize-none"
                   autoFocus
                 />
@@ -233,7 +279,7 @@ export default function OnboardingPage() {
                 <button onClick={() => setStep(1)} className="btn-ghost flex-1">Back</button>
                 <button
                   onClick={handleComplete}
-                  disabled={loading || !fullName.trim() || !isValidUsername(username) || !country}
+                  disabled={loading || !fullName.trim() || !isValidUsername(username) || !country || selectedInterests.length < 3}
                   className="btn-primary flex-1 flex items-center justify-center gap-2"
                 >
                   {loading ? <Loader2 size={16} className="animate-spin" /> : '🚀'}
