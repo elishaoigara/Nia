@@ -2,16 +2,26 @@
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import { Loader2, ArrowRight } from 'lucide-react'
+import { Loader2, ArrowRight, Check, Users, MapPin } from 'lucide-react'
 import { AFRICAN_COUNTRIES, COUNTRY_FLAGS } from '@/lib/african-data'
 import { isValidUsername, normalizeUsername, usernameValidationMessage } from '@/lib/validation'
 
-const STEPS = ['Profile', 'Location', 'Interests & bio']
+const STEPS = ['Profile', 'Location', 'Interests & bio', 'Circles']
 
 const INTERESTS = [
   'Music', 'Fashion', 'Tech', 'Business', 'Sports', 'Campus life',
   'Culture', 'Gaming', 'Creative work', 'Food', 'Travel', 'Community',
 ] as const
+
+type RecommendedCircle = {
+  id: string
+  name: string
+  slug: string
+  description: string | null
+  category: string | null
+  country: string | null
+  member_count: number
+}
 
 export default function OnboardingPage() {
   const supabase = createClient()
@@ -23,15 +33,18 @@ export default function OnboardingPage() {
   const [city, setCity] = useState('')
   const [bio, setBio] = useState('')
   const [selectedInterests, setSelectedInterests] = useState<string[]>([])
+  const [recommendedCircles, setRecommendedCircles] = useState<RecommendedCircle[]>([])
+  const [selectedCircleIds, setSelectedCircleIds] = useState<string[]>([])
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [circlesLoading, setCirclesLoading] = useState(false)
   const [countrySearch, setCountrySearch] = useState('')
 
   const filteredCountries = AFRICAN_COUNTRIES.filter(c =>
     c.toLowerCase().includes(countrySearch.toLowerCase())
   )
 
-  async function handleComplete() {
+  async function handleProfileComplete() {
     const normalizedUsername = normalizeUsername(username)
     const usernameError = usernameValidationMessage(normalizedUsername)
     if (usernameError) {
@@ -48,8 +61,8 @@ export default function OnboardingPage() {
       .from('profiles')
       .select('id')
       .eq('username', normalizedUsername)
-      .single()
-    if (existing) { setError('Username taken. Try another.'); setLoading(false); return }
+      .maybeSingle()
+    if (existing) { setError('Username taken. Try another.'); setLoading(false); setStep(0); return }
 
     const { error: insertError } = await supabase.from('profiles').insert({
       id: user.id,
@@ -59,11 +72,46 @@ export default function OnboardingPage() {
       city: city.trim() || null,
       bio: bio.trim() || null,
       interests: selectedInterests,
-      // keep university column null for non-campus users
     })
 
-    if (insertError) { setError(insertError.message); setLoading(false) }
-    else { router.push('/') }
+    if (insertError) {
+      setError(insertError.message)
+      setLoading(false)
+      return
+    }
+
+    setCirclesLoading(true)
+    const { data: circles, error: circlesError } = await supabase.rpc('get_recommended_circles', {
+      p_user_id: user.id,
+      p_limit: 6,
+    })
+
+    if (circlesError) {
+      // The app can still finish onboarding before the recommendation migration is applied.
+      setRecommendedCircles([])
+    } else {
+      setRecommendedCircles((circles ?? []) as RecommendedCircle[])
+    }
+    setCirclesLoading(false)
+    setLoading(false)
+    setStep(3)
+  }
+
+  async function finishOnboarding() {
+    setLoading(true); setError('')
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) { router.push('/login'); return }
+
+    if (selectedCircleIds.length > 0) {
+      const { error: joinError } = await supabase.from('circle_members').insert(
+        selectedCircleIds.map(circle_id => ({ circle_id, user_id: user.id })),
+      )
+      if (joinError) {
+        setError('Your profile is ready, but we could not join every Circle. You can join them from Explore.')
+      }
+    }
+
+    router.push('/')
   }
 
   return (
@@ -278,12 +326,90 @@ export default function OnboardingPage() {
               <div className="flex gap-2">
                 <button onClick={() => setStep(1)} className="btn-ghost flex-1">Back</button>
                 <button
-                  onClick={handleComplete}
+                  onClick={handleProfileComplete}
                   disabled={loading || !fullName.trim() || !isValidUsername(username) || !country || selectedInterests.length < 3}
                   className="btn-primary flex-1 flex items-center justify-center gap-2"
                 >
                   {loading ? <Loader2 size={16} className="animate-spin" /> : '🚀'}
                   {loading ? 'Setting up…' : "Let's go!"}
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* Step 3 — Recommended Circles */}
+          {step === 3 && (
+            <>
+              <div>
+                <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 4 }}>Find your people</h2>
+                <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginBottom: 12 }}>
+                  Join a few Circles now and make your first feed feel alive. You can change this later.
+                </p>
+              </div>
+
+              {circlesLoading ? (
+                <div style={{ display: 'flex', justifyContent: 'center', padding: '32px 0' }}>
+                  <Loader2 size={24} className="animate-spin" style={{ color: 'var(--nia-violet)' }} />
+                </div>
+              ) : recommendedCircles.length > 0 ? (
+                <div style={{ display: 'grid', gap: 10 }}>
+                  {recommendedCircles.map(circle => {
+                    const selected = selectedCircleIds.includes(circle.id)
+                    return (
+                      <button
+                        key={circle.id}
+                        type="button"
+                        aria-pressed={selected}
+                        onClick={() => setSelectedCircleIds(current => selected
+                          ? current.filter(id => id !== circle.id)
+                          : [...current, circle.id]
+                        )}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 12, width: '100%', textAlign: 'left',
+                          border: `1px solid ${selected ? 'var(--nia-violet)' : 'var(--border)'}`,
+                          background: selected ? 'rgba(91,33,182,0.08)' : 'var(--surface-1)',
+                          borderRadius: 14, padding: 12, cursor: 'pointer', color: 'var(--text-primary)',
+                        }}
+                      >
+                        <span style={{ width: 40, height: 40, borderRadius: 12, background: 'var(--grad-brand)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          <Users size={18} />
+                        </span>
+                        <span style={{ minWidth: 0, flex: 1 }}>
+                          <span style={{ display: 'block', fontWeight: 800, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{circle.name}</span>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-tertiary)', fontSize: 11, marginTop: 3 }}>
+                            {circle.country && <><MapPin size={11} /> {circle.country}</>}
+                            <span><Users size={11} style={{ verticalAlign: 'middle' }} /> {circle.member_count} members</span>
+                          </span>
+                        </span>
+                        <span style={{ width: 24, height: 24, borderRadius: '50%', border: `1.5px solid ${selected ? 'var(--nia-violet)' : 'var(--border)'}`, background: selected ? 'var(--nia-violet)' : 'transparent', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          {selected && <Check size={14} strokeWidth={3} />}
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+              ) : (
+                <div className="card" style={{ padding: 20, textAlign: 'center' }}>
+                  <Users size={24} style={{ color: 'var(--nia-violet)', margin: '0 auto 8px' }} />
+                  <p style={{ fontWeight: 700, fontSize: 14 }}>Your community is still growing</p>
+                  <p style={{ color: 'var(--text-tertiary)', fontSize: 12, marginTop: 4 }}>You can discover Circles from Explore after you join.</p>
+                </div>
+              )}
+
+              {error && (
+                <div className="px-3 py-2 rounded-xl text-sm font-semibold text-red-500" style={{ background: 'rgba(239,68,68,0.08)' }}>
+                  {error}
+                </div>
+              )}
+              <div className="flex gap-2">
+                <button onClick={() => setStep(2)} className="btn-ghost flex-1">Back</button>
+                <button
+                  onClick={finishOnboarding}
+                  disabled={loading}
+                  className="btn-primary flex-1 flex items-center justify-center gap-2"
+                >
+                  {loading ? <Loader2 size={16} className="animate-spin" /> : <ArrowRight size={16} />}
+                  {loading ? 'Joining…' : selectedCircleIds.length > 0 ? `Join ${selectedCircleIds.length} Circle${selectedCircleIds.length === 1 ? '' : 's'}` : 'Skip for now'}
                 </button>
               </div>
             </>
