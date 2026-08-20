@@ -145,7 +145,7 @@ export default function Navbar() {
           style={{
             position: 'fixed', bottom: 0, left: 0, right: 0,
             height: 'var(--nav-bottom)', zIndex: 50,
-            display: 'flex', alignItems: 'center', justifyContent: 'space-around',
+            alignItems: 'center', justifyContent: 'space-around',
             background: 'var(--surface-0)',
             borderTop: '1px solid var(--border)',
             paddingBottom: 'env(safe-area-inset-bottom, 0px)',

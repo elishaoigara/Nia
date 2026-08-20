@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { Loader2, ArrowRight } from 'lucide-react'
 import { AFRICAN_COUNTRIES, COUNTRY_FLAGS } from '@/lib/african-data'
+import { isValidUsername, normalizeUsername, usernameValidationMessage } from '@/lib/validation'
 
 const STEPS = ['Profile', 'Location', 'Bio']
 
@@ -25,6 +26,14 @@ export default function OnboardingPage() {
   )
 
   async function handleComplete() {
+    const normalizedUsername = normalizeUsername(username)
+    const usernameError = usernameValidationMessage(normalizedUsername)
+    if (usernameError) {
+      setError(usernameError)
+      setStep(0)
+      return
+    }
+
     setLoading(true); setError('')
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { router.push('/login'); return }
@@ -32,13 +41,13 @@ export default function OnboardingPage() {
     const { data: existing } = await supabase
       .from('profiles')
       .select('id')
-      .eq('username', username.toLowerCase().trim())
+      .eq('username', normalizedUsername)
       .single()
     if (existing) { setError('Username taken. Try another.'); setLoading(false); return }
 
     const { error: insertError } = await supabase.from('profiles').insert({
       id: user.id,
-      username: username.toLowerCase().replace(/\s+/g, '').trim(),
+      username: normalizedUsername,
       full_name: fullName.trim(),
       country,
       city: city.trim() || null,
@@ -119,17 +128,22 @@ export default function OnboardingPage() {
                   <span className="px-3 py-3 text-sm font-semibold flex-shrink-0" style={{ color: 'var(--text-tertiary)', background: 'var(--surface-2)', borderRight: '1.5px solid var(--border)' }}>@</span>
                   <input
                     value={username}
-                    onChange={e => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_.]/g, ''))}
+                    onChange={e => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
                     placeholder="amara"
                     className="flex-1 px-3 py-3 bg-transparent focus:outline-none text-sm"
-                    onKeyDown={e => e.key === 'Enter' && fullName.trim() && username.trim() && setStep(1)}
+                    onKeyDown={e => e.key === 'Enter' && fullName.trim() && isValidUsername(username) && setStep(1)}
                   />
                 </div>
-                <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>Only letters, numbers, _ and .</p>
+                <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                  2–30 characters: lowercase letters, numbers, and underscores.
+                </p>
+                {username.trim() && usernameValidationMessage(username) && (
+                  <p className="text-xs font-semibold text-red-500">{usernameValidationMessage(username)}</p>
+                )}
               </div>
               <button
                 onClick={() => setStep(1)}
-                disabled={!fullName.trim() || !username.trim()}
+                disabled={!fullName.trim() || !isValidUsername(username)}
                 className="btn-primary w-full flex items-center justify-center gap-2"
               >
                 Continue <ArrowRight size={16} />
@@ -219,7 +233,7 @@ export default function OnboardingPage() {
                 <button onClick={() => setStep(1)} className="btn-ghost flex-1">Back</button>
                 <button
                   onClick={handleComplete}
-                  disabled={loading || !fullName || !username || !country}
+                  disabled={loading || !fullName.trim() || !isValidUsername(username) || !country}
                   className="btn-primary flex-1 flex items-center justify-center gap-2"
                 >
                   {loading ? <Loader2 size={16} className="animate-spin" /> : '🚀'}
