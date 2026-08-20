@@ -23,7 +23,7 @@ const TRENDING_WINDOW_HOURS = 72
 
 const BASE_SELECT = `
   *,
-  profiles:user_id (id, username, full_name, avatar_url, country, city),
+  profiles:user_id (id, username, full_name, avatar_url, country, city, interests),
   circles:circle_id (id, name, slug),
   likes (user_id),
   comments (id, profiles:user_id (id, username, avatar_url)),
@@ -54,7 +54,7 @@ export default async function FeedPage({
   if (!profileCheck) redirect('/onboarding')
 
   const [profileRes, followsRes, blocksRes, mutedIds] = await Promise.all([
-    supabase.from('profiles').select('country, language').eq('id', user.id).single(),
+    supabase.from('profiles').select('country, language, interests').eq('id', user.id).single(),
     supabase.from('follows').select('following_id').eq('follower_id', user.id),
     supabase.from('blocks').select('blocked_id').eq('blocker_id', user.id),
     getMutedIds(supabase),
@@ -71,6 +71,7 @@ export default async function FeedPage({
     mutedIds: new Set(mutedIds),
     country:      myProfile?.country  ?? null,
     language:     myProfile?.language ?? null,
+    interests:    new Set(((myProfile?.interests as string[] | null | undefined) ?? []).map((interest: string) => interest.toLowerCase())),
   }
 
   const candidatePool = PAGE_SIZE * POOL_MULTIPLIER * currentPage
@@ -80,7 +81,7 @@ export default async function FeedPage({
   // independent of the feed tab, so they run once alongside (not blocking)
   // the tab-specific candidates query below.
   const trendingSince = hoursAgoIso(TRENDING_WINDOW_HOURS)
-  const [circleResponse, trendingResponse] = await Promise.all([
+  const [circleResponse, trendingResponse, recommendedCircleResponse] = await Promise.all([
     supabase.from('circle_members')
       .select('circles:circle_id (id, name, slug, category)')
       .eq('user_id', user.id)
@@ -98,6 +99,7 @@ export default async function FeedPage({
       .gte('created_at', trendingSince)
       .order('created_at', { ascending: false })
       .limit(60),
+    supabase.rpc('get_recommended_circles', { p_user_id: user.id, p_limit: 6 }),
   ])
   const railError = circleResponse.error ?? trendingResponse.error
   if (railError) throw railError
@@ -105,6 +107,14 @@ export default async function FeedPage({
   const myCircles = circleRows
     .map(row => row.circles)
     .filter((circle): circle is HomeCircle => circle !== null)
+  const suggestedCircles = !recommendedCircleResponse.error
+    ? ((recommendedCircleResponse.data ?? []) as { id: string; name: string; slug: string; category: string | null }[]).map(circle => ({
+        id: circle.id,
+        name: circle.name,
+        slug: circle.slug,
+        category: circle.category,
+      })) as HomeCircle[]
+    : []
   const trendingFlicks = scoreFlicks(
     (trendingResponse.data ?? []) as unknown as ScorerPost[],
     ctx,
@@ -167,7 +177,7 @@ export default async function FeedPage({
       <StoriesBar currentUserId={user.id} />
 
       {/* Your Circles / Trending Flicks — one combined rail, not two */}
-      <HomeRail circles={myCircles} flicks={trendingFlicks} currentUserId={user.id} />
+      <HomeRail circles={myCircles} suggestedCircles={suggestedCircles} flicks={trendingFlicks} currentUserId={user.id} />
 
       {/* Feed tabs — sticky under top nav */}
       <Suspense fallback={null}>

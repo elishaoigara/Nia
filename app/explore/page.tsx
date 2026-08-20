@@ -1,10 +1,11 @@
 
 'use client'
 
-import { useState, useTransition, useEffect, useCallback } from 'react'
+import { useState, useTransition, useEffect, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
 import CircleCard from '@/components/CircleCard'
+import FollowButton from '@/components/FollowButton'
 import {
   Search, TrendingUp, Users, User,
   MapPin, Globe2, Compass, Loader2,
@@ -13,8 +14,16 @@ import { AFRICAN_REGIONS, getFlag } from '@/lib/african-data'
 import type { Circle, HashtagRow, ProfileSummary } from '@/types/domain'
 
 type Tab = 'trending' | 'search'
-type LocationProfile = Pick<ProfileSummary, 'country' | 'city'>
-type ExplorePerson = Pick<ProfileSummary, 'id' | 'username' | 'avatar_url' | 'country' | 'city' | 'bio'>
+type LocationProfile = Pick<ProfileSummary, 'country' | 'city'> & { interests?: string[] | null }
+type ExplorePerson = Pick<ProfileSummary, 'id' | 'username' | 'full_name' | 'avatar_url' | 'country' | 'city' | 'bio'> & {
+  interests?: string[] | null
+  is_following?: boolean
+  match_reasons?: string[]
+}
+type RecommendedCircle = Pick<Circle, 'id' | 'name' | 'slug' | 'description' | 'university' | 'category' | 'country' | 'is_private' | 'created_at'> & {
+  member_count?: number
+  relevance_score?: number
+}
 type SearchPerson = Pick<ProfileSummary, 'id' | 'username' | 'full_name' | 'avatar_url' | 'university'>
 
 export default function ExplorePage() {
@@ -28,6 +37,7 @@ export default function ExplorePage() {
   const [trending,        setTrending]        = useState<{ tag: string; count: number }[]>([])
   const [trendingCircles, setTrendingCircles] = useState<Circle[]>([])
   const [localCircles,    setLocalCircles]    = useState<Circle[]>([])
+  const [suggestedCircles, setSuggestedCircles] = useState<RecommendedCircle[]>([])
   const [africanUsers,    setAfricanUsers]    = useState<ExplorePerson[]>([])
   const [loadingTrending, setLoadingTrending] = useState(true)
 
@@ -37,64 +47,131 @@ export default function ExplorePage() {
   const [circles,     setCircles]     = useState<Circle[]>([])
   const [hasSearched, setHasSearched] = useState(false)
   const [isPending,   startTransition] = useTransition()
+  const searchRequest = useRef(0)
+  const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // ── load user + trending data ──────────────────────────
+  // ── load compact discovery data ─────────────────────────
   useEffect(() => {
+    let cancelled = false
+
     supabase.auth.getUser().then(async ({ data: { user } }) => {
-      if (!user) return
+      if (!user || cancelled) return
       setUserId(user.id)
 
       const { data: profile } = await supabase
-        .from('profiles').select('country, city').eq('id', user.id).single()
-      setMyProfile(profile as LocationProfile | null)
+        .from('profiles').select('country, city, interests').eq('id', user.id).single()
+      if (cancelled) return
+      const viewer = profile as LocationProfile | null
+      setMyProfile(viewer)
 
       const since = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString()
-      const { data: tags } = await supabase
-        .from('hashtags').select('tag').gte('created_at', since)
-      const counts = ((tags ?? []) as HashtagRow[]).reduce((acc: Record<string, number>, hashtag) => {
-        acc[hashtag.tag] = (acc[hashtag.tag] ?? 0) + 1; return acc
-      }, {})
-      setTrending(
-        Object.entries(counts).sort(([, a], [, b]) => b - a).slice(0, 10)
-          .map(([tag, count]) => ({ tag, count }))
-      )
+      const [
+        tagsResponse,
+        circlesResponse,
+        localResponse,
+        peopleResponse,
+        followsResponse,
+        recommendationsResponse,
+      ] = await Promise.all([
+        supabase.rpc('get_trending_hashtags', { p_since: since, p_limit: 10 }),
+        supabase.from('circles')
+          .select('id, name, slug, description, university, category, country, is_private, created_at, circle_members(count)')
+          .order('created_at', { ascending: false }).limit(6),
+        viewer?.country
+          ? supabase.from('circles')
+              .select('id, name, slug, description, university, category, country, is_private, created_at, circle_members(count)')
+              .eq('country', viewer.country).order('created_at', { ascending: false }).limit(6)
+          : Promise.resolve({ data: [], error: null }),
+        supabase.from('profiles')
+          .select('id, username, full_name, avatar_url, country, city, bio, interests')
+          .neq('id', user.id).not('country', 'is', null).limit(24),
+        supabase.from('follows').select('following_id').eq('follower_id', user.id),
+        supabase.rpc('get_recommended_circles', { p_user_id: user.id, p_limit: 8 }),
+      ])
 
-      const { data: circles } = await supabase
-        .from('circles').select('*, circle_members (user_id)')
-        .order('created_at', { ascending: false }).limit(6)
-      setTrendingCircles((circles ?? []) as unknown as Circle[])
+      if (cancelled) return
 
-      if (profile?.country) {
-        const ids = circles?.map(circle => circle.id) ?? []
-        const q = supabase.from('circles').select('*, circle_members (user_id)')
-          .eq('country', profile.country).limit(4)
-        if (ids.length > 0) q.not('id', 'in', `(${ids.join(',')})`)
-        const { data: local } = await q
-        setLocalCircles((local ?? []) as unknown as Circle[])
+      if (!tagsResponse.error) {
+        setTrending(((tagsResponse.data ?? []) as { tag: string; post_count: number }[])
+          .map(row => ({ tag: row.tag, count: Number(row.post_count) })))
+      } else {
+        // Backward-compatible fallback until the Explore migration is applied.
+        const { data: tags } = await supabase.from('hashtags').select('tag').gte('created_at', since).limit(300)
+        const counts = ((tags ?? []) as HashtagRow[]).reduce((acc: Record<string, number>, hashtag) => {
+          acc[hashtag.tag] = (acc[hashtag.tag] ?? 0) + 1
+          return acc
+        }, {})
+        setTrending(Object.entries(counts).sort(([, a], [, b]) => b - a).slice(0, 10).map(([tag, count]) => ({ tag, count })))
       }
 
-      const { data: people } = await supabase
-        .from('profiles').select('id, username, avatar_url, country, city, bio')
-        .neq('id', user.id).not('country', 'is', null).limit(8)
-      setAfricanUsers((people ?? []) as ExplorePerson[])
+      const normalizeCircle = (circle: Record<string, unknown>): Circle => {
+        const memberRows = (circle.circle_members as { count?: number }[] | null) ?? []
+        return {
+          ...(circle as unknown as Circle),
+          member_count: memberRows[0]?.count ?? 0,
+          circle_members: undefined,
+        }
+      }
+      const recentCircles = ((circlesResponse.data ?? []) as Record<string, unknown>[]).map(normalizeCircle)
+      const countryCircles = ((localResponse.data ?? []) as Record<string, unknown>[]).map(normalizeCircle)
+      setTrendingCircles(recentCircles)
+      setLocalCircles(countryCircles.filter(circle => !recentCircles.some(item => item.id === circle.id)).slice(0, 4))
+
+      const followingIds = new Set(((followsResponse.data ?? []) as { following_id: string }[]).map(row => row.following_id))
+      const viewerInterests = new Set((viewer?.interests ?? []).map(interest => interest.toLowerCase()))
+      const people = ((peopleResponse.data ?? []) as ExplorePerson[])
+        .map(person => {
+          const sharedInterests = (person.interests ?? []).filter(interest => viewerInterests.has(interest.toLowerCase()))
+          const sameCountry = Boolean(viewer?.country && person.country === viewer.country)
+          const matchReasons = [
+            sameCountry ? `From ${person.country}` : null,
+            sharedInterests.length > 0 ? `${sharedInterests.length} shared interest${sharedInterests.length === 1 ? '' : 's'}` : null,
+          ].filter((reason): reason is string => Boolean(reason))
+          return {
+            ...person,
+            is_following: followingIds.has(person.id),
+            match_reasons: matchReasons,
+            recommendation_score: (sameCountry ? 5 : 0) + sharedInterests.length * 3,
+          }
+        })
+        .sort((a, b) => (b.recommendation_score ?? 0) - (a.recommendation_score ?? 0))
+        .slice(0, 8)
+      setAfricanUsers(people)
+
+      if (!recommendationsResponse.error) {
+        setSuggestedCircles((recommendationsResponse.data ?? []) as RecommendedCircle[])
+      } else {
+        const fallbackCircles = [...countryCircles, ...recentCircles]
+          .filter((circle, index, all) => all.findIndex(item => item.id === circle.id) === index)
+          .slice(0, 8)
+        setSuggestedCircles(fallbackCircles as RecommendedCircle[])
+      }
       setLoadingTrending(false)
     })
+
+    return () => { cancelled = true }
   }, [supabase])
 
   // ── search handler ─────────────────────────────────────
-  async function handleSearch(q: string) {
+  function handleSearch(q: string) {
     setQuery(q)
+    if (searchDebounce.current) clearTimeout(searchDebounce.current)
+    const requestId = ++searchRequest.current
     if (!q.trim()) { setUsers([]); setCircles([]); setHasSearched(false); return }
-    startTransition(async () => {
-      const term = `%${q.trim()}%`
-      const [{ data: foundUsers }, { data: foundCircles }] = await Promise.all([
-        supabase.from('profiles').select('id, username, full_name, avatar_url, university').ilike('username', term).limit(10),
-        supabase.from('circles').select('id, name, slug, description, university, category, circle_members(user_id)').ilike('name', term).limit(10),
-      ])
-      setUsers((foundUsers ?? []) as SearchPerson[])
-      setCircles((foundCircles ?? []) as unknown as Circle[])
-      setHasSearched(true)
-    })
+
+    searchDebounce.current = setTimeout(() => {
+      startTransition(async () => {
+        const term = `%${q.trim()}%`
+        const [{ data: foundUsers }, { data: foundCircles }] = await Promise.all([
+          supabase.from('profiles').select('id, username, full_name, avatar_url, university').ilike('username', term).limit(10),
+          supabase.from('circles').select('id, name, slug, description, university, category, circle_members(count)').ilike('name', term).limit(10),
+        ])
+        if (requestId !== searchRequest.current) return
+        setUsers((foundUsers ?? []) as SearchPerson[])
+        setCircles((foundCircles ?? []) as unknown as Circle[])
+        setHasSearched(true)
+      })
+    }, 240)
   }
 
   const focusSearch = useCallback((el: HTMLInputElement | null) => {
@@ -203,6 +280,23 @@ export default function ExplorePage() {
                 </section>
               )}
 
+              {suggestedCircles.length > 0 && (
+                <section>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                    <Users size={16} style={{ color: 'var(--nia-violet)' }} />
+                    <h2 style={{ fontWeight: 800, fontSize: 15 }}>Circles for you</h2>
+                  </div>
+                  <p style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 14 }}>
+                    Based on your interests and where you are.
+                  </p>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
+                    {suggestedCircles.map(circle => (
+                      <CircleCard key={circle.id} circle={circle as Circle} currentUserId={userId ?? ''} />
+                    ))}
+                  </div>
+                </section>
+              )}
+
               {localCircles.length > 0 && (
                 <section>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
@@ -221,34 +315,58 @@ export default function ExplorePage() {
 
               {africanUsers.length > 0 && (
                 <section>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                     <Globe2 size={16} style={{ color: 'var(--nia-violet)' }} />
-                    <h2 style={{ fontWeight: 800, fontSize: 15 }}>People across Africa</h2>
+                    <h2 style={{ fontWeight: 800, fontSize: 15 }}>People to meet</h2>
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+                  <p style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 14 }}>
+                    Find voices from your country and across the continent.
+                  </p>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 10 }}>
                     {africanUsers.map(p => (
-                      <Link
-                        key={p.id}
-                        href={`/profile/${p.id}`}
-                        className="card card-hover"
-                        style={{ padding: 12, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, textDecoration: 'none', textAlign: 'center' }}
-                      >
-                        <div style={{
-                          width: 44, height: 44, borderRadius: '50%',
-                          overflow: 'hidden', flexShrink: 0,
-                          background: 'var(--grad-brand)',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          color: '#fff', fontWeight: 700, fontSize: 16,
-                        }}>
-                          {p.avatar_url
-                            ? <img src={p.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />
-                            : p.username?.[0]?.toUpperCase()}
+                      <div key={p.id} className="card card-hover" style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                        <Link href={`/profile/${p.id}`} style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, textDecoration: 'none' }}>
+                          <div style={{
+                            width: 46, height: 46, borderRadius: '50%',
+                            overflow: 'hidden', flexShrink: 0,
+                            background: 'var(--grad-brand)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            color: '#fff', fontWeight: 800, fontSize: 16,
+                          }}>
+                            {p.avatar_url
+                              ? <img src={p.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" loading="lazy" />
+                              : p.username?.[0]?.toUpperCase()}
+                          </div>
+                          <div style={{ minWidth: 0 }}>
+                            <p style={{ fontWeight: 800, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.full_name || `@${p.username}`}</p>
+                            <p style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              @{p.username} · {getFlag(p.country ?? '')} {p.city ?? p.country}
+                            </p>
+                          </div>
+                        </Link>
+                        {p.match_reasons && p.match_reasons.length > 0 && (
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                            {p.match_reasons.map(reason => (
+                              <span key={reason} style={{ fontSize: 10, fontWeight: 700, color: 'var(--nia-violet)', background: 'rgba(91,33,182,0.08)', borderRadius: 999, padding: '4px 7px' }}>
+                                {reason}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        {p.bio && (
+                          <p style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.45, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                            {p.bio}
+                          </p>
+                        )}
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 'auto' }}>
+                          <FollowButton
+                            currentUserId={userId ?? ''}
+                            targetUserId={p.id}
+                            initialIsFollowing={Boolean(p.is_following)}
+                            onFollowChange={isFollowing => setAfricanUsers(current => current.map(person => person.id === p.id ? { ...person, is_following: isFollowing } : person))}
+                          />
                         </div>
-                        <div style={{ minWidth: 0, width: '100%' }}>
-                          <p style={{ fontWeight: 700, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>@{p.username}</p>
-                          <p style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>{getFlag(p.country ?? '')} {p.city ?? p.country}</p>
-                        </div>
-                      </Link>
+                      </div>
                     ))}
                   </div>
                 </section>
@@ -365,7 +483,7 @@ export default function ExplorePage() {
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--text-tertiary)', flexShrink: 0 }}>
                           <Users size={11} />
-                          <span>{c.circle_members?.length ?? 0}</span>
+                          <span>{c.member_count ?? c.circle_members?.[0]?.count ?? c.circle_members?.length ?? 0}</span>
                         </div>
                       </Link>
                     ))}

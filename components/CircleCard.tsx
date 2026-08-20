@@ -30,7 +30,7 @@ export default function CircleCard({ circle, currentUserId }: CircleCardProps) {
   const router = useRouter()
   const isMember = circle.circle_members?.some((member: CircleMember) => member.user_id === currentUserId)
   const [joined, setJoined] = useState(isMember)
-  const [memberCount, setMemberCount] = useState(circle.circle_members?.length ?? 0)
+  const [memberCount, setMemberCount] = useState(circle.member_count ?? circle.circle_members?.length ?? 0)
   const [requested, setRequested] = useState(false)
   const [loading, setLoading] = useState(false)
 

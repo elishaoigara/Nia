@@ -26,6 +26,7 @@ export const FEED_WEIGHTS = {
   out_of_network: 0.75,  // don't follow — slight penalty, like X's OON weight
   same_language:  1.20,  // post language matches user's preferred language
   same_country:   1.15,  // author from same country
+  shared_interest: 1.25, // author shares at least one profile interest
 
   // Author diversity decay (X: exponential decay per repeated author)
   diversity_decay: 0.40, // each extra post from same author × 0.4
@@ -48,6 +49,7 @@ export interface UserContext {
   mutedIds: Set<string>
   country: string | null
   language: string | null   // preferred language code e.g. 'swahili'
+  interests?: Set<string>
 }
 
 // ── Age decay ────────────────────────────────────────────────────────────────
@@ -92,6 +94,14 @@ function affinityMultiplier(post: ScorerPost, ctx: UserContext): number {
   const authorCountry = post.profiles?.country ?? null
   if (ctx.language && post.language === ctx.language) m *= FEED_WEIGHTS.same_language
   if (ctx.country  && authorCountry === ctx.country)  m *= FEED_WEIGHTS.same_country
+
+  if (ctx.interests && ctx.interests.size > 0) {
+    const authorInterests = Array.isArray(post.profiles?.interests)
+      ? post.profiles.interests
+      : []
+    const sharesInterest = authorInterests.some(interest => ctx.interests?.has(interest.toLowerCase()))
+    if (sharesInterest) m *= FEED_WEIGHTS.shared_interest
+  }
   return m
 }
 

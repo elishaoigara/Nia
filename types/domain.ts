@@ -15,6 +15,7 @@ export interface ProfileSummary {
   city?: string | null
   university?: string | null
   bio?: string | null
+  interests?: string[] | string | null
   language?: string | null
   last_seen_at?: string | null
 }
@@ -35,7 +36,8 @@ export interface Profile extends ProfileSummary {
 }
 
 export interface CircleMember {
-  user_id: string
+  user_id?: string
+  count?: number
   profiles?: ProfileSummary | null
 }
 
@@ -50,6 +52,8 @@ export interface Circle {
   is_private?: boolean | null
   created_at?: string | null
   circle_members?: CircleMember[]
+  member_count?: number
+  relevance_score?: number
 }
 
 export interface CircleJoinRequest {
