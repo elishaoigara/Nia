@@ -352,6 +352,14 @@ export default function DirectMessagePage() {
     const { data, error } = await supabase.from('messages').insert(payload).select().single()
     if (!error && data) {
       setMessages(prev => prev.map(m => (m.id === tempId ? normalizeMsg(data) : m)))
+      await supabase.from('notifications').insert({
+        user_id: recipientId,
+        actor_id: currentUserId,
+        type: 'message',
+        entity_id: currentUserId,
+        message: 'sent you a message',
+        is_read: false,
+      })
       return data.id as string
     } else {
       setMessages(prev => prev.filter(m => m.id !== tempId))

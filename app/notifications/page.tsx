@@ -36,6 +36,7 @@ const FILTERS = [
   { key: 'follow',   label: 'Follows' },
   { key: 'comment',  label: 'Comments' },
   { key: 'mention',  label: 'Mentions' },
+  { key: 'message',  label: 'Messages' },
 ] as const;
 
 function timeAgo(date: string): string {
@@ -61,6 +62,7 @@ function verbForType(type: string): string {
     case 'follow':  return 'started following you';
     case 'comment': return 'commented on your post';
     case 'mention': return 'mentioned you';
+    case 'message': return 'sent you a message';
     default:        return 'interacted with you';
   }
 }
@@ -118,6 +120,7 @@ function NotifBadge({ type }: { type: string }) {
       case 'comment': return <MessageCircle size={iconSize} color={iconColor} strokeWidth={2} />;
       case 'repost':  return <Repeat2 size={iconSize} color={iconColor} strokeWidth={2} />;
       case 'mention': return <AtSign size={iconSize} color={iconColor} strokeWidth={2} />;
+      case 'message': return <MessageCircle size={iconSize} color={iconColor} strokeWidth={2} />;
       default:        return <Bell size={iconSize} color="var(--text-tertiary)" strokeWidth={2} />;
     }
   })();
@@ -511,7 +514,9 @@ export default function Notifications() {
 
 /* ── Individual notification row ── */
 function NotifRow({ n }: { n: GroupedNotification }) {
-  const href = n.entity_id
+  const href = n.type === 'message' && n.actor_id
+    ? `/messages/${n.actor_id}`
+    : n.entity_id
     ? `/posts/${n.entity_id}`
     : n.actor_id
     ? `/profile/${n.actor_id}`

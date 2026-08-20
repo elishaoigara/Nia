@@ -43,11 +43,13 @@ export default function MessagesPage() {
         supabase.from('messages')
           .select('recipient_id, created_at, content, profiles:recipient_id (id, username, avatar_url, full_name)')
           .eq('sender_id', user.id)
-          .order('created_at', { ascending: false }),
+          .order('created_at', { ascending: false })
+          .limit(100),
         supabase.from('messages')
           .select('sender_id, created_at, content, is_read, profiles:sender_id (id, username, avatar_url, full_name)')
           .eq('recipient_id', user.id)
-          .order('created_at', { ascending: false }),
+          .order('created_at', { ascending: false })
+          .limit(100),
         supabase.from('blocks').select('blocked_id').eq('blocker_id', user.id),
         supabase.from('message_requests').select('other_id, status').eq('user_id', user.id),
       ])
