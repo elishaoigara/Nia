@@ -158,6 +158,7 @@ export default function Notifications() {
   const [fetchError, setFetchError]       = useState<string | null>(null);
   const [userId, setUserId]               = useState<string | null>(null);
   const [filter, setFilter]               = useState<typeof FILTERS[number]['key']>('all');
+  const [live, setLive]                   = useState(false);
   const markedRef = useRef<Set<string>>(new Set());
 
   // Hydrate actor data for notifications that came back without a join
@@ -294,7 +295,7 @@ export default function Notifications() {
             }
           }
         )
-        .subscribe();
+        .subscribe(status => setLive(status === 'SUBSCRIBED'));
     });
 
     return () => {
@@ -318,7 +319,7 @@ export default function Notifications() {
           className="sticky top-0 z-10 flex items-center justify-between px-4 py-3.5 border-b"
           style={{ borderColor: 'var(--divider)', background: 'var(--surface-0)' }}
         >
-          <h1 className="text-[17px] font-bold tracking-tight text-(--text-primary)">Notifications</h1>
+          <div className="flex items-center gap-2"><h1 className="text-[17px] font-bold tracking-tight text-(--text-primary)">Notifications</h1>{live && <span className="rounded-full px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide" style={{ background: 'rgba(16,185,129,0.12)', color: 'var(--nia-mint)' }}>Live</span>}</div>
         </div>
         <div className="mt-2">
           {[...Array(5)].map((_, i) => (
@@ -357,7 +358,7 @@ export default function Notifications() {
           className="sticky top-0 z-10 px-4 py-3.5 border-b"
           style={{ borderColor: 'var(--divider)', background: 'var(--surface-0)' }}
         >
-          <h1 className="text-[17px] font-bold tracking-tight text-(--text-primary)">Notifications</h1>
+          <div className="flex items-center gap-2"><h1 className="text-[17px] font-bold tracking-tight text-(--text-primary)">Notifications</h1>{live && <span className="rounded-full px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide" style={{ background: 'rgba(16,185,129,0.12)', color: 'var(--nia-mint)' }}>Live</span>}</div>
         </div>
         <div className="flex flex-col items-center gap-3 py-16 text-(--text-secondary)">
           <div
@@ -395,7 +396,7 @@ export default function Notifications() {
           WebkitBackdropFilter: 'blur(12px)',
         }}
       >
-        <h1 className="text-[17px] font-bold tracking-tight text-(--text-primary)">Notifications</h1>
+        <div className="flex items-center gap-2"><h1 className="text-[17px] font-bold tracking-tight text-(--text-primary)">Notifications</h1>{live && <span className="rounded-full px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide" style={{ background: 'rgba(16,185,129,0.12)', color: 'var(--nia-mint)' }}>Live</span>}</div>
         {hasUnread && (
           <button
             onClick={handleMarkAllRead}
