@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Check, Filter, Loader2, Send, Sparkles } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import { trackEngagement } from '@/lib/analytics'
 
 interface ResponseRow {
   id: string
@@ -60,7 +61,11 @@ export default function CircleResponses({ circleId, userId }: Props) {
     setSaving(true); setError('')
     const { data, error: insertError } = await supabase.from('circle_responses').insert({ circle_id: circleId, user_id: userId, response_type: type, content: content.trim() }).select('id, response_type, content, created_at, profiles:user_id (username, avatar_url)').single()
     if (insertError) setError('Responses are not available until the latest Circle migration is applied.')
-    else if (data) { setResponses(current => [data as unknown as ResponseRow, ...current]); setContent('') }
+    else if (data) {
+      setResponses(current => [data as unknown as ResponseRow, ...current])
+      setContent('')
+      void trackEngagement('circle_response_created', userId, type === 'offer' ? 'offer' : type === 'update' ? 'update' : null, { response_type: type })
+    }
     setSaving(false)
   }
 
@@ -79,7 +84,7 @@ export default function CircleResponses({ circleId, userId }: Props) {
       </div>
 
       <div className="circle-response-actions" role="group" aria-label="Contribution action">
-        {TYPES.map(item => <button key={item.value} type="button" className={`circle-response-action circle-response-action--${item.color}${type === item.value ? ' is-selected' : ''}`} aria-pressed={type === item.value} onClick={() => { setType(item.value); setFilter(item.value); }}>{item.label}</button>)}
+        {TYPES.map(item => <button key={item.value} type="button" className={`circle-response-action circle-response-action--${item.color}${type === item.value ? ' is-selected' : ''}`} aria-pressed={type === item.value} onClick={() => { setType(item.value); setFilter(item.value); void trackEngagement('circle_response_action_selected', userId, item.value === 'offer' ? 'offer' : item.value === 'update' ? 'update' : null, { response_type: item.value }) }}>{item.label}</button>)}
       </div>
       <div className="circle-response-compose">
         <label htmlFor="circle-response" className="sr-only">Your contribution</label>
@@ -88,7 +93,7 @@ export default function CircleResponses({ circleId, userId }: Props) {
       </div>
       {error && <p role="alert" className="circle-response-error">{error}</p>}
 
-      {responses.length > 0 && <div className="circle-response-filter-row"><Filter size={14} aria-hidden="true" /><span className="circle-response-filter-label">Show</span>{(['all', ...TYPES.map(item => item.value)] as const).map(value => <button key={value} type="button" className={`circle-response-filter${filter === value ? ' is-selected' : ''}`} onClick={() => setFilter(value)}>{value === 'all' ? 'All' : typeMeta(value).label}</button>)}</div>}
+      {responses.length > 0 && <div className="circle-response-filter-row"><Filter size={14} aria-hidden="true" /><span className="circle-response-filter-label">Show</span>{(['all', ...TYPES.map(item => item.value)] as const).map(value => <button key={value} type="button" className={`circle-response-filter${filter === value ? ' is-selected' : ''}`} onClick={() => { setFilter(value); void trackEngagement('circle_response_filter_used', userId, value === 'offer' || value === 'update' ? value : null, { filter: value }) }}>{value === 'all' ? 'All' : typeMeta(value).label}</button>)}</div>}
       {visibleResponses.length > 0 && <div className="circle-response-list">{visibleResponses.map(response => { const meta = typeMeta(response.response_type); return <article key={response.id} className="circle-response-card"><div className="circle-response-card-head"><span className={`circle-response-badge circle-response-badge--${meta.color}`}><Check size={12} /> {meta.label}</span><time>{new Date(response.created_at).toLocaleDateString()}</time></div><p className="circle-response-card-content">{response.content}</p><p className="circle-response-author">@{response.profiles?.username ?? 'member'}</p></article> })}</div>}
       {responses.length > 0 && visibleResponses.length === 0 && <p className="circle-response-no-match">No contributions in this view yet. Try another action.</p>}
     </section>

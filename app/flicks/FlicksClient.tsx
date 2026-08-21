@@ -9,6 +9,7 @@ import {
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { getFlag } from '@/lib/african-data'
+import { trackEngagement } from '@/lib/analytics'
 import { VIDEO_CATEGORIES, getCategoryMeta } from '@/lib/video-categories'
 import type { HashtagRow, ProfileSummary } from '@/types/domain'
 
@@ -568,7 +569,7 @@ export default function NiaFlicksClient({ shorts, longs, currentUserId, initialV
     <div className="flick-purpose-filter-wrap" role="group" aria-label="Filter Flicks by purpose">
       <div className="flick-purpose-filter-row">
         {PURPOSE_FILTERS.map(filter => (
-          <button key={filter.id} type="button" className={`flick-purpose-filter${purposeFilter === filter.id ? ' is-selected' : ''}`} aria-pressed={purposeFilter === filter.id} onClick={() => { setPurposeFilter(filter.id); setActiveIdx(0); containerRef.current?.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior }) }}>
+          <button key={filter.id} type="button" className={`flick-purpose-filter${purposeFilter === filter.id ? ' is-selected' : ''}`} aria-pressed={purposeFilter === filter.id} onClick={() => { setPurposeFilter(filter.id); setActiveIdx(0); containerRef.current?.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior }); void trackEngagement('flicks_purpose_filter_used', currentUserId, filter.id === 'all' ? null : filter.id, { filter: filter.id }) }}>
             {filter.label}
           </button>
         ))}

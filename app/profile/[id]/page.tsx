@@ -8,7 +8,7 @@ import PostCard from '@/components/PostCard'
 import FollowButton from '@/components/FollowButton'
 import LogoutButton from '@/components/LogoutButton'
 import {
-  ArrowLeft, MapPin, Calendar, Pencil,
+  ArrowLeft, MapPin, Calendar, Pencil, Settings,
   Grid3x3, MessageCircle, Bookmark,
   Loader2, Link as LinkIcon, Globe, Languages,
 } from 'lucide-react'
@@ -409,6 +409,14 @@ export default function ProfilePage() {
         </div>
         {isOwner && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+            <Link href="/settings" aria-label="Open settings" title="Settings" style={{
+              width: 34, height: 34, borderRadius: '50%', fontSize: 13, fontWeight: 700,
+              border: '1.5px solid var(--border)', background: 'none',
+              color: 'var(--text-primary)', textDecoration: 'none',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+            }}>
+              <Settings size={14} />
+            </Link>
             <Link href="/profile/edit" style={{
               padding: '6px 14px', borderRadius: 20, fontSize: 13, fontWeight: 700,
               border: '1.5px solid var(--border)', background: 'none',

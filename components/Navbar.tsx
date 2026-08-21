@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
   Home, Compass, Clapperboard,
-  MessageSquare, User, Plus,
+  MessageSquare, User, Plus, Settings as SettingsIcon,
 } from 'lucide-react'
 import NotificationBell from '@/components/NotificationBell'
 import ThemeToggle      from '@/components/ThemeToggle'
@@ -282,6 +282,10 @@ export default function Navbar() {
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 16 }}>
+          <Link href="/settings" className="settings-nav-link tap-sm" aria-label="Open settings">
+            <SettingsIcon size={17} />
+            <span>Settings</span>
+          </Link>
           <button
             type="button"
             onClick={scrollToCompose}

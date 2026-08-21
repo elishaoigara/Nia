@@ -19,6 +19,7 @@ import {
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { VIDEO_CATEGORIES } from '@/lib/video-categories';
+import { trackEngagement } from '@/lib/analytics';
 
 interface MediaItem {
   file: File;
@@ -464,6 +465,13 @@ export default function CreatePost({
           ).toISOString(),
         });
       }
+
+      void trackEngagement('post_created', userId, purposeMode, {
+        has_media: Boolean(media_url),
+        media_type: media_type ?? 'none',
+        has_circle: Boolean(circleId),
+        has_poll: Boolean(hasPoll),
+      });
 
       /* Reset */
       mediaItems.forEach(m => URL.revokeObjectURL(m.preview));

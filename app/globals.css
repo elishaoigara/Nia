@@ -1904,3 +1904,55 @@ body {
   .circle-post-filters { align-items: stretch; flex-direction: column; }
   .circle-post-sort-group { align-self: flex-start; }
 }
+
+/* Settings: account controls with comfortable reading and touch targets */
+.settings-page { width: 100%; max-width: 720px; margin: 0 auto; padding: 26px 16px 56px; }
+.settings-heading { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 22px; }
+.settings-heading h1 { margin: 2px 0 5px; color: var(--text-primary); font-size: clamp(24px, 4vw, 30px); line-height: 1.12; }
+.settings-heading p:not(.home-eyebrow) { max-width: 540px; margin: 0; color: var(--text-secondary); font-size: 13px; line-height: 1.5; }
+.settings-back { display: grid; width: 40px; height: 40px; flex: 0 0 40px; place-items: center; border: 1px solid var(--border); border-radius: 13px; background: var(--surface-1); color: var(--text-primary); text-decoration: none; }
+.settings-section { margin-top: 22px; }
+.settings-section-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 0 4px 8px; }
+.settings-section-heading h2 { margin: 0; color: var(--text-primary); font-size: 14px; font-weight: 800; }
+.settings-section-heading span { color: var(--text-tertiary); font-size: 11px; text-align: right; }
+.settings-card { overflow: hidden; border: 1px solid var(--border); border-radius: 18px; background: var(--surface-1); }
+.settings-account-card { display: flex; align-items: center; gap: 12px; padding: 14px; }
+.settings-account-avatar { display: grid; width: 42px; height: 42px; flex: 0 0 42px; place-items: center; border-radius: 14px; background: var(--grad-brand); color: white; }
+.settings-account-copy { min-width: 0; flex: 1; }
+.settings-account-copy strong, .settings-account-copy span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.settings-account-copy strong { color: var(--text-primary); font-size: 13px; }
+.settings-account-copy span { margin-top: 3px; color: var(--text-tertiary); font-size: 11px; }
+.settings-outline-button { display: inline-flex; align-items: center; gap: 3px; min-height: 36px; flex: 0 0 auto; padding: 7px 10px; border: 1px solid var(--border); border-radius: 10px; color: var(--text-primary); font-size: 11px; font-weight: 750; text-decoration: none; white-space: nowrap; }
+.settings-row { display: flex; align-items: center; gap: 12px; min-height: 72px; padding: 13px 14px; border-bottom: 1px solid var(--divider); }
+.settings-row:last-child { border-bottom: 0; }
+.settings-row-icon { display: grid; width: 36px; height: 36px; flex: 0 0 36px; place-items: center; border-radius: 11px; background: var(--surface-2); color: var(--nia-violet); }
+.settings-row-copy { min-width: 0; flex: 1; }
+.settings-row-copy p { margin: 0; color: var(--text-primary); font-size: 13px; font-weight: 750; }
+.settings-row-copy span { display: block; max-width: 470px; margin-top: 4px; color: var(--text-secondary); font-size: 11px; line-height: 1.4; }
+.settings-row-control { display: flex; flex: 0 0 auto; align-items: center; }
+.settings-toggle { position: relative; width: 46px; height: 28px; flex: 0 0 46px; padding: 3px; border: 0; border-radius: 999px; background: var(--surface-3); cursor: pointer; transition: background .18s ease; }
+.settings-toggle span { display: block; width: 22px; height: 22px; border-radius: 50%; background: var(--text-tertiary); box-shadow: 0 2px 5px rgba(0,0,0,.15); transition: transform .18s ease, background .18s ease; }
+.settings-toggle.is-on { background: var(--nia-violet); }
+.settings-toggle.is-on span { transform: translateX(18px); background: white; }
+.settings-link-row { display: flex; align-items: center; gap: 12px; min-height: 68px; padding: 12px 14px; border-bottom: 1px solid var(--divider); color: var(--text-secondary); text-decoration: none; }
+.settings-link-row:last-child { border-bottom: 0; }
+.settings-link-row > span:not(.settings-row-icon) { min-width: 0; flex: 1; }
+.settings-link-row strong, .settings-link-row small { display: block; }
+.settings-link-row strong { color: var(--text-primary); font-size: 13px; }
+.settings-link-row small { margin-top: 3px; color: var(--text-secondary); font-size: 11px; line-height: 1.4; }
+.settings-link-row > svg { flex: 0 0 auto; color: var(--text-tertiary); }
+.settings-logout-card { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 22px; padding: 14px; }
+.settings-logout-card strong, .settings-logout-card span { display: block; }
+.settings-logout-card strong { color: var(--text-primary); font-size: 13px; }
+.settings-logout-card span { margin-top: 4px; color: var(--text-secondary); font-size: 11px; line-height: 1.4; }
+.settings-footnote { margin: 18px 4px 0; color: var(--text-tertiary); font-size: 11px; line-height: 1.5; }
+.settings-nav-link { display: flex; align-items: center; gap: 12px; min-height: 42px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 14px; color: var(--text-secondary); font-size: 14px; font-weight: 600; text-decoration: none; }
+@media (max-width: 520px) {
+  .settings-page { padding: 20px 13px 42px; }
+  .settings-account-card { align-items: flex-start; flex-wrap: wrap; }
+  .settings-account-copy { padding-top: 2px; }
+  .settings-outline-button { width: 100%; justify-content: center; margin-left: 54px; }
+  .settings-row { min-height: 78px; padding: 12px; }
+  .settings-row-copy span { max-width: none; }
+  .settings-logout-card { align-items: flex-start; flex-direction: column; }
+}
