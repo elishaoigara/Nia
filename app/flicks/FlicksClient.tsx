@@ -1635,6 +1635,7 @@ function FlickItem({
         {/* Like */}
         <ActionBtn
           onClick={toggleLike}
+          ariaLabel={` ${liked ? 'Unlike' : 'Like'} flick by @${profile?.username ?? 'member'}`}
           icon={<Heart size={22} fill={liked ? '#ff4d6d' : 'none'} color={liked ? '#ff4d6d' : 'white'} strokeWidth={1.8} />}
           label={likeCount > 0 ? String(likeCount) : ''}
           active={liked}
@@ -1643,6 +1644,7 @@ function FlickItem({
         {/* Comments */}
         <ActionBtn
           onClick={() => onOpenComments(video.id, commentCount)}
+          ariaLabel={`Open comments for @${profile?.username ?? 'member'}`}
           icon={<MessageCircle size={22} color="white" strokeWidth={1.8} />}
           label={commentCount > 0 ? String(commentCount) : ''}
         />
@@ -1666,6 +1668,7 @@ function FlickItem({
         {/* Share */}
         <ActionBtn
           onClick={share}
+          ariaLabel="Share this flick"
           icon={copied ? <Check size={20} color="white" /> : <Share2 size={20} color="white" strokeWidth={1.8} />}
           label={copied ? 'Copied!' : 'Share'}
         />
@@ -1691,12 +1694,12 @@ function FlickItem({
 
       {/* ── Bottom info ─────────────────────────────────── */}
       <div style={{
-        position: 'absolute', bottom: 'calc(56px + env(safe-area-inset-bottom, 0px))', left: 0, right: 68,
-        padding: '0 16px',
+        position: 'absolute', bottom: 'calc(56px + env(safe-area-inset-bottom, 0px))', left: 0, right: 84,
+        maxWidth: 700, padding: '0 16px',
       }}>
         <Link href={`/profile/${profile?.id}`} style={{
-          display: 'flex', alignItems: 'center', gap: 6,
-          marginBottom: 6, textDecoration: 'none',
+          display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6,
+          marginBottom: 8, textDecoration: 'none',
         }}>
           <span style={{ color: 'white', fontWeight: 700, fontSize: 14, textShadow: '0 1px 4px rgba(0,0,0,0.5)' }}>
             @{profile?.username ?? 'unknown'}
@@ -1745,16 +1748,18 @@ function FlickItem({
 
 // ── Reusable action button ────────────────────────────────────────────────────
 function ActionBtn({
-  onClick, icon, label, active,
+  onClick, icon, label, active, ariaLabel,
 }: {
   onClick: () => void
   icon: React.ReactNode
   label?: string
   active?: boolean
+  ariaLabel?: string
 }) {
   return (
     <button
       onClick={onClick}
+      aria-label={ariaLabel ?? label}
       style={{
         display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
         border: 'none', background: 'none', cursor: 'pointer',

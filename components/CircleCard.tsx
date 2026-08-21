@@ -70,10 +70,10 @@ export default function CircleCard({ circle, currentUserId }: CircleCardProps) {
   return (
     <Link href={`/circles/${circle.slug}`} className="block group h-full">
       {/* Implemented hover:border-(--border) */}
-      <div className="card card-hover p-5 h-full flex flex-col gap-4 border border-transparent hover:border-(--border) transition-all duration-200" style={{ background: 'var(--surface-0)' }}>
+      <div className="card card-hover circle-card p-5 h-full flex flex-col gap-5 border border-transparent hover:border-(--border) transition-all duration-200" style={{ background: 'var(--surface-0)' }}>
         
         {/* Top: emoji + name */}
-        <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
             <div
               className="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl shrink-0 transition-transform group-hover:scale-105"
@@ -84,13 +84,13 @@ export default function CircleCard({ circle, currentUserId }: CircleCardProps) {
             
             <div className="min-w-0">
               {/* Implemented group-hover:text-(--nia-violet) */}
-              <h3 className="font-bold text-base leading-tight group-hover:text-(--nia-violet) transition-colors truncate">
+              <h3 className="font-bold text-base leading-snug break-words group-hover:text-(--nia-violet) transition-colors">
                 {circle.name}
               </h3>
               
-              <div className="flex items-center gap-2 mt-1">
+              <div className="flex items-center gap-2 mt-2 min-w-0 flex-wrap">
                 {circle.university && (
-                  <p className="text-xs truncate font-medium" style={{ color: 'var(--text-tertiary)' }}>
+                  <p className="text-xs break-words font-medium" style={{ color: 'var(--text-tertiary)' }}>
                     {circle.university.split(' ').slice(0, 3).join(' ')}
                   </p>
                 )}
@@ -117,7 +117,7 @@ export default function CircleCard({ circle, currentUserId }: CircleCardProps) {
         )}
 
         {/* Footer */}
-        <div className="flex items-center justify-between mt-auto pt-2 border-t border-dashed" style={{ borderColor: 'var(--border)' }}>
+        <div className="flex items-center justify-between gap-3 flex-wrap mt-auto pt-3 border-t border-dashed" style={{ borderColor: 'var(--border)' }}>
           <div className="flex items-center gap-1.5" style={{ color: 'var(--text-secondary)' }}>
             <div className="p-1 rounded-md" style={{ background: 'var(--surface-1)' }}>
               <Users size={13} style={{ color: 'var(--text-tertiary)' }} />
@@ -129,9 +129,10 @@ export default function CircleCard({ circle, currentUserId }: CircleCardProps) {
 
           {/* Implemented min-w-19 */}
           <button
+            aria-label={`${joined ? 'Leave' : requested ? 'Request pending' : circle.is_private ? 'Request to join' : 'Join'} ${circle.name}`}
             onClick={toggleJoin}
             disabled={loading || requested}
-            className="px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center min-w-19"
+            className="px-4 py-2 rounded-xl text-xs font-bold transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center min-w-[84px] min-h-[38px]"
             style={joined || requested
               ? { background: 'var(--surface-2)', color: 'var(--text-secondary)' }
               : { backgroundColor: color, color: '#fff' }

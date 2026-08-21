@@ -72,6 +72,11 @@ export default function CirclesPage() {
         {userId && <CreateCircle userId={userId} />}
       </div>
 
+      <div className="circle-directory-intro">
+        <p className="home-eyebrow">Find people to build with</p>
+        <p>Join a Circle with a shared question, skill, place, or ambition. Nia is better when participation has a purpose.</p>
+      </div>
+
       {/* Search */}
       <div style={{ position: 'relative' }}>
         <Search size={16} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-tertiary)' }} />
@@ -137,7 +142,7 @@ export default function CirclesPage() {
           {!query && !category && yourCircles.length > 0 && (
             <section className="space-y-3">
               <h2 style={{ fontWeight: 800, fontSize: 15 }}>Your Circles</h2>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 250px), 1fr))', gap: 12 }}>
                 {yourCircles.map(circle => (
                   <CircleCard key={circle.id} circle={circle} currentUserId={userId ?? ''} />
                 ))}
@@ -159,7 +164,7 @@ export default function CirclesPage() {
                 </p>
               </div>
             ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 250px), 1fr))', gap: 12 }}>
                 {filtered.map(circle => (
                   <CircleCard key={circle.id} circle={circle} currentUserId={userId ?? ''} />
                 ))}
