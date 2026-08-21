@@ -6,6 +6,8 @@ import CircleJoinButton from '@/components/CircleJoinButton'
 import CircleRequestsPanel from '@/components/CircleRequestsPanel'
 import CirclePrompt from '@/components/CirclePrompt'
 import ReportCircleButton from '@/components/ReportCircleButton'
+import CircleResources from '@/components/CircleResources'
+import CircleResponses from '@/components/CircleResponses'
 import { Users, ArrowLeft, Lock, Globe, School, Calendar } from 'lucide-react'
 import Link from 'next/link'
 import type { Circle, CircleJoinRequest, Post } from '@/types/domain'
@@ -190,6 +192,9 @@ export default async function CirclePage({ params, searchParams }: Props) {
           accentColor={color}
         />
       )}
+
+      {isMember && <CircleResources circleId={circle.id} userId={user.id} isOwner={circle.created_by === user.id} />}
+      {isMember && <CircleResponses circleId={circle.id} userId={user.id} />}
 
       {/* Post creator — only for members */}
       {isMember && <CreatePost userId={user.id} circleId={circle.id} />}
