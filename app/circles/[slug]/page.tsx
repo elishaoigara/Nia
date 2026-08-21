@@ -14,7 +14,7 @@ import type { Circle, CircleJoinRequest, Post } from '@/types/domain'
 
 interface Props {
   params: Promise<{ slug: string }>
-  searchParams: Promise<{ sort?: string }>
+  searchParams: Promise<{ sort?: string; mode?: string }>
 }
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -24,8 +24,10 @@ const CATEGORY_COLORS: Record<string, string> = {
 
 export default async function CirclePage({ params, searchParams }: Props) {
   const { slug } = await params
-  const { sort } = await searchParams
+  const { sort, mode } = await searchParams
   const sortMode = sort === 'top' ? 'top' : 'recent'
+  const allowedModes = ['ask', 'offer', 'update', 'opportunity', 'reflection'] as const
+  const filterMode = allowedModes.includes(mode as (typeof allowedModes)[number]) ? mode : 'all'
 
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -71,10 +73,12 @@ export default async function CirclePage({ params, searchParams }: Props) {
     pendingRequests = (data ?? []) as unknown as CircleJoinRequest[]
   }
 
-  const sortedPosts = ((posts ?? []) as unknown as Post[]).sort((a, b) => {
-    if (sortMode === 'top') return (b.likes?.length ?? 0) - (a.likes?.length ?? 0)
-    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-  })
+  const sortedPosts = ((posts ?? []) as unknown as Post[])
+    .filter(post => filterMode === 'all' || post.contribution_mode === filterMode)
+    .sort((a, b) => {
+      if (sortMode === 'top') return (b.likes?.length ?? 0) - (a.likes?.length ?? 0)
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    })
 
   const color = CATEGORY_COLORS[circle.category?.toLowerCase() ?? 'default'] ?? CATEGORY_COLORS.default
   const previewMembers = members.slice(0, 6)
@@ -200,10 +204,21 @@ export default async function CirclePage({ params, searchParams }: Props) {
       {isMember && <CreatePost userId={user.id} circleId={circle.id} />}
 
       {/* Sort tabs */}
-      {sortedPosts.length > 0 && (
-        <div className="flex items-center gap-2">
+      {(posts ?? []).length > 0 && (
+        <div className="circle-post-filters">
+          <div className="circle-post-filter-group" role="group" aria-label="Filter contributions">
+            {[
+              { value: 'all', label: 'All contributions' },
+              { value: 'ask', label: 'Questions' },
+              { value: 'offer', label: 'Offers' },
+              { value: 'update', label: 'Progress' },
+              { value: 'opportunity', label: 'Opportunities' },
+              { value: 'reflection', label: 'Reflections' },
+            ].map(item => <Link key={item.value} href={`/circles/${slug}?sort=${sortMode}&mode=${item.value === 'all' ? '' : item.value}`} className={`circle-post-filter${filterMode === item.value ? ' is-selected' : ''}`}>{item.label}</Link>)}
+          </div>
+          <div className="circle-post-sort-group" role="group" aria-label="Sort posts">
           <Link
-            href={`/circles/${slug}?sort=recent`}
+            href={`/circles/${slug}?sort=recent${filterMode !== 'all' ? `&mode=${filterMode}` : ''}`}
             className="px-3 py-1.5 rounded-full text-xs font-bold transition-all"
             style={sortMode === 'recent'
               ? { background: color, color: '#fff' }
@@ -212,7 +227,7 @@ export default async function CirclePage({ params, searchParams }: Props) {
             Recent
           </Link>
           <Link
-            href={`/circles/${slug}?sort=top`}
+            href={`/circles/${slug}?sort=top${filterMode !== 'all' ? `&mode=${filterMode}` : ''}`}
             className="px-3 py-1.5 rounded-full text-xs font-bold transition-all"
             style={sortMode === 'top'
               ? { background: color, color: '#fff' }
@@ -220,6 +235,7 @@ export default async function CirclePage({ params, searchParams }: Props) {
           >
             Top
           </Link>
+          </div>
         </div>
       )}
 

@@ -39,6 +39,7 @@ export interface FlickPost {
   language: string | null
   video_duration?: number | null
   category?: string | null
+  contribution_mode?: 'ask' | 'offer' | 'update' | 'opportunity' | 'reflection' | null
   profiles: { id: string; username: string; avatar_url: string | null; country: string | null } | null
   likes: { user_id: string }[]
   comments: { id: string }[]
@@ -60,6 +61,17 @@ interface FlicksClientProps {
 // this is the fix for mid/low-end Android devices choking after scrolling a while.
 const RENDER_WINDOW = 1
 const DOUBLE_TAP_MS = 280
+const PURPOSE_FILTERS = [
+  { id: 'all', label: 'All purposes' },
+  { id: 'ask', label: 'Questions' },
+  { id: 'offer', label: 'Offers' },
+  { id: 'update', label: 'Progress' },
+  { id: 'opportunity', label: 'Opportunities' },
+  { id: 'reflection', label: 'Reflections' },
+] as const
+const PURPOSE_LABELS: Record<string, string> = {
+  ask: 'Question', offer: 'Offer help', update: 'Progress update', opportunity: 'Opportunity', reflection: 'Reflection',
+}
 
 function timeAgo(date: string) {
   const s = Math.floor((Date.now() - new Date(date).getTime()) / 1000)
@@ -437,7 +449,11 @@ function CommentSheet({
 // ── Main Flicks Component ─────────────────────────────────────────────────────
 export default function NiaFlicksClient({ shorts, longs, currentUserId, initialVideo }: FlicksClientProps) {
   const [tab, setTab] = useState<'short' | 'long'>('short')
+  const [purposeFilter, setPurposeFilter] = useState<(typeof PURPOSE_FILTERS)[number]['id']>('all')
   const [activeIdx, setActiveIdx] = useState(0)
+  const visibleShorts = purposeFilter === 'all'
+    ? shorts
+    : shorts.filter(video => (video.contribution_mode ?? 'reflection') === purposeFilter)
   // Start muted: iOS/most mobile browsers silently reject unmuted autoplay, which
   // meant the very first video often never actually started playing. Muted-by-default
   // + a "tap for sound" hint is the standard short-video pattern for a reason.
@@ -479,7 +495,7 @@ export default function NiaFlicksClient({ shorts, longs, currentUserId, initialV
     }
     el.addEventListener('scroll', onScroll, { passive: true })
     return () => { el.removeEventListener('scroll', onScroll); cancelAnimationFrame(raf) }
-  }, [tab])
+  }, [tab, purposeFilter])
 
   // Lock body scroll when sheet open
   useEffect(() => {
@@ -548,6 +564,17 @@ export default function NiaFlicksClient({ shorts, longs, currentUserId, initialV
     </button>
   )
 
+  const PurposeFilterBar = (
+    <div className="flick-purpose-filter-wrap" role="group" aria-label="Filter Flicks by purpose">
+      <div className="flick-purpose-filter-row">
+        {PURPOSE_FILTERS.map(filter => (
+          <button key={filter.id} type="button" className={`flick-purpose-filter${purposeFilter === filter.id ? ' is-selected' : ''}`} aria-pressed={purposeFilter === filter.id} onClick={() => { setPurposeFilter(filter.id); setActiveIdx(0); containerRef.current?.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior }) }}>
+            {filter.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
 
   // ── Empty state ──────────────────────────────────────────────────
   if (shorts.length === 0 && longs.length === 0) {
@@ -658,6 +685,8 @@ export default function NiaFlicksClient({ shorts, longs, currentUserId, initialV
 
       {TabToggle}
 
+      {PurposeFilterBar}
+
       {searchOpen && (
         <SearchOverlay
           onClose={() => setSearchOpen(false)}
@@ -678,7 +707,7 @@ export default function NiaFlicksClient({ shorts, longs, currentUserId, initialV
         />
       )}
 
-      {shorts.length === 0 ? (
+      {visibleShorts.length === 0 ? (
         <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <p style={{ color: 'rgba(255,255,255,0.45)', fontSize: 14 }}>No short flicks yet — check Long Flicks!</p>
         </div>
@@ -695,7 +724,7 @@ export default function NiaFlicksClient({ shorts, longs, currentUserId, initialV
             msOverflowStyle: 'none',
           } as React.CSSProperties}
         >
-          {shorts.map((video, i) => (
+          {visibleShorts.map((video, i) => (
             <FlickItem
               key={video.id}
               video={video}
@@ -1683,6 +1712,7 @@ function FlickItem({
               {video.language}
             </span>
           )}
+          <span className="flick-purpose-badge">{PURPOSE_LABELS[video.contribution_mode ?? 'reflection']}</span>
         </Link>
         {video.content && (
           <p style={{

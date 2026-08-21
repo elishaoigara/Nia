@@ -12,7 +12,7 @@ const SHORTS_LIMIT = 40
 const LONGS_LIMIT = 40
 
 const FLICK_SELECT = `
-  id, user_id, content, media_url, media_type, created_at, language, video_duration, category, thumbnail_url,
+  id, user_id, content, media_url, media_type, created_at, language, video_duration, category, contribution_mode, thumbnail_url,
   profiles:user_id (id, username, avatar_url, country),
   likes (user_id),
   comments (id),
