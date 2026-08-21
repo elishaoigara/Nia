@@ -5,7 +5,16 @@ import PostCard           from '@/components/PostCard'
 import LoadMore           from '@/components/LoadMore'
 import FeedTabs           from '@/components/FeedTabs'
 import StoriesBar         from '@/components/StoriesBar'
-import HomeRail           from '@/components/HomeRail'
+import HomeRail            from '@/components/HomeRail'
+import {
+  HomeHeader,
+  NextStepCard,
+  CircleShelf,
+  CirclePulseFeed,
+  PurposeComposer,
+  type CirclePulseItem,
+} from '@/components/HomeCircleFirst'
+
 import WelcomeBanner      from '@/components/WelcomeBanner'
 import { Suspense }       from 'react'
 import { scorePosts }     from '@/lib/feed-scorer'
@@ -54,7 +63,7 @@ export default async function FeedPage({
   if (!profileCheck) redirect('/onboarding')
 
   const [profileRes, followsRes, blocksRes, mutedIds] = await Promise.all([
-    supabase.from('profiles').select('country, language, interests').eq('id', user.id).single(),
+    supabase.from('profiles').select('full_name, country, language, interests').eq('id', user.id).single(),
     supabase.from('follows').select('following_id').eq('follower_id', user.id),
     supabase.from('blocks').select('blocked_id').eq('blocker_id', user.id),
     getMutedIds(supabase),
@@ -107,6 +116,32 @@ export default async function FeedPage({
   const myCircles = circleRows
     .map(row => row.circles)
     .filter((circle): circle is HomeCircle => circle !== null)
+
+  const pulseResponse = myCircles.length > 0
+    ? await supabase.from('posts').select(`
+        id, circle_id, content, created_at,
+        profiles:user_id (username, full_name, avatar_url),
+        circles:circle_id (name, slug)
+      `).in('circle_id', myCircles.map(circle => circle.id)).not('content', 'is', null).order('created_at', { ascending: false }).limit(4)
+    : { data: [], error: null }
+  const circlePulseItems = ((pulseResponse.data ?? []) as unknown as Array<{
+    id: string
+    circle_id: string
+    content: string
+    created_at: string
+    profiles: { username?: string | null; full_name?: string | null; avatar_url?: string | null } | null
+    circles: { name: string; slug: string } | null
+  }>).filter(item => item.circles).map(item => ({
+    id: item.id,
+    circleId: item.circle_id,
+    circleName: item.circles?.name ?? 'Your Circle',
+    circleSlug: item.circles?.slug ?? '',
+    authorName: item.profiles?.full_name || `@${item.profiles?.username ?? 'member'}`,
+    authorAvatar: item.profiles?.avatar_url ?? null,
+    content: item.content,
+    createdAt: item.created_at,
+    type: 'conversation' as const,
+  })) as CirclePulseItem[]
   const suggestedCircles = !recommendedCircleResponse.error
     ? ((recommendedCircleResponse.data ?? []) as { id: string; name: string; slug: string; category: string | null }[]).map(circle => ({
         id: circle.id,
@@ -173,11 +208,21 @@ export default async function FeedPage({
 
       <WelcomeBanner />
 
-      {/* Stories */}
-      <StoriesBar currentUserId={user.id} />
+      <HomeHeader
+        displayName={myProfile?.full_name?.split(' ')[0] || 'friend'}
+        activeCircleCount={myCircles.length}
+        needsResponseCount={0}
+      />
+      <NextStepCard circle={myCircles[0] ?? null} hasActivity={circlePulseItems.length > 0} />
+      <CircleShelf circles={myCircles} />
+      <CirclePulseFeed items={circlePulseItems} />
+      <PurposeComposer userId={user.id} circles={myCircles} />
 
-      {/* Your Circles / Trending Flicks — one combined rail, not two */}
-      <HomeRail circles={myCircles} suggestedCircles={suggestedCircles} flicks={trendingFlicks} currentUserId={user.id} />
+      {/* Broader discovery remains available below the Circle layer. */}
+      <HomeRail circles={[]} suggestedCircles={suggestedCircles} flicks={trendingFlicks} currentUserId={user.id} />
+
+      {/* Stories remain available below the Circle layer. */}
+      <StoriesBar currentUserId={user.id} />
 
       {/* Feed tabs — sticky under top nav */}
       <Suspense fallback={null}>

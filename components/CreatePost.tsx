@@ -30,6 +30,7 @@ interface MediaItem {
 interface CreatePostProps {
   userId: string;
   circleId?: string | null;
+  purposeMode?: 'ask' | 'offer' | 'update' | 'opportunity' | 'reflection';
 }
 
 interface Profile {
@@ -63,6 +64,7 @@ const MAX_VIDEO_SEC = 600; // 10 min ceiling — short vs long is decided automa
 export default function CreatePost({
   userId,
   circleId = null,
+  purposeMode = 'reflection',
 }: CreatePostProps) {
   const supabase = createClient();
   const router = useRouter();
@@ -495,6 +497,13 @@ export default function CreatePost({
 
   /* ── Collapsed / expanded state ─────────────────── */
   const [isOpen, setIsOpen] = useState(false);
+  const purposePlaceholder = {
+    ask: 'What are you trying to figure out?',
+    offer: 'What can you help someone with?',
+    update: 'What moved forward this week?',
+    opportunity: 'What opportunity should the community know about?',
+    reflection: 'What did you learn or notice?',
+  }[purposeMode];
 
   function openCompose() {
     setIsOpen(true);
@@ -535,9 +544,10 @@ export default function CreatePost({
             }
           </div>
           <div className="compose-trigger-pill">
-            <span className="compose-trigger-placeholder">
-              Share something with Africa 🌍
-            </span>
+                          <span className="compose-trigger-placeholder">
+                {purposePlaceholder}
+              </span>
+
           </div>
           <button
             className="compose-trigger-media"
@@ -576,7 +586,7 @@ export default function CreatePost({
             <textarea
               ref={textRef}
               className="compose-textarea"
-              placeholder="Share something with Africa 🌍"
+              placeholder={purposePlaceholder}
               value={content}
               onChange={e => { setContent(e.target.value); grow(); }}
               rows={1}
