@@ -4,6 +4,8 @@ import PostCard from '@/components/PostCard'
 import CreatePost from '@/components/CreatePost'
 import CircleJoinButton from '@/components/CircleJoinButton'
 import CircleRequestsPanel from '@/components/CircleRequestsPanel'
+import CirclePrompt from '@/components/CirclePrompt'
+import ReportCircleButton from '@/components/ReportCircleButton'
 import { Users, ArrowLeft, Lock, Globe, School, Calendar } from 'lucide-react'
 import Link from 'next/link'
 import type { Circle, CircleJoinRequest, Post } from '@/types/domain'
@@ -159,14 +161,17 @@ export default async function CirclePage({ params, searchParams }: Props) {
               </div>
             </div>
 
-            <CircleJoinButton
-              circleId={circle.id}
-              currentUserId={user.id}
-              isPrivate={!!circle.is_private}
-              initialIsMember={isMember}
-              initialRequestStatus={requestStatus}
-              accentColor={color}
-            />
+            <div className="flex items-center gap-2">
+              <ReportCircleButton circleId={circle.id} accentColor={color} />
+              <CircleJoinButton
+                circleId={circle.id}
+                currentUserId={user.id}
+                isPrivate={!!circle.is_private}
+                initialIsMember={isMember}
+                initialRequestStatus={requestStatus}
+                accentColor={color}
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -174,6 +179,16 @@ export default async function CirclePage({ params, searchParams }: Props) {
       {/* Pending join requests — only visible to existing members of a private circle */}
       {pendingRequests.length > 0 && (
         <CircleRequestsPanel requests={pendingRequests} />
+      )}
+
+      {/* Purposeful activity starter — only for members */}
+      {isMember && (
+        <CirclePrompt
+          circleId={circle.id}
+          userId={user.id}
+          isOwner={circle.created_by === user.id}
+          accentColor={color}
+        />
       )}
 
       {/* Post creator — only for members */}

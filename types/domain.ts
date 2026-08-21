@@ -45,6 +45,7 @@ export interface CircleMember {
 
 export interface Circle {
   id: string
+  created_by?: string | null
   name: string
   slug: string
   description?: string | null
