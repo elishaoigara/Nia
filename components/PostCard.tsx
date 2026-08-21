@@ -91,6 +91,14 @@ function mediaGridClass(count: number): string {
    ─────────────────────────────────────────────── */
 const TRENDING_THRESHOLD = 30; // likes to qualify as trending
 
+const CONTRIBUTION_MODE_LABELS: Record<NonNullable<Post['contribution_mode']>, string> = {
+  ask: 'Ask',
+  offer: 'Offer help',
+  update: 'Progress update',
+  opportunity: 'Opportunity',
+  reflection: 'Reflection',
+};
+
 type PostVariant = 'media' | 'trending' | 'text';
 
 function getPostVariant(
@@ -357,6 +365,11 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
                 <span className="post-time">{timeAgo(post.created_at)}</span>
                 {variant === 'trending' && (
                   <span className="post-badge post-badge--trending">🔥 trending</span>
+                )}
+                {post.contribution_mode && (
+                  <span className={`post-purpose-tag post-purpose-tag--${post.contribution_mode}`}>
+                    {CONTRIBUTION_MODE_LABELS[post.contribution_mode]}
+                  </span>
                 )}
                 {canEdit && (
                   <span style={{ fontSize: 11, color: 'var(--nia-violet)', fontWeight: 600, background: 'rgba(91,33,182,0.08)', borderRadius: 4, padding: '1px 5px' }}>

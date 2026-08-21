@@ -1835,3 +1835,22 @@ body {
   .home-welcome { padding-top: 26px; }
   .home-pulse-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+.post-purpose-tag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 19px;
+  padding: 2px 7px;
+  border: 1px solid color-mix(in srgb, var(--nia-violet) 20%, var(--border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--nia-violet) 9%, var(--surface-1));
+  color: var(--nia-violet);
+  font-size: 10px;
+  font-weight: 750;
+  line-height: 1;
+  white-space: nowrap;
+}
+.post-purpose-tag--ask { border-color: color-mix(in srgb, var(--nia-coral) 30%, var(--border)); background: color-mix(in srgb, var(--nia-coral) 9%, var(--surface-1)); color: var(--nia-coral); }
+.post-purpose-tag--offer { border-color: color-mix(in srgb, var(--nia-mint) 35%, var(--border)); background: color-mix(in srgb, var(--nia-mint) 12%, var(--surface-1)); color: var(--text-primary); }
+.post-purpose-tag--update { border-color: color-mix(in srgb, var(--nia-sky) 30%, var(--border)); background: color-mix(in srgb, var(--nia-sky) 10%, var(--surface-1)); color: var(--text-primary); }
+.post-purpose-tag--opportunity { border-color: color-mix(in srgb, var(--nia-amber) 35%, var(--border)); background: color-mix(in srgb, var(--nia-amber) 12%, var(--surface-1)); color: var(--text-primary); }

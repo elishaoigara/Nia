@@ -21,6 +21,7 @@ export type CirclePulseItem = {
   authorAvatar: string | null
   content: string
   createdAt: string
+  mode: 'ask' | 'offer' | 'update' | 'opportunity' | 'reflection'
   type: 'update' | 'conversation'
 }
 
@@ -110,6 +111,14 @@ export function CircleShelf({ circles }: { circles: HomeCircleSummary[] }) {
   )
 }
 
+const PURPOSE_LABELS: Record<CirclePulseItem['mode'], string> = {
+  ask: 'asked a question',
+  offer: 'offered help',
+  update: 'shared a progress update',
+  opportunity: 'shared an opportunity',
+  reflection: 'shared a reflection',
+}
+
 function relativeTime(value: string) {
   const seconds = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 1000))
   if (seconds < 60) return 'just now'
@@ -137,7 +146,7 @@ export function CirclePulseFeed({ items }: { items: CirclePulseItem[] }) {
               <div className="home-pulse-avatar">{item.authorAvatar ? <img src={item.authorAvatar} alt="" /> : item.authorName.slice(0, 1).toUpperCase()}</div>
               <div className="home-pulse-content">
                 <div className="home-pulse-meta"><strong>{item.circleName}</strong><span>{relativeTime(item.createdAt)}</span></div>
-                <p><b>{item.authorName}</b> shared a {item.type === 'update' ? 'progress update' : 'conversation'}.</p>
+                <p><b>{item.authorName}</b> {PURPOSE_LABELS[item.mode]}.</p>
                 <p className="home-pulse-text">{item.content}</p>
                 <span className="home-pulse-action">Open Circle <ArrowRight size={13} /></span>
               </div>

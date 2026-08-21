@@ -409,6 +409,7 @@ export default function CreatePost({
           video_duration: videoDuration,
           extra_media: extra_media.length ? extra_media : null,
           language,
+          contribution_mode: purposeMode,
           category: isVideo ? (category ?? 'other') : null,
         })
         .select()

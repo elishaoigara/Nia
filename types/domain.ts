@@ -103,6 +103,7 @@ export interface Post {
   thumbnail_url?: string | null
   video_duration?: number | null
   category?: string | null
+  contribution_mode?: 'ask' | 'offer' | 'update' | 'opportunity' | 'reflection' | null
   language: string | null
   circle_id?: string | null
   profiles: ProfileSummary | null

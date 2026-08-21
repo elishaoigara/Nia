@@ -119,7 +119,7 @@ export default async function FeedPage({
 
   const pulseResponse = myCircles.length > 0
     ? await supabase.from('posts').select(`
-        id, circle_id, content, created_at,
+        id, circle_id, content, contribution_mode, created_at,
         profiles:user_id (username, full_name, avatar_url),
         circles:circle_id (name, slug)
       `).in('circle_id', myCircles.map(circle => circle.id)).not('content', 'is', null).order('created_at', { ascending: false }).limit(4)
@@ -128,6 +128,7 @@ export default async function FeedPage({
     id: string
     circle_id: string
     content: string
+    contribution_mode: 'ask' | 'offer' | 'update' | 'opportunity' | 'reflection' | null
     created_at: string
     profiles: { username?: string | null; full_name?: string | null; avatar_url?: string | null } | null
     circles: { name: string; slug: string } | null
@@ -140,6 +141,7 @@ export default async function FeedPage({
     authorAvatar: item.profiles?.avatar_url ?? null,
     content: item.content,
     createdAt: item.created_at,
+    mode: item.contribution_mode ?? 'reflection',
     type: 'conversation' as const,
   })) as CirclePulseItem[]
   const suggestedCircles = !recommendedCircleResponse.error
