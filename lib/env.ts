@@ -1,4 +1,4 @@
-const SUPABASE_PLACEHOLDER_URL = 'https://example.supabase.co'
+const SUPABASE_PLACEHOLDER_URL = 'https://placeholder.supabase.co'
 const SUPABASE_PLACEHOLDER_KEY = 'public-anon-key-not-configured'
 
 export class ConfigurationError extends Error {

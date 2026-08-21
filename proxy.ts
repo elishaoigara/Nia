@@ -1,5 +1,7 @@
 import { type NextRequest } from 'next/server';
 import { updateSession } from '@/lib/supabase/middleware';
+import { publicSupabaseEnv } from '@/lib/env';
+import { NextResponse } from 'next/server';
 
 const publicPaths = [
   '/login',
@@ -12,6 +14,15 @@ const publicPaths = [
 
 export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
+
+  if (pathname === '/setup') return;
+
+  if (!publicSupabaseEnv.isConfigured) {
+    const setupUrl = request.nextUrl.clone();
+    setupUrl.pathname = '/setup';
+    setupUrl.search = '';
+    return NextResponse.redirect(setupUrl);
+  }
 
   const isPublic = publicPaths.some(
     (path) => pathname === path || pathname.startsWith(path + '/')

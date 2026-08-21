@@ -53,6 +53,8 @@ export default function Navbar() {
   }, [supabase])
 
   const isFlicks   = pathname === '/flicks'
+  const isSetup    = pathname === '/setup'
+  const isAuthPage = ['/login', '/signup', '/forgot-password', '/reset-password', '/auth/callback'].some(path => pathname === path || pathname.startsWith(path + '/'))
   const isDmThread = pathname.startsWith('/messages/') && pathname.split('/').length === 3
 
   function isActive(href: string) {
@@ -63,7 +65,7 @@ export default function Navbar() {
     return pathname.startsWith(href)
   }
 
-  if (isFlicks) return null
+  if (isFlicks || isSetup || isAuthPage) return null
 
   /* ── Sidebar active style (desktop) ── */
   const activeStyle = {
@@ -101,15 +103,10 @@ export default function Navbar() {
             <ThemeToggle />
             {userId && <NotificationBell unreadCount={unreadNotifications} />}
             <button
+              type="button"
               onClick={scrollToCompose}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 6,
-                background: 'var(--grad-brand)', color: '#fff',
-                fontSize: 13, fontWeight: 700,
-                padding: '7px 14px', borderRadius: 10,
-                border: 'none', cursor: 'pointer', minHeight: 34,
-              }}
-              className="tap-sm"
+              className="btn-primary navbar-post-button tap-sm"
+              aria-label="Create a new post"
             >
               <Plus size={15} strokeWidth={2.5} />
               <span className="hidden xs:inline">Post</span>
@@ -286,16 +283,10 @@ export default function Navbar() {
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 16 }}>
           <button
+            type="button"
             onClick={scrollToCompose}
-            style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-              background: 'var(--grad-brand)', color: '#fff',
-              fontWeight: 700, fontSize: 14,
-              padding: '12px', borderRadius: 14,
-              border: 'none', cursor: 'pointer',
-              boxShadow: '0 4px 16px rgba(91, 33, 182, 0.2)',
-            }}
-            className="tap-sm"
+            className="btn-primary sidebar-post-button tap-sm"
+            aria-label="Create a new post"
           >
             <Plus size={17} strokeWidth={2.5} />
             New Post

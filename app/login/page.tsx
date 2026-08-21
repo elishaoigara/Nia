@@ -137,7 +137,8 @@ export default function LoginPage() {
             <button
               onClick={handleGoogleLogin}
               disabled={loading}
-              className="tap-sm"
+                className="btn-ghost tap-sm"
+              aria-label="Continue with Google"
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -194,7 +195,9 @@ export default function LoginPage() {
           {/* Email form */}
           <form onSubmit={handleEmailLogin}>
             <div style={{ marginBottom: 14 }}>
+              <label htmlFor="login-email" className="visually-hidden">Email address</label>
               <input
+                id="login-email"
                 type="email"
                 inputMode="email"
                 autoComplete="email"
@@ -202,38 +205,20 @@ export default function LoginPage() {
                 value={email}
                 onChange={e => setEmail(e.target.value)}
                 required
-                style={{
-                  background: 'var(--surface-0)',
-                  border: '1px solid var(--border)',
-                  color: 'var(--text-primary)',
-                  width: '100%',
-                  padding: '12px 16px',
-                  borderRadius: 12,
-                  fontSize: 15,
-                  outline: 'none',
-                  fontFamily: 'inherit',
-                }}
+                className="input"
               />
             </div>
             <div style={{ marginBottom: 20 }}>
+              <label htmlFor="login-password" className="visually-hidden">Password</label>
               <input
+                id="login-password"
                 type="password"
                 autoComplete="current-password"
                 placeholder="Password"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 required
-                style={{
-                  background: 'var(--surface-0)',
-                  border: '1px solid var(--border)',
-                  color: 'var(--text-primary)',
-                  width: '100%',
-                  padding: '12px 16px',
-                  borderRadius: 12,
-                  fontSize: 15,
-                  outline: 'none',
-                  fontFamily: 'inherit',
-                }}
+                className="input"
               />
             </div>
 
@@ -255,10 +240,9 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="tap-sm"
+              className="btn-primary tap-sm"
               style={{
                 width: '100%',
-                padding: '12px 0',
                 borderRadius: 12,
                 border: 'none',
                 background: 'var(--grad-brand)',
@@ -300,16 +284,8 @@ export default function LoginPage() {
           </p>
           <Link
             href="/signup"
-            style={{
-              display: 'inline-block',
-              padding: '9px 20px',
-              borderRadius: 10,
-              background: 'var(--grad-brand)',
-              color: '#fff',
-              fontWeight: 700,
-              fontSize: 13.5,
-              textDecoration: 'none',
-            }}
+            className="btn-primary"
+            style={{ textDecoration: 'none', fontSize: 13.5 }}
           >
             Create your account →
           </Link>

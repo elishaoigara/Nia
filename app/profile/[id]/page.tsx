@@ -233,6 +233,12 @@ function parseTags(profile: Profile): string[] {
   return tags.slice(0, 6)
 }
 
+function parseGoals(profile: Profile): string[] {
+  if (Array.isArray(profile.goals)) return profile.goals.filter(Boolean).slice(0, 4)
+  if (typeof profile.goals === 'string') return profile.goals.split(',').map(goal => goal.trim()).filter(Boolean).slice(0, 4)
+  return []
+}
+
 export default function ProfilePage() {
   const { id }   = useParams() as { id: string }
   const router   = useRouter()
@@ -365,6 +371,7 @@ export default function ProfilePage() {
   const initials     = (profile.full_name ?? profile.username ?? '?').split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()
   const countryFlag  = profile.country ? getFlag(profile.country) : null
   const tags         = parseTags(profile)
+  const goals        = parseGoals(profile)
   const strength     = calcStrength(profile)
 
   // Banner: uploaded > city skyline SVG
@@ -540,6 +547,20 @@ export default function ProfilePage() {
           }}>
             {profile.bio}
           </p>
+        )}
+
+        {/* Purpose goals */}
+        {goals.length > 0 && (
+          <div style={{ width: '100%', maxWidth: 400, marginBottom: 16, padding: '14px 16px', borderRadius: 16, background: 'var(--surface-1)', border: '1px solid var(--border)' }}>
+            <p style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.7px', margin: '0 0 8px' }}>Here to</p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {goals.map(goal => (
+                <span key={goal} style={{ fontSize: 12, fontWeight: 700, padding: '5px 10px', borderRadius: 999, background: 'rgba(91,33,182,0.1)', color: 'var(--nia-violet)' }}>
+                  {goal}
+                </span>
+              ))}
+            </div>
+          </div>
         )}
 
         {/* Interest tags */}

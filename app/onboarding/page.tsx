@@ -13,6 +13,11 @@ const INTERESTS = [
   'Culture', 'Gaming', 'Creative work', 'Food', 'Travel', 'Community',
 ] as const
 
+const GOALS = [
+  'Learn from people', 'Build a project', 'Find opportunities',
+  'Meet collaborators', 'Share ideas', 'Support my community',
+] as const
+
 type RecommendedCircle = {
   id: string
   name: string
@@ -33,6 +38,7 @@ export default function OnboardingPage() {
   const [city, setCity] = useState('')
   const [bio, setBio] = useState('')
   const [selectedInterests, setSelectedInterests] = useState<string[]>([])
+  const [selectedGoals, setSelectedGoals] = useState<string[]>([])
   const [recommendedCircles, setRecommendedCircles] = useState<RecommendedCircle[]>([])
   const [selectedCircleIds, setSelectedCircleIds] = useState<string[]>([])
   const [error, setError] = useState('')
@@ -72,6 +78,7 @@ export default function OnboardingPage() {
       city: city.trim() || null,
       bio: bio.trim() || null,
       interests: selectedInterests,
+      goals: selectedGoals,
     })
 
     if (insertError) {
@@ -270,7 +277,36 @@ export default function OnboardingPage() {
               <div>
                 <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 4 }}>Make Nia yours</h2>
                 <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginBottom: 12 }}>
-                  Pick at least three interests so your feed and communities feel relevant from the start.
+                  Start with what you want to do here. Your choices shape people and Circles we recommend.
+                </p>
+                <p className="text-sm font-bold" style={{ margin: '0 0 8px' }}>What brings you here?</p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
+                  {GOALS.map(goal => {
+                    const selected = selectedGoals.includes(goal)
+                    return (
+                      <button
+                        key={goal}
+                        type="button"
+                        onClick={() => setSelectedGoals(current => selected ? current.filter(item => item !== goal) : [...current, goal])}
+                        aria-pressed={selected}
+                        style={{
+                          border: `1px solid ${selected ? 'var(--nia-violet)' : 'var(--border)'}`,
+                          background: selected ? 'rgba(91,33,182,0.12)' : 'var(--surface-1)',
+                          color: selected ? 'var(--nia-violet)' : 'var(--text-secondary)',
+                          borderRadius: 999,
+                          padding: '8px 12px',
+                          fontSize: 13,
+                          fontWeight: selected ? 700 : 600,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {goal}
+                      </button>
+                    )
+                  })}
+                </div>
+                <p className="text-xs" style={{ color: selectedGoals.length > 0 ? 'var(--nia-violet)' : 'var(--text-tertiary)', margin: '0 0 14px' }}>
+                  {selectedGoals.length} selected · choose at least 1
                 </p>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                   {INTERESTS.map(interest => {
@@ -328,10 +364,10 @@ export default function OnboardingPage() {
                 <button onClick={() => setStep(1)} className="btn-ghost flex-1">Back</button>
                 <button
                   onClick={handleProfileComplete}
-                  disabled={loading || !fullName.trim() || !isValidUsername(username) || !country || selectedInterests.length < 3}
+                  disabled={loading || !fullName.trim() || !isValidUsername(username) || !country || selectedInterests.length < 3 || selectedGoals.length < 1}
                   className="btn-primary flex-1 flex items-center justify-center gap-2"
                 >
-                  {loading ? <Loader2 size={16} className="animate-spin" /> : '🚀'}
+                  {loading ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
                   {loading ? 'Setting up…' : "Let's go!"}
                 </button>
               </div>

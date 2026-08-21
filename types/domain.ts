@@ -16,6 +16,7 @@ export interface ProfileSummary {
   university?: string | null
   bio?: string | null
   interests?: string[] | string | null
+  goals?: string[] | string | null
   language?: string | null
   last_seen_at?: string | null
 }
@@ -26,6 +27,7 @@ export interface Profile extends ProfileSummary {
   website?: string | null
   languages?: string[] | string | null
   interests?: string[] | string | null
+  goals?: string[] | string | null
   created_at?: string | null
   tribe?: string | null
   gender?: string | null
