@@ -1418,6 +1418,9 @@ function FlickItem({
   const viewTracked = useRef(false)
   const lastTapRef = useRef(0)
   const tapTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const loadStartedAtRef = useRef<number | null>(null)
+  const timeoutTrackedRef = useRef(false)
+  const retryCountRef = useRef(0)
   const supabase = createClient()
 
   const [playing, setPlaying] = useState(false)
@@ -1453,6 +1456,9 @@ function FlickItem({
     if (!v || !shouldMount) return
     setLoadTimedOut(false)
     setErrored(false)
+    loadStartedAtRef.current = null
+    timeoutTrackedRef.current = false
+    retryCountRef.current = 0
     if (isActive) {
       v.currentTime = 0
       void v.play().catch(() => { /* autoplay may be blocked; the tap overlay remains available */ })
@@ -1472,10 +1478,17 @@ function FlickItem({
       if (v && v.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
         setLoadTimedOut(true)
         setBuffering(false)
+        if (!timeoutTrackedRef.current) {
+          timeoutTrackedRef.current = true
+          void trackEngagement('flicks_video_load_timeout', currentUserId, null, {
+            post_id: video.id,
+            elapsed_ms: Math.round(performance.now() - (loadStartedAtRef.current ?? performance.now())),
+          })
+        }
       }
     }, 10000)
     return () => window.clearTimeout(timeout)
-  }, [shouldMount, isActive, video.id, errored])
+  }, [currentUserId, shouldMount, isActive, video.id, errored])
 
   // Sync mute
   useEffect(() => {
@@ -1530,6 +1543,14 @@ function FlickItem({
   }
 
   function retryVideo() {
+    retryCountRef.current += 1
+    void trackEngagement('flicks_video_retry', currentUserId, null, {
+      post_id: video.id,
+      retry_count: retryCountRef.current,
+      reason: loadTimedOut ? 'load_timeout' : errored ? 'media_error' : 'manual',
+    })
+    timeoutTrackedRef.current = false
+    loadStartedAtRef.current = performance.now()
     setErrored(false)
     setLoadTimedOut(false)
     setBuffering(true)
@@ -1583,7 +1604,11 @@ function FlickItem({
             const v = videoRef.current
             if (v && v.duration) setProgress((v.currentTime / v.duration) * 100)
           }}
-          onLoadStart={() => { setBuffering(isActive); setLoadTimedOut(false) }}
+          onLoadStart={() => {
+            loadStartedAtRef.current = performance.now()
+            setBuffering(isActive)
+            setLoadTimedOut(false)
+          }}
           onWaiting={() => setBuffering(isActive)}
           onPlay={() => setPlaying(true)}
           onPause={() => setPlaying(false)}
