@@ -1429,6 +1429,7 @@ function FlickItem({
   const [buffering, setBuffering] = useState(false)
   const [errored, setErrored] = useState(false)
   const [showBigHeart, setShowBigHeart] = useState(false)
+  const [loadTimedOut, setLoadTimedOut] = useState(false)
 
   // Track view once per active session — count comes from the joined `post_views`
   // in the server query now, so no extra fetch per video on mount.
@@ -1444,18 +1445,37 @@ function FlickItem({
     }
   }, [currentUserId, isActive, supabase, video.id])
 
-  // Play / pause based on active state (only meaningful once the <video> is mounted)
+  // Play / pause based on active state (only meaningful once the <video> is mounted).
+  // `muted` is also set directly on the element below: setting it only in an effect
+  // races the first play() call on mobile browsers and can leave the player waiting.
   useEffect(() => {
     const v = videoRef.current
     if (!v || !shouldMount) return
+    setLoadTimedOut(false)
+    setErrored(false)
     if (isActive) {
       v.currentTime = 0
-      void v.play().catch(() => { /* autoplay may be blocked */ })
+      void v.play().catch(() => { /* autoplay may be blocked; the tap overlay remains available */ })
     } else {
       v.pause()
       v.currentTime = 0
     }
-  }, [isActive, shouldMount])
+  }, [isActive, shouldMount, video.id])
+
+  // Never leave a member with an endless spinner when a media URL is slow,
+  // unavailable, or incompatible with the browser. The retry action reuses the
+  // same video element and preserves the low-data behavior.
+  useEffect(() => {
+    if (!shouldMount || !isActive || errored) return
+    const timeout = window.setTimeout(() => {
+      const v = videoRef.current
+      if (v && v.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+        setLoadTimedOut(true)
+        setBuffering(false)
+      }
+    }, 10000)
+    return () => window.clearTimeout(timeout)
+  }, [shouldMount, isActive, video.id, errored])
 
   // Sync mute
   useEffect(() => {
@@ -1511,6 +1531,8 @@ function FlickItem({
 
   function retryVideo() {
     setErrored(false)
+    setLoadTimedOut(false)
+    setBuffering(true)
     const v = videoRef.current
     if (!v) return
     v.load()
@@ -1550,6 +1572,8 @@ function FlickItem({
           ref={videoRef}
           src={video.media_url}
           poster={video.thumbnail_url ?? undefined}
+          muted={muted}
+          aria-label={`Flick by @${profile?.username ?? 'unknown'}`}
           style={{
             position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover',
             touchAction: 'manipulation', WebkitUserSelect: 'none', userSelect: 'none',
@@ -1559,11 +1583,14 @@ function FlickItem({
             const v = videoRef.current
             if (v && v.duration) setProgress((v.currentTime / v.duration) * 100)
           }}
-          onWaiting={() => setBuffering(true)}
+          onLoadStart={() => { setBuffering(isActive); setLoadTimedOut(false) }}
+          onWaiting={() => setBuffering(isActive)}
           onPlay={() => setPlaying(true)}
           onPause={() => setPlaying(false)}
-          onPlaying={() => { setBuffering(false); setErrored(false) }}
-          onCanPlay={() => setBuffering(false)}
+          onPlaying={() => { setBuffering(false); setErrored(false); setLoadTimedOut(false) }}
+          onLoadedData={() => { setBuffering(false); setLoadTimedOut(false) }}
+          onCanPlay={() => { setBuffering(false); setLoadTimedOut(false) }}
+          onStalled={() => setBuffering(isActive)}
           onError={() => { setBuffering(false); setErrored(true) }}
           onClick={handleTap}
         />
@@ -1598,14 +1625,14 @@ function FlickItem({
       )}
 
       {/* Error state with retry */}
-      {errored && (
+      {(errored || loadTimedOut) && (
         <div style={{
           position: 'absolute', inset: 0, zIndex: 5,
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10,
           background: 'rgba(0,0,0,0.55)',
         }}>
           <AlertCircle size={30} color="rgba(255,255,255,0.75)" />
-          <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: 13, fontWeight: 600 }}>Couldn’t load this video</p>
+          <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: 13, fontWeight: 600 }}>{loadTimedOut ? 'This video is taking too long to load' : 'Couldn’t load this video'}</p>
           <button
             onClick={retryVideo}
             style={{
@@ -1620,7 +1647,7 @@ function FlickItem({
       )}
 
       {/* Pause overlay */}
-      {!playing && !buffering && !errored && (
+      {!playing && !buffering && !errored && !loadTimedOut && (
         <div style={{
           position: 'absolute', inset: 0,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
