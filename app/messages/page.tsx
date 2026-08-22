@@ -15,12 +15,15 @@ function timeAgo(date: string) {
   return new Date(date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
 }
 
+type CircleContext = { name: string; slug: string; category: string | null }
+
 type Convo = {
   profile: { id: string; username: string; avatar_url: string | null; full_name?: string | null }
   lastMsg: string
   time: string
   unread: boolean
   isRequest: boolean
+  circleContext?: CircleContext
 }
 
 export default function MessagesPage() {
@@ -99,6 +102,34 @@ export default function MessagesPage() {
         .filter(c => c.profile)
         .sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())
 
+      // Show only a verified shared Circle; do not infer context from profile data.
+      const otherIds = sorted.map(convo => convo.profile.id)
+      if (otherIds.length > 0) {
+        const { data: sharedMembers } = await supabase
+          .from('circle_members')
+          .select('circle_id, user_id')
+          .in('user_id', [user.id, ...otherIds])
+        const circleIds = Array.from(new Set((sharedMembers ?? []).map(row => row.circle_id)))
+        if (circleIds.length > 0) {
+          const { data: sharedCircles } = await supabase
+            .from('circles')
+            .select('id, name, slug, category')
+            .in('id', circleIds)
+          const memberSets = new Map<string, Set<string>>()
+          for (const row of sharedMembers ?? []) {
+            const set = memberSets.get(row.circle_id) ?? new Set<string>()
+            set.add(row.user_id)
+            memberSets.set(row.circle_id, set)
+          }
+          const circleById = new Map((sharedCircles ?? []).map(circle => [circle.id, circle]))
+          for (const convo of sorted) {
+            const match = circleIds.find(circleId => memberSets.get(circleId)?.has(user.id) && memberSets.get(circleId)?.has(convo.profile.id))
+            const circle = match ? circleById.get(match) : null
+            if (circle) convo.circleContext = { name: circle.name, slug: circle.slug, category: circle.category }
+          }
+        }
+      }
+
       setConvos(sorted)
       setLoading(false)
     }
@@ -158,9 +189,9 @@ export default function MessagesPage() {
             <MessageSquare size={16} color="white" />
           </div>
           <div style={{ flex: 1 }}>
-            <h1 style={{ fontWeight: 800, fontSize: 18, lineHeight: 1.2, margin: 0 }}>Messages</h1>
+            <h1 style={{ fontWeight: 800, fontSize: 18, lineHeight: 1.2, margin: 0 }}>Conversations</h1>
             <p style={{ fontSize: 12, color: 'var(--text-tertiary)', margin: 0 }}>
-              {unreadTotal > 0 ? `${unreadTotal} unread` : 'Your conversations'}
+              {unreadTotal > 0 ? `${unreadTotal} waiting for you` : 'Keep the good conversations close.'}
             </p>
           </div>
         </div>
@@ -170,7 +201,7 @@ export default function MessagesPage() {
           <input
             value={query}
             onChange={e => setQuery(e.target.value)}
-            placeholder="Search conversations…"
+            placeholder="Search people or conversations…"
             style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontSize: 14, color: 'var(--text-primary)', fontFamily: 'inherit' }}
           />
         </div>
@@ -190,7 +221,7 @@ export default function MessagesPage() {
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
               }}
             >
-              {t === 'primary' ? 'Primary' : 'Requests'}
+              {t === 'primary' ? 'Conversations' : 'New people'}
               {t === 'requests' && requests.length > 0 && (
                 <span style={{ background: 'var(--nia-violet)', color: 'white', borderRadius: 10, fontSize: 10.5, fontWeight: 800, padding: '1px 6px' }}>
                   {requests.length}
@@ -234,7 +265,9 @@ export default function MessagesPage() {
         </div>
       ) : (
         <div>
-          {filtered.map(({ profile, lastMsg, time, unread, isRequest }) => (
+          {filtered.length > 0 && <p className="messages-section-label">{tab === 'primary' ? 'Keeping the thread warm' : 'New people to meet'}</p>}
+          {tab === 'requests' && requests.length > 0 && <p className="messages-safety-note">Only accept conversations you welcome. You can block or report at any time.</p>}
+          {filtered.map(({ profile, lastMsg, time, unread, isRequest, circleContext }) => (
             <div key={profile.id} style={{ borderBottom: '1px solid var(--divider)' }}>
               <Link
                 href={`/messages/${profile.id}`}
@@ -256,9 +289,12 @@ export default function MessagesPage() {
                     <span style={{ fontSize: 11, color: 'var(--text-tertiary)', flexShrink: 0 }}>{timeAgo(time)}</span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                    <p style={{ fontSize: 13, margin: 0, color: unread ? 'var(--text-primary)' : 'var(--text-tertiary)', fontWeight: unread ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {lastMsg}
-                    </p>
+                    <div className="messages-preview-line">
+                      <p style={{ fontSize: 13, margin: 0, color: unread ? 'var(--text-primary)' : 'var(--text-tertiary)', fontWeight: unread ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {lastMsg}
+                      </p>
+                      {circleContext && <span className="message-circle-badge" title={`Shared Circle: ${circleContext.name}`}>{circleContext.name}</span>}
+                    </div>
                     {unread && <div style={{ width: 9, height: 9, borderRadius: '50%', background: 'var(--nia-violet)', flexShrink: 0 }} />}
                   </div>
                 </div>
@@ -272,7 +308,7 @@ export default function MessagesPage() {
                     className="tap-sm"
                     style={{ flex: 1, padding: '7px', borderRadius: 10, border: 'none', background: 'var(--grad-brand)', color: 'white', fontWeight: 700, fontSize: 12.5, cursor: 'pointer' }}
                   >
-                    Accept
+                    Say hello
                   </button>
                   <button
                     onClick={() => decline(profile.id)}
@@ -280,7 +316,7 @@ export default function MessagesPage() {
                     className="tap-sm"
                     style={{ flex: 1, padding: '7px', borderRadius: 10, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', fontWeight: 700, fontSize: 12.5, cursor: 'pointer' }}
                   >
-                    Decline
+                    Not now
                   </button>
                 </div>
               )}

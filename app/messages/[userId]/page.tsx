@@ -26,6 +26,8 @@ type Profile = {
   last_seen_at?: string | null
 }
 
+type SharedCircle = { name: string; slug: string }
+
 type PendingMedia = {
   file: File
   url: string
@@ -105,6 +107,7 @@ export default function DirectMessagePage() {
 
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [recipient, setRecipient] = useState<Profile | null>(null)
+  const [sharedCircle, setSharedCircle] = useState<SharedCircle | null>(null)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [loading, setLoading] = useState(true)
   const [hasMore, setHasMore] = useState(true)
@@ -192,6 +195,19 @@ export default function DirectMessagePage() {
       const ordered = (msgs ?? []).map(normalizeMsg).reverse()
       const firstUnread = ordered.find(m => !m.is_read && m.sender_id === recipientId)
       unreadDividerIdRef.current = firstUnread?.id ?? null
+      const { data: sharedRows } = await supabase
+        .from('circle_members')
+        .select('circle_id, user_id')
+        .in('user_id', [user.id, recipientId])
+      const sharedCircleId = Array.from(new Set((sharedRows ?? []).map(row => row.circle_id)))
+        .find(circleId => (sharedRows ?? []).filter(row => row.circle_id === circleId).length > 1)
+      if (sharedCircleId) {
+        const { data: circle } = await supabase.from('circles').select('name, slug').eq('id', sharedCircleId).maybeSingle()
+        setSharedCircle(circle ? { name: circle.name, slug: circle.slug } : null)
+      } else {
+        setSharedCircle(null)
+      }
+
       setRecipient(profile as Profile)
       setMessages(ordered)
       setHasMore(ordered.length === PAGE_SIZE)
@@ -663,6 +679,12 @@ export default function DirectMessagePage() {
   }
 
   const presence = presenceLabel(onlineOther, recipient?.last_seen_at)
+  const quickReplies = ['Tell me more', 'Same here', 'What are you working on?', 'Send encouragement']
+
+  function applyQuickReply(reply: string) {
+    setNewMessage(reply)
+    requestAnimationFrame(() => inputRef.current?.focus())
+  }
 
   if (!recipientId) {
     return <div style={{ textAlign: 'center', padding: 32 }}>Invalid conversation</div>
@@ -695,6 +717,7 @@ export default function DirectMessagePage() {
               <p style={{ fontSize: 12, margin: 0, color: typingOther ? 'var(--nia-violet)' : 'var(--text-tertiary)', fontWeight: typingOther ? 700 : 400 }}>
                 {typingOther ? 'Typing…' : presence ?? `@${recipient.username}`}
               </p>
+              {sharedCircle && <span className="conversation-circle-badge">From {sharedCircle.name}</span>}
             </div>
           </Link>
         )}
@@ -723,12 +746,12 @@ export default function DirectMessagePage() {
       {/* MESSAGE REQUEST BANNER */}
       {pendingRequest && (
         <div style={{ padding: '10px 14px', background: 'var(--surface-1)', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
-          <p style={{ fontSize: 12.5, color: 'var(--text-secondary)', margin: '0 0 8px' }}>
-            <strong>@{recipient?.username}</strong> isn’t someone you follow. Accept to start chatting, or decline to hide this request.
+            <p style={{ fontSize: 12.5, color: 'var(--text-secondary)', margin: '0 0 8px' }}>
+            <strong>@{recipient?.username}</strong> wants to start a conversation. Only accept if you welcome it; you can block or report at any time.
           </p>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={acceptRequest} className="tap-sm" style={{ flex: 1, padding: '8px', borderRadius: 10, border: 'none', background: 'var(--grad-brand)', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Accept</button>
-            <button onClick={declineRequest} className="tap-sm" style={{ flex: 1, padding: '8px', borderRadius: 10, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Decline</button>
+            <button onClick={acceptRequest} className="tap-sm" style={{ flex: 1, padding: '8px', borderRadius: 10, border: 'none', background: 'var(--grad-brand)', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Say hello</button>
+            <button onClick={declineRequest} className="tap-sm" style={{ flex: 1, padding: '8px', borderRadius: 10, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Not now</button>
           </div>
         </div>
       )}
@@ -752,8 +775,18 @@ export default function DirectMessagePage() {
         )}
         {!loading && messages.length === 0 && (
           <div style={{ textAlign: 'center', paddingTop: 64 }}>
-            <p style={{ fontWeight: 700, fontSize: 17 }}>Say hi 👋</p>
-            <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 4 }}>Start the conversation</p>
+            <p style={{ fontWeight: 700, fontSize: 17 }}>A quiet little corner for two</p>
+            <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 4 }}>Say hello, continue a Circle thought, or send a little encouragement.</p>
+          </div>
+        )}
+        {!pendingRequest && !editingId && messages.length < 2 && (
+          <div className="quick-reply-rail" aria-label="Quick replies">
+            <p>Make the first move</p>
+            <div>
+              {quickReplies.map(reply => (
+                <button key={reply} type="button" className="quick-reply-chip tap-sm" onClick={() => applyQuickReply(reply)}>{reply}</button>
+              ))}
+            </div>
           </div>
         )}
         {messages.map((msg, i) => {
@@ -935,7 +968,7 @@ export default function DirectMessagePage() {
                   onChange={e => handleTypingInput(e.target.value)}
                   onFocus={() => setShowAttachTray(false)}
                   onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendText() } }}
-                  placeholder={editingId ? 'Edit message…' : pendingViewOnce ? 'Disappearing message…' : 'Message…'}
+                  placeholder={editingId ? 'Edit message…' : pendingViewOnce ? 'Disappearing message…' : messages.length === 0 ? 'Say something kind…' : 'Continue the thought…'}
                   style={{ flex: 1, minWidth: 0, background: 'none', border: 'none', outline: 'none', fontSize: 14.5, color: 'var(--text-primary)', fontFamily: 'inherit' }}
                 />
               </div>
