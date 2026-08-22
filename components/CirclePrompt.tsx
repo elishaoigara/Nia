@@ -64,12 +64,12 @@ export default function CirclePrompt({ circleId, userId, isOwner, accentColor }:
 
   return (
     <section className="card" aria-labelledby="circle-prompt-heading" style={{ borderColor: `${accentColor}55`, background: `linear-gradient(135deg, ${accentColor}0d, var(--surface-1))` }}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-start gap-3">
+      <div className="circle-prompt-header">
+        <div className="circle-prompt-copy">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full" style={{ background: `${accentColor}22`, color: accentColor }}>
             <MessageCircle size={17} />
           </div>
-          <div>
+          <div className="circle-prompt-text">
             <p id="circle-prompt-heading" className="text-[11px] font-extrabold uppercase tracking-[0.08em]" style={{ color: accentColor }}>Conversation starter</p>
             {prompt ? <p className="mt-1 text-sm font-semibold leading-relaxed">{prompt.prompt}</p> : <p className="mt-1 text-sm" style={{ color: 'var(--text-secondary)' }}>Give this Circle a question worth answering.</p>}
           </div>
@@ -78,12 +78,12 @@ export default function CirclePrompt({ circleId, userId, isOwner, accentColor }:
       </div>
 
       {isOwner && showComposer && (
-        <div className="mt-4 space-y-2">
+        <div className="circle-prompt-composer">
           <label htmlFor="circle-prompt-input" className="sr-only">Conversation prompt</label>
           <textarea id="circle-prompt-input" value={draft} onChange={event => setDraft(event.target.value.slice(0, 280))} rows={3} maxLength={280} className="input w-full resize-none" placeholder="What should this Circle talk about or work on together?" />
-          <div className="flex items-center justify-between gap-2">
+          <div className="circle-prompt-actions">
             <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>{draft.length}/280</span>
-            <div className="flex gap-2">
+            <div className="circle-prompt-action-buttons">
               <button type="button" className="btn-ghost" onClick={() => { setShowComposer(false); setDraft(''); setError('') }}>Cancel</button>
               <button type="button" className="btn-primary flex items-center gap-2" disabled={saving || !draft.trim()} onClick={publishPrompt}>
                 {saving ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />} Publish

@@ -2023,3 +2023,35 @@ body {
   .flick-discovery-view-bar::-webkit-scrollbar { display: none; }
   .flick-discovery-view span { display: none; }
 }
+
+/* Circle detail: keep prompt/resource headers and composer actions from colliding. */
+.circle-prompt-header,
+.circle-resources-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; min-width: 0; }
+.circle-prompt-copy { display: flex; align-items: flex-start; gap: 12px; min-width: 0; flex: 1 1 auto; }
+.circle-prompt-text,
+.circle-resources-copy { min-width: 0; flex: 1 1 auto; }
+.circle-prompt-text p,
+.circle-resources-copy h2,
+.circle-resources-copy p { overflow-wrap: anywhere; }
+.circle-prompt-composer { display: grid; gap: 10px; margin-top: 16px; min-width: 0; }
+.circle-prompt-composer textarea { display: block; min-height: 96px; width: 100%; box-sizing: border-box; }
+.circle-prompt-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; }
+.circle-prompt-action-buttons { display: flex; flex: 0 1 auto; flex-wrap: wrap; justify-content: flex-end; gap: 8px; min-width: 0; }
+.circle-prompt-action-buttons button,
+.circle-resources-add { min-height: 40px; }
+.circle-resources-add { flex: 0 0 auto; white-space: nowrap; }
+@media (max-width: 560px) {
+  .circle-prompt-header,
+  .circle-resources-header { gap: 10px; }
+  .circle-prompt-copy { gap: 9px; }
+  .circle-prompt-actions { align-items: stretch; flex-direction: column; }
+  .circle-prompt-action-buttons { width: 100%; justify-content: stretch; }
+  .circle-prompt-action-buttons button { flex: 1 1 0; justify-content: center; }
+  .circle-resources-header { flex-direction: column; }
+  .circle-resources-add { width: 100%; justify-content: center; }
+}
+@media (max-width: 380px) {
+  .circle-prompt-copy { gap: 8px; }
+  .circle-prompt-copy > div:first-child { width: 32px; height: 32px; flex-basis: 32px; }
+  .circle-prompt-actions { gap: 8px; }
+}
