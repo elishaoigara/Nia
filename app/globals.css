@@ -2010,3 +2010,16 @@ body {
   .quick-reply-rail { margin-left: 0; }
   .conversation-circle-badge { max-width: 20ch; }
 }
+
+.flick-discovery-view-bar { position: absolute; top: 58px; left: 0; right: 0; z-index: 55; display: flex; justify-content: center; gap: 6px; padding: 8px 14px; pointer-events: none; }
+.flick-discovery-view { pointer-events: auto; display: inline-flex; align-items: baseline; gap: 5px; min-height: 38px; padding: 8px 12px; border: 1px solid rgba(255,255,255,.12); border-radius: 999px; background: rgba(20,18,17,.72); color: rgba(255,255,255,.68); backdrop-filter: blur(10px); cursor: pointer; white-space: nowrap; }
+.flick-discovery-view strong { font-size: 12px; }
+.flick-discovery-view span { font-size: 10px; opacity: .7; }
+.flick-discovery-view.is-selected { border-color: rgba(157,95,255,.7); background: var(--grad-brand); color: #fff; }
+.flick-card-save { order: 2; align-self: flex-start; flex: 0 0 auto; min-height: 32px; padding: 6px 8px; border: 1px solid rgba(255,255,255,.14); border-radius: 999px; background: rgba(255,255,255,.07); color: rgba(255,255,255,.75); font: 700 10px/1 inherit; cursor: pointer; }
+.flick-card-save:hover, .flick-card-save:focus-visible { border-color: var(--nia-violet); color: #fff; }
+@media (max-width: 600px) {
+  .flick-discovery-view-bar { top: 102px; justify-content: flex-start; overflow-x: auto; scrollbar-width: none; }
+  .flick-discovery-view-bar::-webkit-scrollbar { display: none; }
+  .flick-discovery-view span { display: none; }
+}

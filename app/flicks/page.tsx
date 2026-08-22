@@ -12,7 +12,7 @@ const SHORTS_LIMIT = 40
 const LONGS_LIMIT = 40
 
 const FLICK_SELECT = `
-  id, user_id, content, media_url, media_type, created_at, language, video_duration, category, contribution_mode, thumbnail_url,
+  id, user_id, content, media_url, media_type, created_at, language, video_duration, category, contribution_mode, thumbnail_url, circle_id,
   profiles:user_id (id, username, avatar_url, country),
   likes (user_id),
   comments (id),
@@ -36,11 +36,12 @@ export default async function ReelsPage({
   // but was never actually called anywhere, so Flicks has just been reverse-
   // chronological this whole time — none of the completion-rate/watch-time/
   // diversity-decay logic was doing anything.
-  const [profileRes, followsRes, blocksRes, mutedIds] = await Promise.all([
+  const [profileRes, followsRes, blocksRes, mutedIds, circleMembershipRes] = await Promise.all([
     supabase.from('profiles').select('country, language').eq('id', user.id).single(),
     supabase.from('follows').select('following_id').eq('follower_id', user.id),
     supabase.from('blocks').select('blocked_id').eq('blocker_id', user.id),
     getMutedIds(supabase),
+    supabase.from('circle_members').select('circle_id').eq('user_id', user.id),
   ])
 
   const ctx: UserContext = {
@@ -109,5 +110,7 @@ export default async function ReelsPage({
     if (row) initialVideo = row as unknown as FlickPost
   }
 
-  return <FlicksClient shorts={shorts} longs={longs} currentUserId={user.id} initialVideo={initialVideo} />
+  const circleIds = (circleMembershipRes.data ?? []).map(row => row.circle_id)
+
+  return <FlicksClient shorts={shorts} longs={longs} currentUserId={user.id} circleIds={circleIds} initialVideo={initialVideo} />
 }

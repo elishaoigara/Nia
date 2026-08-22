@@ -1,10 +1,10 @@
 'use client'
 
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Heart, MessageCircle, Share2, Volume2, VolumeX, Play,
   X, Send, Loader2, ImagePlus, Eye, Check, AlertCircle, RotateCcw,
-  Search, ArrowLeft, Hash,
+  Search, ArrowLeft, Hash, Bookmark,
 } from 'lucide-react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
@@ -41,6 +41,7 @@ export interface FlickPost {
   video_duration?: number | null
   category?: string | null
   contribution_mode?: 'ask' | 'offer' | 'update' | 'opportunity' | 'reflection' | null
+  circle_id?: string | null
   profiles: { id: string; username: string; avatar_url: string | null; country: string | null } | null
   likes: { user_id: string }[]
   comments: { id: string }[]
@@ -52,6 +53,7 @@ interface FlicksClientProps {
   shorts: FlickPost[]
   longs: FlickPost[]
   currentUserId: string
+  circleIds: string[]
   /** Set when arriving via a deep link (e.g. the home rail's Trending strip) —
    * opens straight into the detail player instead of the default short-form feed. */
   initialVideo?: FlickPost | null
@@ -448,13 +450,21 @@ function CommentSheet({
 }
 
 // ── Main Flicks Component ─────────────────────────────────────────────────────
-export default function NiaFlicksClient({ shorts, longs, currentUserId, initialVideo }: FlicksClientProps) {
+export default function NiaFlicksClient({ shorts, longs, currentUserId, circleIds, initialVideo }: FlicksClientProps) {
   const [tab, setTab] = useState<'short' | 'long'>('short')
   const [purposeFilter, setPurposeFilter] = useState<(typeof PURPOSE_FILTERS)[number]['id']>('all')
+  const [discoveryView, setDiscoveryView] = useState<'fresh' | 'saved' | 'circles'>('fresh')
   const [activeIdx, setActiveIdx] = useState(0)
-  const visibleShorts = purposeFilter === 'all'
+  const [savedIds, setSavedIds] = useState<Set<string>>(new Set())
+  const allVideos = useMemo(() => [...shorts, ...longs], [shorts, longs])
+  const viewVideos = (videos: FlickPost[]) => discoveryView === 'saved'
+    ? videos.filter(video => savedIds.has(video.id))
+    : discoveryView === 'circles'
+      ? videos.filter(video => video.user_id !== currentUserId && !!video.circle_id && circleIds.includes(video.circle_id))
+      : videos
+  const visibleShorts = viewVideos(purposeFilter === 'all'
     ? shorts
-    : shorts.filter(video => (video.contribution_mode ?? 'reflection') === purposeFilter)
+    : shorts.filter(video => (video.contribution_mode ?? 'reflection') === purposeFilter))
   // Start muted: iOS/most mobile browsers silently reject unmuted autoplay, which
   // meant the very first video often never actually started playing. Muted-by-default
   // + a "tap for sound" hint is the standard short-video pattern for a reason.
@@ -471,6 +481,44 @@ export default function NiaFlicksClient({ shorts, longs, currentUserId, initialV
   const [searchOpen, setSearchOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
   const slowConnection = useSlowConnection()
+
+  useEffect(() => {
+    const ids = allVideos.map(video => video.id)
+    if (ids.length === 0) return
+    const supabase = createClient()
+    supabase.from('bookmarks').select('post_id').eq('user_id', currentUserId).in('post_id', ids)
+      .then(({ data }) => setSavedIds(new Set((data ?? []).map(row => row.post_id))))
+  }, [currentUserId, allVideos])
+
+  const visibleLongs = viewVideos(longs)
+
+  async function toggleSaved(postId: string) {
+    const supabase = createClient()
+    const next = new Set(savedIds)
+    if (next.has(postId)) {
+      next.delete(postId)
+      await supabase.from('bookmarks').delete().eq('user_id', currentUserId).eq('post_id', postId)
+    } else {
+      next.add(postId)
+      await supabase.from('bookmarks').insert({ user_id: currentUserId, post_id: postId })
+    }
+    setSavedIds(next)
+    void trackEngagement('flicks_save_toggled', currentUserId, null, { post_id: postId, saved: next.has(postId) })
+  }
+
+  const DiscoveryViewBar = (
+    <div className="flick-discovery-view-bar" role="group" aria-label="Flicks view">
+      {[
+        { id: 'fresh', label: 'Fresh', detail: 'new ideas' },
+        { id: 'saved', label: 'Saved', detail: 'keep for later' },
+        { id: 'circles', label: 'My Circles', detail: 'from your rooms' },
+      ].map(view => (
+        <button key={view.id} type="button" className={`flick-discovery-view${discoveryView === view.id ? ' is-selected' : ''}`} aria-pressed={discoveryView === view.id} onClick={() => { setDiscoveryView(view.id as typeof discoveryView); setActiveIdx(0); containerRef.current?.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior }) }}>
+          <strong>{view.label}</strong><span>{view.detail}</span>
+        </button>
+      ))}
+    </div>
+  )
 
   // Deep link from outside Flicks (currently: the home page's Trending rail).
   // Runs once — if the person closes the detail view, we don't want it
@@ -504,13 +552,13 @@ export default function NiaFlicksClient({ shorts, longs, currentUserId, initialV
     return () => { document.body.style.overflow = '' }
   }, [commentSheet])
 
-  const handleOpenComments = useCallback((postId: string, count: number, flickIdx: number) => {
+  function handleOpenComments(postId: string, count: number, flickIdx: number) {
     setCommentSheet({ postId, count, flickIdx })
-  }, [])
+  }
 
-  const handleCommentCountChange = useCallback((postId: string, newCount: number) => {
+  function handleCommentCountChange(postId: string, newCount: number) {
     setCommentCounts(prev => ({ ...prev, [postId]: newCount }))
-  }, [])
+  }
 
   // ── Tab toggle (shared header) ──────────────────────────────────
   const TabToggle = (
@@ -610,9 +658,12 @@ export default function NiaFlicksClient({ shorts, longs, currentUserId, initialV
       } as React.CSSProperties}>
         {TabToggle}
         {SearchButton}
+        {DiscoveryViewBar}
         <LongFlicksGrid
-          videos={longs}
+          videos={visibleLongs}
           onOpen={setOpenDetail}
+          savedIds={savedIds}
+          onToggleSave={toggleSaved}
         />
         {openDetail && (
           <LongFlickPlayer
@@ -687,6 +738,7 @@ export default function NiaFlicksClient({ shorts, longs, currentUserId, initialV
       {TabToggle}
 
       {PurposeFilterBar}
+      {DiscoveryViewBar}
 
       {searchOpen && (
         <SearchOverlay
@@ -738,6 +790,8 @@ export default function NiaFlicksClient({ shorts, longs, currentUserId, initialV
               commentCount={commentCounts[video.id] ?? 0}
               onOpenComments={(postId, count) => handleOpenComments(postId, count, i)}
               showSoundHint={i === 0 && muted}
+              saved={savedIds.has(video.id)}
+              onToggleSave={() => toggleSaved(video.id)}
             />
           ))}
         </div>
@@ -758,7 +812,7 @@ export default function NiaFlicksClient({ shorts, longs, currentUserId, initialV
 }
 
 // ── Long Flicks: topic grid + category chips ──────────────────────────────────
-function LongFlicksGrid({ videos, onOpen }: { videos: FlickPost[]; onOpen: (v: FlickPost) => void }) {
+function LongFlicksGrid({ videos, onOpen, savedIds, onToggleSave }: { videos: FlickPost[]; onOpen: (v: FlickPost) => void; savedIds: Set<string>; onToggleSave: (postId: string) => void }) {
   const [activeCategory, setActiveCategory] = useState<string>('all')
 
   const counts = videos.reduce((acc: Record<string, number>, v) => {
@@ -831,7 +885,7 @@ function LongFlicksGrid({ videos, onOpen }: { videos: FlickPost[]; onOpen: (v: F
           display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: 14,
           padding: '4px 14px 32px',
         }}>
-          {filtered.map(v => <LongFlickGridCard key={v.id} video={v} onOpen={onOpen} />)}
+          {filtered.map(v => <LongFlickGridCard key={v.id} video={v} onOpen={onOpen} saved={savedIds.has(v.id)} onToggleSave={() => onToggleSave(v.id)} />)}
         </div>
       )}
     </div>
@@ -860,13 +914,16 @@ function useInView<T extends HTMLElement>(rootMargin = '600px 0px') {
   return [ref, inView] as const
 }
 
-function LongFlickGridCard({ video: v, onOpen }: { video: FlickPost; onOpen: (v: FlickPost) => void }) {
+function LongFlickGridCard({ video: v, onOpen, saved = false, onToggleSave }: { video: FlickPost; onOpen: (v: FlickPost) => void; saved?: boolean; onToggleSave?: () => void }) {
   const profile = v.profiles
   const [thumbRef, inView] = useInView<HTMLDivElement>()
 
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       onClick={() => onOpen(v)}
+      onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onOpen(v) } }}
       style={{
         textAlign: 'left', border: '1px solid rgba(255,255,255,0.08)',
         background: 'rgba(255,255,255,0.04)', borderRadius: 14,
@@ -944,6 +1001,9 @@ function LongFlickGridCard({ video: v, onOpen }: { video: FlickPost; onOpen: (v:
 
       {/* Info */}
       <div style={{ padding: '8px 9px', display: 'flex', gap: 7 }}>
+        {onToggleSave && <button type="button" className="flick-card-save" aria-label={saved ? 'Remove from saved Flicks' : 'Save Flick for later'} onClick={(event) => { event.stopPropagation(); onToggleSave() }}>
+          {saved ? 'Saved' : 'Save'}
+        </button>}
         <div style={{
           width: 24, height: 24, borderRadius: '50%', overflow: 'hidden', flexShrink: 0,
           background: 'var(--grad-brand)',
@@ -986,7 +1046,7 @@ function LongFlickGridCard({ video: v, onOpen }: { video: FlickPost; onOpen: (v:
           </div>
         </div>
       </div>
-    </button>
+    </div>
   )
 }
 
@@ -1339,7 +1399,7 @@ function LongFlickPlayer({
 // ── Single Flick Item ─────────────────────────────────────────────────────────
 function FlickItem({
   video, isActive, shouldMount, slowConnection, muted, onToggleMute,
-  currentUserId, commentCount, onOpenComments, showSoundHint,
+  currentUserId, commentCount, onOpenComments, showSoundHint, saved, onToggleSave,
 }: {
   video: FlickPost
   isActive: boolean
@@ -1351,6 +1411,8 @@ function FlickItem({
   commentCount: number
   onOpenComments: (postId: string, count: number) => void
   showSoundHint: boolean
+  saved: boolean
+  onToggleSave: () => void
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const viewTracked = useRef(false)
@@ -1647,6 +1709,15 @@ function FlickItem({
           ariaLabel={`Open comments for @${profile?.username ?? 'member'}`}
           icon={<MessageCircle size={22} color="white" strokeWidth={1.8} />}
           label={commentCount > 0 ? String(commentCount) : ''}
+        />
+
+        {/* Save */}
+        <ActionBtn
+          onClick={onToggleSave}
+          ariaLabel={saved ? 'Remove this Flick from saved' : 'Save this Flick for later'}
+          icon={<Bookmark size={20} color={saved ? 'var(--nia-accent-soft)' : 'white'} fill={saved ? 'var(--nia-accent-soft)' : 'none'} strokeWidth={1.8} />}
+          label={saved ? 'Saved' : 'Save'}
+          active={saved}
         />
 
         {/* Views */}
