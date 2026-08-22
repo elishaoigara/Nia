@@ -1652,7 +1652,7 @@ function FlickItem({
         {/* Views */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
           <div style={{
-            width: 42, height: 42, borderRadius: '50%',
+            width: 44, height: 44, borderRadius: '50%',
             background: 'rgba(255,255,255,0.1)',
             backdropFilter: 'blur(6px)',
             border: '1px solid rgba(255,255,255,0.12)',
@@ -1676,8 +1676,9 @@ function FlickItem({
         {/* Mute */}
         <button
           onClick={onToggleMute}
+          aria-label={muted ? 'Turn sound on' : 'Mute flick'}
           style={{
-            width: 42, height: 42, borderRadius: '50%', cursor: 'pointer',
+            width: 44, height: 44, borderRadius: '50%', cursor: 'pointer',
             background: 'rgba(255,255,255,0.1)',
             backdropFilter: 'blur(6px)',
             border: '1px solid rgba(255,255,255,0.12)',
@@ -1771,7 +1772,7 @@ function ActionBtn({
       onTouchEnd={e => (e.currentTarget.style.transform = 'scale(1)')}
     >
       <div style={{
-        width: 42, height: 42, borderRadius: '50%',
+        width: 44, height: 44, borderRadius: '50%',
         background: active ? 'rgba(255,77,109,0.18)' : 'rgba(255,255,255,0.1)',
         backdropFilter: 'blur(6px)',
         border: `1px solid ${active ? 'rgba(255,77,109,0.3)' : 'rgba(255,255,255,0.12)'}`,
