@@ -1981,3 +1981,11 @@ body {
 
 .circle-directory-intro { padding: 14px 16px; border: 1px solid color-mix(in srgb, var(--nia-violet) 22%, var(--border)); border-radius: 16px; background: linear-gradient(135deg, color-mix(in srgb, var(--nia-violet) 8%, var(--surface-1)), var(--surface-1)); }
 .circle-directory-intro p:last-child { max-width: 560px; margin: 5px 0 0; color: var(--text-secondary); font-size: 13px; line-height: 1.5; }
+
+.home-welcome-note { margin: 8px 0 0; color: var(--nia-violet); font-size: 12px; font-weight: 700; line-height: 1.45; }
+.home-welcome h1 { max-width: 660px; }
+.purpose-mode-hint { min-height: 20px; margin: 9px 0 0; color: var(--text-secondary); font-size: 12px; line-height: 1.45; }
+@media (max-width: 560px) {
+  .home-welcome h1 { font-size: clamp(1.55rem, 7vw, 2rem); line-height: 1.12; }
+  .home-welcome-note { max-width: 30ch; }
+}
