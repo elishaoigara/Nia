@@ -1,36 +1,84 @@
--- Security hardening for the Nia Supabase project.
--- Review in staging before production. This migration does not change row data.
--- It fixes mutable search paths and restricts RPC execution privileges.
+-- Review in staging before production.
+--
+-- The live project contains additional functions created outside the original
+-- checked-in migration chain. Every privilege/search_path change below is
+-- therefore conditional so a clean install does not fail when an optional
+-- function is not present yet.
 
--- Pin every flagged function to a trusted search path.
-alter function public.accept_circle_join_request(uuid) set search_path = public, pg_temp;
-alter function public.accept_follow_request(uuid) set search_path = public, pg_temp;
-alter function public.apply_default_audience() set search_path = public, pg_temp;
-alter function public.fn_create_message_request() set search_path = public, pg_temp;
-alter function public.increment_poll_vote() set search_path = public, pg_temp;
-alter function public.is_account_active(uuid) set search_path = public, pg_temp;
-alter function public.notify_circle_join() set search_path = public, pg_temp;
-alter function public.notify_comment() set search_path = public, pg_temp;
-alter function public.notify_like() set search_path = public, pg_temp;
+do $$
+declare
+  function_name text;
+  function_signature text;
+  function_names text[] := array[
+    'accept_circle_join_request(uuid)',
+    'accept_follow_request(uuid)',
+    'apply_default_audience()',
+    'fn_create_message_request()',
+    'increment_poll_vote()',
+    'is_account_active(uuid)',
+    'notify_circle_join()',
+    'notify_comment()',
+    'notify_like()'
+  ];
+begin
+  foreach function_signature in array function_names loop
+    if to_regprocedure('public.' || function_signature) is not null then
+      execute format(
+        'alter function public.%s set search_path = public, pg_temp',
+        function_signature
+      );
+    end if;
+  end loop;
+end
+$$;
 
--- Trigger-only functions are not API operations. Remove direct execution from
--- every exposed role; PostgreSQL triggers can still invoke them internally.
-revoke all on function public.apply_default_audience() from public, anon, authenticated;
-revoke all on function public.fn_create_message_request() from public, anon, authenticated;
-revoke all on function public.increment_poll_vote() from public, anon, authenticated;
-revoke all on function public.notify_circle_join() from public, anon, authenticated;
-revoke all on function public.notify_comment() from public, anon, authenticated;
-revoke all on function public.notify_like() from public, anon, authenticated;
+-- Trigger-only functions are not API operations. PostgreSQL triggers can still
+-- invoke them internally after direct execution is revoked.
+do $$
+declare
+  function_signature text;
+  function_names text[] := array[
+    'apply_default_audience()',
+    'fn_create_message_request()',
+    'increment_poll_vote()',
+    'notify_circle_join()',
+    'notify_comment()',
+    'notify_like()'
+  ];
+begin
+  foreach function_signature in array function_names loop
+    if to_regprocedure('public.' || function_signature) is not null then
+      execute format(
+        'revoke all on function public.%s from public, anon, authenticated',
+        function_signature
+      );
+    end if;
+  end loop;
+end
+$$;
 
--- User-invoked workflows require a signed-in caller. Their function bodies
--- perform their own authorization checks as a second line of defense.
-revoke all on function public.accept_circle_join_request(uuid) from public, anon, authenticated;
-grant execute on function public.accept_circle_join_request(uuid) to authenticated;
-
-revoke all on function public.accept_follow_request(uuid) from public, anon, authenticated;
-grant execute on function public.accept_follow_request(uuid) to authenticated;
-
--- Account status is a read-only authenticated helper; anonymous callers do not
--- need to query it through PostgREST.
-revoke all on function public.is_account_active(uuid) from public, anon, authenticated;
-grant execute on function public.is_account_active(uuid) to authenticated;
+-- User-invoked workflows require a signed-in caller. Their function bodies must
+-- still perform authorization checks as a second line of defense.
+do $$
+declare
+  function_signature text;
+  function_names text[] := array[
+    'accept_circle_join_request(uuid)',
+    'accept_follow_request(uuid)',
+    'is_account_active(uuid)'
+  ];
+begin
+  foreach function_signature in array function_names loop
+    if to_regprocedure('public.' || function_signature) is not null then
+      execute format(
+        'revoke all on function public.%s from public, anon, authenticated',
+        function_signature
+      );
+      execute format(
+        'grant execute on function public.%s to authenticated',
+        function_signature
+      );
+    end if;
+  end loop;
+end
+$$;
