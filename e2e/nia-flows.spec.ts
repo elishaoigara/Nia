@@ -1,5 +1,5 @@
 import { test as baseTest, expect } from '@playwright/test'
-import { test as dbTest } from './fixtures/supabase'
+import { hasDatabaseFixtureConfig, test as dbTest } from './fixtures/supabase'
 
 async function signIn(page: import('@playwright/test').Page, email: string, password: string) {
   await page.goto('/login')
@@ -28,13 +28,15 @@ baseTest.describe('mobile authentication recovery', () => {
     await page.getByPlaceholder('Email').fill('invalid@example.com')
     await page.getByPlaceholder('Password').fill('not-the-password')
     await page.getByRole('button', { name: 'Sign in' }).click()
-    await expect(page.getByRole('alert')).toBeVisible()
+    await expect(page.getByRole('alert').filter({ hasText: /could not reach Nia/i })).toBeVisible()
     const hasHorizontalOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)
     expect(hasHorizontalOverflow).toBe(false)
   })
 })
 
 dbTest.describe('onboarding Circle selection', () => {
+  dbTest.skip(!hasDatabaseFixtureConfig, 'Database-backed E2E variables are not configured')
+
   dbTest('saves interests, presents recommended Circles, and enters Home after joining', async ({ page, testData }) => {
     await signIn(page, testData.onboardingUser.email, testData.onboardingUser.password)
     await expect(page).toHaveURL(/\/onboarding/)
@@ -63,6 +65,8 @@ dbTest.describe('onboarding Circle selection', () => {
 })
 
 dbTest.describe('messaging and notifications', () => {
+  dbTest.skip(!hasDatabaseFixtureConfig, 'Database-backed E2E variables are not configured')
+
   dbTest('sends a message and exposes its notification deep link', async ({ page, testData }) => {
     await signIn(page, testData.sender.email, testData.sender.password)
     await page.goto(`/messages/${testData.recipient.id}`)

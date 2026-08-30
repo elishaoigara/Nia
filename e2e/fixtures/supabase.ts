@@ -19,6 +19,11 @@ type SupabaseFixtures = {
   testData: TestData
 }
 
+export const hasDatabaseFixtureConfig = Boolean(
+  (process.env.E2E_SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL) &&
+  process.env.E2E_SUPABASE_SERVICE_ROLE_KEY,
+)
+
 function requireFixtureConfig() {
   const url = process.env.E2E_SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL
   const serviceRoleKey = process.env.E2E_SUPABASE_SERVICE_ROLE_KEY

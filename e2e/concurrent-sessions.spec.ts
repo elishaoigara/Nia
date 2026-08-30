@@ -1,4 +1,4 @@
-import { test as dbTest, expect } from './fixtures/supabase'
+import { hasDatabaseFixtureConfig, test as dbTest, expect } from './fixtures/supabase'
 import type { Page } from '@playwright/test'
 
 async function signIn(page: Page, email: string, password: string) {
@@ -10,6 +10,8 @@ async function signIn(page: Page, email: string, password: string) {
 }
 
 dbTest.describe('concurrent authenticated sessions', () => {
+  dbTest.skip(!hasDatabaseFixtureConfig, 'Database-backed E2E variables are not configured')
+
   dbTest('delivers a new direct-message notification to an already-open recipient session', async ({ page, testData }) => {
     const browser = page.context().browser()
     if (!browser) throw new Error('Could not access the Playwright browser')
@@ -46,4 +48,3 @@ dbTest.describe('concurrent authenticated sessions', () => {
 })
 
 export { expect }
-
