@@ -9,7 +9,6 @@ const publicPaths = [
   '/forgot-password',
   '/reset-password',
   '/auth/callback',
-  '/api/mpesa/callback',
 ];
 
 export async function proxy(request: NextRequest) {

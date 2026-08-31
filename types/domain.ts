@@ -32,9 +32,6 @@ export interface Profile extends ProfileSummary {
   tribe?: string | null
   gender?: string | null
   birth_date?: string | null
-  verified?: boolean | null
-  is_verified?: boolean | null
-  verification_status?: string | null
 }
 
 export interface CircleMember {

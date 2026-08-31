@@ -67,10 +67,11 @@ export default function OnboardingPage() {
       .from('profiles')
       .select('id')
       .eq('username', normalizedUsername)
+      .neq('id', user.id)
       .maybeSingle()
     if (existing) { setError('Username taken. Try another.'); setLoading(false); setStep(0); return }
 
-    const { error: insertError } = await supabase.from('profiles').insert({
+    const { error: insertError } = await supabase.from('profiles').upsert({
       id: user.id,
       username: normalizedUsername,
       full_name: fullName.trim(),
@@ -79,7 +80,7 @@ export default function OnboardingPage() {
       bio: bio.trim() || null,
       interests: selectedInterests,
       goals: selectedGoals,
-    })
+    }, { onConflict: 'id' })
 
     if (insertError) {
       setError(insertError.message)
@@ -110,11 +111,14 @@ export default function OnboardingPage() {
     if (!user) { router.push('/login'); return }
 
     if (selectedCircleIds.length > 0) {
-      const { error: joinError } = await supabase.from('circle_members').insert(
+      const { error: joinError } = await supabase.from('circle_members').upsert(
         selectedCircleIds.map(circle_id => ({ circle_id, user_id: user.id })),
+        { onConflict: 'circle_id,user_id', ignoreDuplicates: true },
       )
       if (joinError) {
         setError('Your profile is ready, but we could not join every Circle. You can join them from Explore.')
+        setLoading(false)
+        return
       }
     }
 

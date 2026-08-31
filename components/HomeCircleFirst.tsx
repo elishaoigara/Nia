@@ -28,11 +28,9 @@ export type CirclePulseItem = {
 export function HomeHeader({
   displayName,
   activeCircleCount,
-  needsResponseCount,
 }: {
   displayName: string
   activeCircleCount: number
-  needsResponseCount: number
 }) {
   const welcomeNotes = [
     'A little room for big ideas.',
@@ -52,7 +50,7 @@ export function HomeHeader({
         <h1 id="home-welcome-heading">Hey {displayName}, what are we getting into?</h1>
         <p className="home-welcome-copy">
           {activeCircleCount > 0
-            ? `${activeCircleCount} Circle${activeCircleCount === 1 ? '' : 's'} in your orbit${needsResponseCount > 0 ? ` · ${needsResponseCount} ${needsResponseCount === 1 ? 'conversation is' : 'conversations are'} waiting for you` : ''}.`
+            ? `${activeCircleCount} Circle${activeCircleCount === 1 ? '' : 's'} in your orbit.`
             : 'Find a Circle connected to what you want to learn, make, laugh about, or share.'}
         </p>
         <p className="home-welcome-note">{welcomeNote}</p>
@@ -109,7 +107,7 @@ export function CircleShelf({ circles }: { circles: HomeCircleSummary[] }) {
         {circles.map(circle => (
           <Link key={circle.id} href={`/circles/${circle.slug}`} className="home-circle-tile tap-sm">
             <span className="home-circle-avatar"><Users size={17} /></span>
-            <span className="home-circle-tile-copy"><strong>{circle.name}</strong><small>{circle.category ?? 'Community'} · People are around</small></span>
+            <span className="home-circle-tile-copy"><strong>{circle.name}</strong><small>{circle.category ?? 'Community'} · Open Circle</small></span>
             <ArrowRight size={14} className="home-circle-arrow" />
           </Link>
         ))}
@@ -190,7 +188,7 @@ function PurposeComposerInner({ userId, circles }: { userId: string; circles: Ho
   const current = PURPOSE_MODES.find(item => item.id === mode) ?? PURPOSE_MODES[2]
 
   return (
-    <section className="home-section home-composer-section" aria-labelledby="home-composer-heading">
+    <section id="compose" className="home-section home-composer-section" aria-labelledby="home-composer-heading">
       <div className="home-section-heading"><div><p className="home-eyebrow">Your turn, if you feel like it</p><h2 id="home-composer-heading">Drop something here</h2></div></div>
       <div className="purpose-mode-row" role="group" aria-label="Ways to join in">
         {PURPOSE_MODES.map(item => <button key={item.id} type="button" className={`purpose-mode${mode === item.id ? ' is-selected' : ''}`} aria-pressed={mode === item.id} onClick={() => setMode(item.id)}>{item.label}</button>)}
@@ -201,4 +199,3 @@ function PurposeComposerInner({ userId, circles }: { userId: string; circles: Ho
     </section>
     )
 }
-

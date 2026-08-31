@@ -1,6 +1,5 @@
 import { createClient }  from '@/lib/supabase/server'
 import { redirect }       from 'next/navigation'
-import CreatePost         from '@/components/CreatePost'
 import PostCard           from '@/components/PostCard'
 import LoadMore           from '@/components/LoadMore'
 import FeedTabs           from '@/components/FeedTabs'
@@ -213,7 +212,6 @@ export default async function FeedPage({
       <HomeHeader
         displayName={myProfile?.full_name?.split(' ')[0] || 'friend'}
         activeCircleCount={myCircles.length}
-        needsResponseCount={0}
       />
       <NextStepCard circle={myCircles[0] ?? null} hasActivity={circlePulseItems.length > 0} />
       <CircleShelf circles={myCircles} />
@@ -230,11 +228,6 @@ export default async function FeedPage({
       <Suspense fallback={null}>
         <FeedTabs currentTab={currentTab} />
       </Suspense>
-
-      {/* Compose */}
-      <div id="compose">
-        <CreatePost userId={user.id} />
-      </div>
 
       {/* Empty state */}
       {posts.length === 0 && (

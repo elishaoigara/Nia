@@ -30,7 +30,6 @@ create table public.profiles (
   languages text[],
   interests text[],
   last_seen_at timestamptz,
-  is_verified boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -261,28 +260,18 @@ create table public.notifications (
   created_at timestamptz not null default now()
 );
 
-create table public.tips (
+create table public.reports (
   id uuid primary key default gen_random_uuid(),
-  sender_id uuid not null references public.profiles(id) on delete cascade,
-  recipient_id uuid not null references public.profiles(id) on delete cascade,
-  amount numeric(12, 2) not null check (amount > 0),
-  phone text not null,
-  checkout_request_id text not null unique,
-  mpesa_ref text unique,
-  status text not null default 'pending' check (status in ('pending', 'success', 'failed')),
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-
-create table public.verified_payments (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references public.profiles(id) on delete cascade,
-  amount numeric(12, 2) not null check (amount > 0),
-  currency text not null,
-  payment_ref text not null unique,
-  status text not null default 'pending' check (status in ('pending', 'approved', 'rejected')),
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  reporter_id uuid not null references public.profiles(id) on delete cascade,
+  reported_user_id uuid references public.profiles(id) on delete set null,
+  entity_type text not null check (entity_type in ('post', 'comment', 'profile')),
+  entity_id uuid,
+  reason text not null check (char_length(reason) between 1 and 120),
+  details text check (char_length(details) <= 1000),
+  status text not null default 'open' check (status in ('open', 'reviewed', 'resolved')),
+  priority text not null default 'normal' check (priority in ('normal', 'high', 'urgent')),
+  assigned_to uuid references public.profiles(id) on delete set null,
+  created_at timestamptz not null default now()
 );
 
 create or replace function public.protect_profile_fields()
@@ -291,9 +280,6 @@ language plpgsql
 set search_path = public
 as $$
 begin
-  if auth.uid() is not null and new.is_verified is distinct from old.is_verified then
-    raise exception 'is_verified can only be changed by a trusted service';
-  end if;
   new.id = old.id;
   new.created_at = old.created_at;
   return new;
@@ -351,8 +337,6 @@ create trigger posts_set_updated_at before update on public.posts for each row e
 create trigger comments_set_updated_at before update on public.comments for each row execute function public.set_updated_at();
 create trigger messages_protect_fields before update on public.messages for each row execute function public.protect_message_fields();
 create trigger message_requests_set_updated_at before update on public.message_requests for each row execute function public.set_updated_at();
-create trigger tips_set_updated_at before update on public.tips for each row execute function public.set_updated_at();
-create trigger verified_payments_set_updated_at before update on public.verified_payments for each row execute function public.set_updated_at();
 
 create or replace function public.create_message_request()
 returns trigger
@@ -436,9 +420,8 @@ alter table public.story_views enable row level security;
 alter table public.messages enable row level security;
 alter table public.message_requests enable row level security;
 alter table public.message_reports enable row level security;
+alter table public.reports enable row level security;
 alter table public.notifications enable row level security;
-alter table public.tips enable row level security;
-alter table public.verified_payments enable row level security;
 
 create policy "authenticated users read profiles" on public.profiles for select to authenticated using (true);
 create policy "users create own profile" on public.profiles for insert to authenticated with check (id = auth.uid());
@@ -547,15 +530,14 @@ create policy "users read own message requests" on public.message_requests for s
 create policy "users update own message requests" on public.message_requests for update to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid());
 create policy "users file reports" on public.message_reports for insert to authenticated with check (reporter_id = auth.uid());
 create policy "users read own reports" on public.message_reports for select to authenticated using (reporter_id = auth.uid());
+create policy "users submit content reports" on public.reports for insert to authenticated with check (
+  reporter_id = auth.uid() and reported_user_id is distinct from auth.uid()
+);
+create policy "users read own content reports" on public.reports for select to authenticated using (reporter_id = auth.uid());
 
 create policy "users read own notifications" on public.notifications for select to authenticated using (user_id = auth.uid());
 create policy "actors create notifications" on public.notifications for insert to authenticated with check (actor_id = auth.uid() and user_id <> auth.uid());
 create policy "users update own notifications" on public.notifications for update to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid());
-create policy "users read related tips" on public.tips for select to authenticated using (sender_id = auth.uid() or recipient_id = auth.uid());
-create policy "users create own pending tips" on public.tips for insert to authenticated with check (
-  sender_id = auth.uid() and status = 'pending' and mpesa_ref is null
-);
-create policy "users read own verification payments" on public.verified_payments for select to authenticated using (user_id = auth.uid());
 
 -- Public media buckets. Object writes are still restricted to their owner.
 insert into storage.buckets (id, name, public)

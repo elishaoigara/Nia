@@ -17,6 +17,11 @@ import { asBoolean, asNullableString, asString, isRecord } from '@/lib/validatio
 
 const PAGE_SIZE = 30
 const TYPING_IDLE_MS = 2500
+const MAX_UPLOAD_BYTES = {
+  image: 15 * 1024 * 1024,
+  video: 50 * 1024 * 1024,
+  file: 20 * 1024 * 1024,
+} as const
 
 type Profile = {
   id: string
@@ -425,6 +430,12 @@ export default function DirectMessagePage() {
   async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>, type: 'image' | 'video' | 'file') {
     const file = e.target.files?.[0]
     if (!file || !currentUserId || !recipientId) return
+    if (file.size > MAX_UPLOAD_BYTES[type]) {
+      const limitMb = Math.round(MAX_UPLOAD_BYTES[type] / 1024 / 1024)
+      showToast(`${type === 'image' ? 'Images' : type === 'video' ? 'Videos' : 'Files'} must be ${limitMb} MB or smaller`)
+      e.target.value = ''
+      return
+    }
     const detectedType = type === 'file' ? 'file' : (file.type === 'image/gif' ? 'gif' : type)
     const previewUrl = URL.createObjectURL(file)
     setPendingMedia({ file, url: previewUrl, detectedType, displayType: type })
@@ -885,7 +896,7 @@ export default function DirectMessagePage() {
       )}
 
       {/* REPLY / EDIT PREVIEW */}
-      {(replyTo || editingId) && (
+      {(replyTo || editingId) && !pendingRequest && !amIBlocking && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', background: 'var(--surface-2)', borderTop: '1px solid var(--border)', flexShrink: 0 }}>
           <div style={{ width: 3, borderRadius: 2, alignSelf: 'stretch', background: 'var(--nia-violet)', flexShrink: 0 }} />
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -905,6 +916,12 @@ export default function DirectMessagePage() {
       )}
 
       {/* INPUT BAR */}
+      {amIBlocking && (
+        <div style={{ padding: '12px 14px', borderTop: '1px solid var(--border)', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 13 }}>
+          You blocked this account. Unblock them from the conversation menu to send a message.
+        </div>
+      )}
+      {!pendingRequest && !amIBlocking && (
       <div style={{ padding: '8px 10px', borderTop: '1px solid var(--border)', flexShrink: 0, paddingBottom: 'calc(8px + env(safe-area-inset-bottom, 0px))', position: 'relative' }}>
         {showGifPicker && <ChatGifPicker onPick={sendGif} onClose={() => setShowGifPicker(false)} />}
 
@@ -999,6 +1016,7 @@ export default function DirectMessagePage() {
         <input ref={videoRef} type="file" accept="video/*" style={{ display: 'none' }} onChange={e => handleFileSelect(e, 'video')} />
         <input ref={fileDocRef} type="file" style={{ display: 'none' }} onChange={e => handleFileSelect(e, 'file')} />
       </div>
+      )}
 
       {actionSheetMsg && (
         <MessageActionSheet

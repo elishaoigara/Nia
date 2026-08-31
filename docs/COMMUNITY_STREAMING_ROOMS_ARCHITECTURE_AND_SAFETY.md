@@ -2,7 +2,7 @@
 
 **Architecture and Safety Blueprint**  
 **Status:** Design-ready proposal  
-**Scope:** Circle-based live audio/video rooms; tips and monetization are deliberately excluded
+**Scope:** Circle-based live audio/video rooms
 
 ## Executive direction
 

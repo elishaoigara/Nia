@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import UnityLine from '@/components/UnityLine';
 
@@ -14,11 +15,19 @@ export default function ResetPasswordPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [ready, setReady] = useState(false);
+  const [invalidLink, setInvalidLink] = useState(false);
 
   /* Wait for the session to be set via the URL hash token */
   useEffect(() => {
     let cancelled = false;
     let attempt: ReturnType<typeof setTimeout> | undefined;
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!cancelled && session) {
+        setReady(true);
+        setInvalidLink(false);
+      }
+    });
 
     const checkSession = async () => {
       const { data } = await supabase.auth.getSession();
@@ -30,14 +39,17 @@ export default function ResetPasswordPage() {
 
       attempt = setTimeout(async () => {
         const { data: retryData } = await supabase.auth.getSession();
-        if (!cancelled && retryData?.session) setReady(true);
-      }, 1500);
+        if (cancelled) return;
+        if (retryData?.session) setReady(true);
+        else setInvalidLink(true);
+      }, 2500);
     };
 
     void checkSession();
     return () => {
       cancelled = true;
       if (attempt) clearTimeout(attempt);
+      authListener.subscription.unsubscribe();
     };
   }, [supabase.auth]);
 
@@ -46,8 +58,8 @@ export default function ResetPasswordPage() {
     setLoading(true);
     setError('');
 
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters.');
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters.');
       setLoading(false);
       return;
     }
@@ -133,7 +145,19 @@ export default function ResetPasswordPage() {
             padding: 32,
           }}
         >
-          {!ready ? (
+          {invalidLink ? (
+            <div style={{ textAlign: 'center' }}>
+              <h2 style={{ color: 'var(--text-primary)', fontSize: 20, fontWeight: 700, margin: '0 0 10px' }}>
+                This reset link is no longer valid
+              </h2>
+              <p style={{ color: 'var(--text-tertiary)', fontSize: 14, marginBottom: 18 }}>
+                It may have expired or already been used. Request a fresh link to continue.
+              </p>
+              <Link href="/forgot-password" className="btn-primary" style={{ textDecoration: 'none' }}>
+                Request a new link
+              </Link>
+            </div>
+          ) : !ready ? (
             <div style={{ textAlign: 'center' }}>
               <p style={{ color: 'var(--text-tertiary)', fontSize: 14 }}>
                 Verifying reset link…
@@ -164,11 +188,11 @@ export default function ResetPasswordPage() {
                   </label>
                   <input
                     type="password"
-                    placeholder="At least 6 characters"
+                    placeholder="At least 8 characters"
                     value={password}
                     onChange={e => setPassword(e.target.value)}
                     required
-                    minLength={6}
+                    minLength={8}
                     style={{
                       background: 'var(--surface-0)',
                       border: '1px solid var(--border)',
@@ -193,7 +217,7 @@ export default function ResetPasswordPage() {
                     value={confirm}
                     onChange={e => setConfirm(e.target.value)}
                     required
-                    minLength={6}
+                    minLength={8}
                     style={{
                       background: 'var(--surface-0)',
                       border: '1px solid var(--border)',

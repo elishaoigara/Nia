@@ -33,6 +33,3 @@ create index if not exists reactions_user_id_idx on public.reactions (user_id);
 create index if not exists reports_assigned_to_idx on public.reports (assigned_to);
 create index if not exists reposts_user_id_idx on public.reposts (user_id);
 create index if not exists story_views_viewer_id_idx on public.story_views (viewer_id);
-create index if not exists tips_recipient_id_idx on public.tips (recipient_id);
-create index if not exists tips_sender_id_idx on public.tips (sender_id);
-create index if not exists verified_payments_user_id_idx on public.verified_payments (user_id);

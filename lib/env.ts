@@ -34,24 +34,6 @@ export function getServerSupabaseEnv() {
   }
 }
 
-export function getSupabaseAdminEnv() {
-  return {
-    url: required('NEXT_PUBLIC_SUPABASE_URL', process.env.NEXT_PUBLIC_SUPABASE_URL),
-    serviceRoleKey: required('SUPABASE_SERVICE_ROLE_KEY', process.env.SUPABASE_SERVICE_ROLE_KEY),
-  }
-}
-
-export function getMpesaEnv() {
-  return {
-    consumerKey: required('MPESA_CONSUMER_KEY', process.env.MPESA_CONSUMER_KEY),
-    consumerSecret: required('MPESA_CONSUMER_SECRET', process.env.MPESA_CONSUMER_SECRET),
-    shortcode: required('MPESA_SHORTCODE', process.env.MPESA_SHORTCODE),
-    passkey: required('MPESA_PASSKEY', process.env.MPESA_PASSKEY),
-    callbackToken: required('MPESA_CALLBACK_TOKEN', process.env.MPESA_CALLBACK_TOKEN),
-    environment: process.env.MPESA_ENVIRONMENT === 'production' ? 'production' : 'sandbox',
-  } as const
-}
-
 export function getAnthropicApiKey(): string {
   return required('ANTHROPIC_API_KEY', process.env.ANTHROPIC_API_KEY)
 }

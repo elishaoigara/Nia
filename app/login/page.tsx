@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
@@ -15,6 +15,22 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const callbackError = new URLSearchParams(window.location.search).get('error');
+    if (!callbackError) return;
+
+    const messages: Record<string, string> = {
+      missing_auth_code: 'That sign-in link is incomplete. Please start again.',
+      auth_callback_failed: 'We could not finish signing you in. Please try again.',
+      profile_lookup_failed: 'You are signed in, but your profile could not be loaded. Please try again.',
+    };
+    const timer = window.setTimeout(() => {
+      setError(messages[callbackError] ?? 'We could not finish signing you in. Please try again.');
+      window.history.replaceState({}, '', window.location.pathname);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   async function handleEmailLogin(e: React.FormEvent) {
     e.preventDefault();

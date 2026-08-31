@@ -116,9 +116,9 @@ community usefulness
 
 The interface should explain recommendations in plain language and provide controls to reset or tune the feed. A chronological or **Fresh** mode should always remain available.
 
-### 2. Creator sustainability and monetization
+### 2. Creator practice and growth
 
-Creator monetization should be introduced only after trust, moderation, and rights management are reliable. The goal is to help creators earn from useful cultural and educational work without forcing them into advertiser-friendly performance.
+The goal is to help creators improve useful cultural and educational work without forcing them into attention-seeking performance.
 
 #### Creator tools
 
@@ -128,18 +128,6 @@ Creator monetization should be introduced only after trust, moderation, and righ
 - Collaborative videos with Circle attribution.
 - Analytics focused on saves, Circle shares, completion, and helpful responses.
 - Audience feedback prompts such as **What should I explain next?**
-
-#### Monetization options
-
-| Model | Nia use case | Safeguard |
-| --- | --- | --- |
-| Circle-supported tips | Members support a creator’s useful work | Clear fees, receipts, refunds, and fraud controls. |
-| Paid workshops or rooms | A creator hosts a deeper learning session | Transparent pricing in local currency where relevant, including KSh for Kenyan users. |
-| Memberships | Supporters receive deeper Circle access or series | No paywall on essential safety or community information. |
-| Sponsored community briefs | Carefully selected mission-aligned sponsors | Prominent disclosure and editorial independence. |
-| Creator grants | Nia funds emerging regional storytellers | Transparent criteria and application process. |
-
-Do not make payout eligibility depend only on popularity. Consider usefulness, originality, consistency, community contribution, and safety record.
 
 ### 3. Immersive community streaming rooms
 
@@ -201,7 +189,7 @@ Before personalization and live rooms, Nia needs stronger safety infrastructure:
 | 1 | Discovery lanes, responsive long-form grid, clearer metadata | More meaningful opens and fewer immediate exits. |
 | 2 | Circle sharing, saves, “Try this,” reaction stamps, and feedback controls | More video-to-Circle actions and useful responses. |
 | 3 | Freshness/diversity ranking and explainable personalization | Higher satisfaction without increasing unwanted repetition. |
-| 4 | Creator series, analytics, grants, and supported tips | More consistent quality from emerging creators. |
+| 4 | Creator series, analytics, and grants | More consistent quality from emerging creators. |
 | 5 | Moderated Circle streaming rooms | Repeat participation, shared resources, and safe room completion. |
 
 ## Metrics that fit Nia

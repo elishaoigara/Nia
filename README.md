@@ -9,7 +9,6 @@ Nia is a mobile-first, pan-African social platform with a ranked feed, Circles, 
 - Tailwind CSS 4 and CSS design tokens
 - Supabase Auth, Postgres, Realtime, and Storage
 - Anthropic API for caption and translation assistance
-- Safaricom Daraja for M-Pesa payments
 - Vitest for unit tests
 
 ## Requirements
@@ -47,16 +46,13 @@ Required application variables:
 - `NEXT_PUBLIC_APP_URL`
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-- `SUPABASE_SERVICE_ROLE_KEY` (trusted webhook processing only)
 
 Integration variables:
 
 - `ANTHROPIC_API_KEY` and optional `ANTHROPIC_MODEL`
 - `NEXT_PUBLIC_TENOR_API_KEY` (optional; static GIF fallbacks are available)
-- `MPESA_ENVIRONMENT`, `MPESA_CONSUMER_KEY`, `MPESA_CONSUMER_SECRET`
-- `MPESA_SHORTCODE`, `MPESA_PASSKEY`, `MPESA_CALLBACK_TOKEN`
 
-Never expose service-role, Anthropic, Daraja, or callback credentials through a `NEXT_PUBLIC_` variable.
+`SUPABASE_SERVICE_ROLE_KEY` is only needed by trusted local seed and test tooling. Never expose service-role or Anthropic credentials through a `NEXT_PUBLIC_` variable.
 
 ## Commands
 
@@ -89,7 +85,6 @@ Supabase clients are separated by trust boundary:
 - `lib/supabase/client.ts`: singleton browser client
 - `lib/supabase/server.ts`: request-scoped cookie-aware server client
 - `lib/supabase/middleware.ts`: session refresh and route authorization
-- `lib/supabase/admin.ts`: server-only service-role client for trusted webhooks
 
 ## Deployment
 
@@ -111,7 +106,6 @@ Before production rollout, complete the operational checklist in [`docs/PRODUCTI
 
 - Protected routes are enforced in `proxy.ts`, with defense-in-depth authentication in sensitive route handlers.
 - Database access is restricted through row-level security.
-- M-Pesa callbacks require a secret callback token and use a server-only service-role client.
 - Security headers and a Content Security Policy are configured globally.
 - API inputs are length- and shape-validated; provider errors are not returned to clients.
 - `npm audit` is expected to report zero known vulnerabilities.

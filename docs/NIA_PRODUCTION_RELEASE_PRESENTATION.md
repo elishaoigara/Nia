@@ -112,7 +112,7 @@
 
 **Speaker script:**
 
-“The latest Workstream D commit is connected to Vercel and is serving from the production target. The deployment is ready and the public URL is healthy for the tested routes. This confirms delivery integrity from GitHub through Vercel. It does not by itself certify the external dependencies required for payments, email, backups, monitoring, or policy compliance, so those remain separate launch gates.”
+“The latest Workstream D commit is connected to Vercel and is serving from the production target. The deployment is ready and the public URL is healthy for the tested routes. This confirms delivery integrity from GitHub through Vercel. It does not by itself certify the external dependencies required for email, backups, monitoring, or policy compliance, so those remain separate launch gates.”
 
 ---
 
@@ -122,17 +122,16 @@
 |---|---|---|
 | P0 | Apply and verify reviewed Supabase migrations in staging, then promote to production | Engineering / database owner |
 | P0 | Configure production secrets, rotate exposed development credentials, and verify redirect allowlists | Engineering / platform owner |
-| P0 | Complete Daraja production credentials, callback security, duplicate handling, cancellation, and reconciliation tests | Payments owner |
-| P0 | Add distributed rate limits and abuse controls for auth, AI, messaging, uploads, and payments | Platform / security owner |
+| P0 | Add distributed rate limits and abuse controls for auth, AI, messaging, and uploads | Platform / security owner |
 | P0 | Configure error tracking, structured logs, uptime checks, and alerts | Platform owner |
 | P0 | Enable point-in-time recovery, define retention, and perform a restore drill | Database owner |
 | P0 | Complete custom domain, TLS, transactional email, and Auth redirect configuration | Platform / operations owner |
 | P0 | Complete accessibility, browser, low-end Android, and metered-network acceptance testing | QA / community research owner |
-| P0 | Complete privacy, terms, retention, deletion, moderation, reporting, payment, and refund policies | Legal / operations owner |
+| P0 | Complete privacy, terms, retention, deletion, moderation, and reporting policies | Legal / operations owner |
 
 **Speaker script:**
 
-“The product is not yet ready for broad user acquisition until the operational gates are closed. The most important distinction is between software readiness and launch readiness. The repository and deployment are in a strong pre-launch state, but production safety also requires managed secrets, rate limits, monitoring, tested backups, payment verification, domain and email configuration, representative-device testing, and published policies.”
+“The product is not yet ready for broad user acquisition until the operational gates are closed. The most important distinction is between software readiness and launch readiness. The repository and deployment are in a strong pre-launch state, but production safety also requires managed secrets, rate limits, monitoring, tested backups, domain and email configuration, representative-device testing, and published policies.”
 
 ---
 
@@ -150,7 +149,7 @@
 
 **Speaker script:**
 
-“We recommend a staged release rather than a single launch event. First, establish a disposable or isolated staging environment and run the complete authenticated suite, including concurrent messages, notifications, Circle responses, authorization boundaries, posting, uploads, and payment callbacks. Next, close the operational controls. Then run a small pilot with clear ownership and rollback procedures. Public acquisition should begin only after pilot evidence confirms reliability and community safety.”
+“We recommend a staged release rather than a single launch event. First, establish a disposable or isolated staging environment and run the complete authenticated suite, including concurrent messages, notifications, Circle responses, authorization boundaries, posting, and uploads. Next, close the operational controls. Then run a small pilot with clear ownership and rollback procedures. Public acquisition should begin only after pilot evidence confirms reliability and community safety.”
 
 ---
 

@@ -8,7 +8,7 @@ Expo SDK 55 and later run on React Native’s New Architecture, so the mobile pr
 
 ## Boundaries
 
-The mobile app should call Supabase directly for RLS-protected reads and writes such as profiles, follows, Circles, posts, reactions, notifications, and messages. Privileged operations such as AI generation, payment initiation, moderation actions, signed upload workflows, and service-role tasks must remain behind Next.js route handlers or Supabase Edge Functions. A service-role key must never ship in the mobile bundle.
+The mobile app should call Supabase directly for RLS-protected reads and writes such as profiles, follows, Circles, posts, reactions, notifications, and messages. Privileged operations such as AI generation, moderation actions, signed upload workflows, and service-role tasks must remain behind Next.js route handlers or Supabase Edge Functions. A service-role key must never ship in the mobile bundle.
 
 The shared contract layer should contain `types/domain.ts` equivalents, Zod or equivalent validation schemas, canonical event names, recommendation response shapes, and permissions. The web and mobile clients should consume compact response shapes rather than reconstructing large nested joins independently.
 

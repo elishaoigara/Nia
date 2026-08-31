@@ -14,6 +14,7 @@ import { AFRICAN_REGIONS, getFlag } from '@/lib/african-data'
 import type { Circle, HashtagRow, ProfileSummary } from '@/types/domain'
 
 type Tab = 'trending' | 'search'
+type RegionId = 'all' | (typeof AFRICAN_REGIONS)[number]['id']
 type LocationProfile = Pick<ProfileSummary, 'country' | 'city'> & { interests?: string[] | null }
 type ExplorePerson = Pick<ProfileSummary, 'id' | 'username' | 'full_name' | 'avatar_url' | 'country' | 'city' | 'bio'> & {
   interests?: string[] | null
@@ -30,6 +31,7 @@ export default function ExplorePage() {
   const supabase = createClient()
 
   const [tab,          setTab]          = useState<Tab>('trending')
+  const [selectedRegion, setSelectedRegion] = useState<RegionId>('all')
   const [userId,       setUserId]       = useState<string | null>(null)
   const [myProfile,    setMyProfile]    = useState<LocationProfile | null>(null)
 
@@ -49,6 +51,16 @@ export default function ExplorePage() {
   const [isPending,   startTransition] = useTransition()
   const searchRequest = useRef(0)
   const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    const region = new URLSearchParams(window.location.search).get('region')
+    const timer = window.setTimeout(() => {
+      if (region && AFRICAN_REGIONS.some(item => item.id === region)) {
+        setSelectedRegion(region as RegionId)
+      }
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [])
 
   // ── load compact discovery data ─────────────────────────
   useEffect(() => {
@@ -178,6 +190,25 @@ export default function ExplorePage() {
     if (el && tab === 'search') el.focus()
   }, [tab])
 
+  const region = selectedRegion === 'all'
+    ? null
+    : AFRICAN_REGIONS.find(item => item.id === selectedRegion) ?? null
+  const isInSelectedRegion = (country?: string | null) =>
+    !region || Boolean(country && region.countries.includes(country))
+  const visibleNewCircles = trendingCircles.filter(circle => isInSelectedRegion(circle.country))
+  const visibleSuggestedCircles = suggestedCircles.filter(circle => isInSelectedRegion(circle.country))
+  const visibleLocalCircles = localCircles.filter(circle => isInSelectedRegion(circle.country))
+  const visiblePeople = africanUsers.filter(person => isInSelectedRegion(person.country))
+  const hasRegionResults = visibleNewCircles.length + visibleSuggestedCircles.length + visibleLocalCircles.length + visiblePeople.length > 0
+
+  function selectRegion(nextRegion: RegionId) {
+    setSelectedRegion(nextRegion)
+    const url = new URL(window.location.href)
+    if (nextRegion === 'all') url.searchParams.delete('region')
+    else url.searchParams.set('region', nextRegion)
+    window.history.replaceState({}, '', `${url.pathname}${url.search}`)
+  }
+
   return (
     <main className="w-full max-w-2xl px-4 py-6 space-y-6">
 
@@ -190,7 +221,7 @@ export default function ExplorePage() {
         gap: 4,
       }}>
         {([
-          { id: 'trending', label: 'Trending', icon: TrendingUp },
+          { id: 'trending', label: 'Discover', icon: TrendingUp },
           { id: 'search',   label: 'Search',   icon: Search     },
         ] as const).map(({ id, label, icon: Icon }) => (
           <button
@@ -231,14 +262,18 @@ export default function ExplorePage() {
               {/* Region filter pills */}
               <div className="region-pills hidden-scrollbar" style={{ margin: '-6px -16px 12px', padding: '8px 16px' }}>
                 {[
-                  { id: 'all', label: '🌍 All Africa' },
-                  { id: 'east', label: '🦁 East' },
-                  { id: 'west', label: '🥁 West' },
-                  { id: 'southern', label: '🦏 Southern' },
-                  { id: 'north', label: '🐪 North' },
-                  { id: 'central', label: '🦍 Central' },
-                ].map(r => (
-                  <button key={r.id} className="region-pill">{r.label}</button>
+                  { id: 'all' as const, label: '🌍 All Africa' },
+                  ...AFRICAN_REGIONS.map(item => ({ id: item.id, label: `${item.emoji} ${item.label.replace(' Africa', '')}` })),
+                ].map(item => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className={`region-pill${selectedRegion === item.id ? ' active' : ''}`}
+                    aria-pressed={selectedRegion === item.id}
+                    onClick={() => selectRegion(item.id as RegionId)}
+                  >
+                    {item.label}
+                  </button>
                 ))}
               </div>
 
@@ -246,7 +281,7 @@ export default function ExplorePage() {
                 <section>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, paddingBottom: 2 }}>
                     <TrendingUp size={14} style={{ color: 'var(--text-tertiary)' }} />
-                    <h2 style={{ fontWeight: 700, fontSize: 12, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Trending in Africa</h2>
+                    <h2 style={{ fontWeight: 700, fontSize: 12, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Trending across Nia</h2>
                   </div>
                   <div className="tag-cloud" style={{ padding: '0 0 4px' }}>
                     {trending.map(({ tag, count }, i) => {
@@ -266,21 +301,21 @@ export default function ExplorePage() {
                 </section>
               )}
 
-              {trendingCircles.length > 0 && (
+              {visibleNewCircles.length > 0 && (
                 <section>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
                     <Users size={16} style={{ color: 'var(--nia-violet)' }} />
-                    <h2 style={{ fontWeight: 800, fontSize: 15 }}>Trending Circles</h2>
+                    <h2 style={{ fontWeight: 800, fontSize: 15 }}>New Circles{region ? ` in ${region.label}` : ''}</h2>
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
-                    {trendingCircles.map(circle => (
+                    {visibleNewCircles.map(circle => (
                       <CircleCard key={circle.id} circle={circle} currentUserId={userId ?? ''} />
                     ))}
                   </div>
                 </section>
               )}
 
-              {suggestedCircles.length > 0 && (
+              {visibleSuggestedCircles.length > 0 && (
                 <section>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                     <Users size={16} style={{ color: 'var(--nia-violet)' }} />
@@ -290,14 +325,14 @@ export default function ExplorePage() {
                     Based on your interests and where you are.
                   </p>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
-                    {suggestedCircles.map(circle => (
+                    {visibleSuggestedCircles.map(circle => (
                       <CircleCard key={circle.id} circle={circle as Circle} currentUserId={userId ?? ''} />
                     ))}
                   </div>
                 </section>
               )}
 
-              {localCircles.length > 0 && (
+              {visibleLocalCircles.length > 0 && (
                 <section>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
                     <MapPin size={16} style={{ color: 'var(--nia-violet)' }} />
@@ -306,14 +341,14 @@ export default function ExplorePage() {
                     </h2>
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
-                    {localCircles.map(circle => (
+                    {visibleLocalCircles.map(circle => (
                       <CircleCard key={circle.id} circle={circle} currentUserId={userId ?? ''} />
                     ))}
                   </div>
                 </section>
               )}
 
-              {africanUsers.length > 0 && (
+              {visiblePeople.length > 0 && (
                 <section>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                     <Globe2 size={16} style={{ color: 'var(--nia-violet)' }} />
@@ -323,7 +358,7 @@ export default function ExplorePage() {
                     Find voices from your country and across the continent.
                   </p>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 10 }}>
-                    {africanUsers.map(p => (
+                    {visiblePeople.map(p => (
                       <div key={p.id} className="card card-hover" style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
                         <Link href={`/profile/${p.id}`} style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, textDecoration: 'none' }}>
                           <div style={{
@@ -372,6 +407,15 @@ export default function ExplorePage() {
                 </section>
               )}
 
+              {region && !hasRegionResults && (
+                <div className="card" style={{ textAlign: 'center', padding: '32px 20px' }}>
+                  <span style={{ fontSize: 32 }}>{region.emoji}</span>
+                  <p style={{ fontWeight: 800, marginTop: 8 }}>No matches in {region.label} yet</p>
+                  <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 4 }}>Try all Africa, or help this region grow by inviting your community.</p>
+                  <button type="button" className="btn-ghost" style={{ marginTop: 14 }} onClick={() => selectRegion('all')}>Show all Africa</button>
+                </div>
+              )}
+
               <section>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
                   <Compass size={16} style={{ color: 'var(--nia-violet)' }} />
@@ -379,18 +423,19 @@ export default function ExplorePage() {
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
                   {AFRICAN_REGIONS.map(region => (
-                    <Link
+                    <button
                       key={region.id}
-                      href={`/explore?region=${region.id}`}
+                      type="button"
+                      onClick={() => selectRegion(region.id as RegionId)}
                       className="card card-hover"
-                      style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, textDecoration: 'none', transition: 'all 0.2s' }}
+                      style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left', color: 'inherit', cursor: 'pointer', transition: 'all 0.2s' }}
                     >
                       <span style={{ fontSize: 22 }}>{region.emoji}</span>
                       <div>
                         <p style={{ fontWeight: 700, fontSize: 13 }}>{region.label}</p>
                         <p style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{region.countries.length} countries</p>
                       </div>
-                    </Link>
+                    </button>
                   ))}
                 </div>
               </section>

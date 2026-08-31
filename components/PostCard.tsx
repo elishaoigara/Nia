@@ -17,6 +17,9 @@ import {
   Trash2,
   Link2,
   Check,
+  Flag,
+  VolumeX,
+  UserX,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { getStoryRingData } from '@/lib/activeStories';
@@ -138,6 +141,8 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
   const [lightboxIndex,      setLightboxIndex]      = useState(0);
   const [isFollowingAuthor,  setIsFollowingAuthor]  = useState(!!post.viewer_is_following);
   const [copied,             setCopied]             = useState(false);
+  const [safetyBusy,         setSafetyBusy]         = useState(false);
+  const [safetyNotice,       setSafetyNotice]       = useState('');
 
   // Edit state
   const [editing,     setEditing]     = useState(false);
@@ -300,6 +305,63 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
     setTimeout(() => setCopied(false), 2000);
   }, [post.id]);
 
+  const handleReport = useCallback(async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!currentUserId || !post.user_id || safetyBusy) return;
+    setShowMenu(false);
+    const details = window.prompt('What should Nia moderators know about this post?');
+    if (!details?.trim()) return;
+    setSafetyBusy(true);
+    const { error } = await supabase.from('reports').insert({
+      reporter_id: currentUserId,
+      reported_user_id: post.user_id,
+      entity_type: 'post',
+      entity_id: post.id,
+      reason: 'Post reported from feed',
+      details: details.trim().slice(0, 1000),
+    });
+    setSafetyBusy(false);
+    setSafetyNotice(error ? 'Report could not be sent. Please try again.' : 'Report sent to Nia moderators.');
+  }, [currentUserId, post.id, post.user_id, safetyBusy, supabase]);
+
+  const handleMute = useCallback(async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!currentUserId || !post.user_id || safetyBusy) return;
+    setShowMenu(false);
+    if (!window.confirm(`Mute @${profile?.username ?? 'this account'}? Their posts will be hidden from your feed.`)) return;
+    setSafetyBusy(true);
+    const { error } = await supabase.from('mutes').upsert(
+      { muter_id: currentUserId, muted_id: post.user_id },
+      { onConflict: 'muter_id,muted_id', ignoreDuplicates: true },
+    );
+    setSafetyBusy(false);
+    if (error) {
+      setSafetyNotice('This account could not be muted. Please try again.');
+      return;
+    }
+    onDelete?.(post.id);
+    router.refresh();
+  }, [currentUserId, onDelete, post.id, post.user_id, profile?.username, router, safetyBusy, supabase]);
+
+  const handleBlock = useCallback(async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!currentUserId || !post.user_id || safetyBusy) return;
+    setShowMenu(false);
+    if (!window.confirm(`Block @${profile?.username ?? 'this account'}? They will not be able to message you.`)) return;
+    setSafetyBusy(true);
+    const { error } = await supabase.from('blocks').upsert(
+      { blocker_id: currentUserId, blocked_id: post.user_id },
+      { onConflict: 'blocker_id,blocked_id', ignoreDuplicates: true },
+    );
+    setSafetyBusy(false);
+    if (error) {
+      setSafetyNotice('This account could not be blocked. Please try again.');
+      return;
+    }
+    onDelete?.(post.id);
+    router.refresh();
+  }, [currentUserId, onDelete, post.id, post.user_id, profile?.username, router, safetyBusy, supabase]);
+
   const initials = profile?.username?.[0]?.toUpperCase() ?? '?';
 
   /* ── Variant ── */
@@ -421,6 +483,23 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
                       {bookmarked ? 'Bookmarked' : 'Bookmark'}
                     </button>
 
+                    {!isOwner && currentUserId && (
+                      <>
+                        <button onClick={handleReport} disabled={safetyBusy} style={menuItemStyle()}>
+                          <Flag size={14} />
+                          Report post
+                        </button>
+                        <button onClick={handleMute} disabled={safetyBusy} style={menuItemStyle()}>
+                          <VolumeX size={14} />
+                          Mute account
+                        </button>
+                        <button onClick={handleBlock} disabled={safetyBusy} style={menuItemStyle('#f43f5e')}>
+                          <UserX size={14} />
+                          Block account
+                        </button>
+                      </>
+                    )}
+
                     {/* Edit — only within 15min window */}
                     {canEdit && (
                       <button
@@ -444,6 +523,12 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
               </div>
             </div>
           </div>
+
+          {safetyNotice && (
+            <p role="status" style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
+              {safetyNotice}
+            </p>
+          )}
 
           {/* Content / Edit mode */}
           {editing ? (
