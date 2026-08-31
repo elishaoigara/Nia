@@ -2016,12 +2016,53 @@ body {
 .flick-discovery-view strong { font-size: 12px; }
 .flick-discovery-view span { font-size: 10px; opacity: .7; }
 .flick-discovery-view.is-selected { border-color: rgba(157,95,255,.7); background: var(--grad-brand); color: #fff; }
+.flick-filter-trigger { gap: 6px; }
+.flick-filter-trigger.has-filter { border-color: rgba(196,181,253,.65); color: #fff; }
+.flick-home-link { position: absolute; top: calc(12px + env(safe-area-inset-top, 0px)); left: 14px; z-index: 62; display: grid; width: 34px; height: 34px; place-items: center; border-radius: 11px; background: var(--grad-brand); color: #fff; font-size: 13px; font-weight: 900; text-decoration: none; box-shadow: 0 6px 20px rgba(76,29,149,.24); pointer-events: auto; }
+.flick-header-actions { position: absolute; top: calc(10px + env(safe-area-inset-top, 0px)); right: 14px; z-index: 62; display: flex; align-items: center; gap: 7px; }
+.flick-header-icon, .flick-create-link { display: inline-flex; min-height: 36px; align-items: center; justify-content: center; border: 1px solid rgba(255,255,255,.13); background: rgba(20,18,17,.62); color: rgba(255,255,255,.9); backdrop-filter: blur(10px); }
+.flick-header-icon { width: 36px; padding: 0; border-radius: 50%; cursor: pointer; }
+.flick-create-link { gap: 5px; padding: 0 12px; border-radius: 999px; font-size: 11px; font-weight: 800; text-decoration: none; }
+.flick-filter-backdrop { position: fixed; inset: 0; z-index: 180; display: flex; align-items: flex-end; justify-content: center; padding: 14px; background: rgba(0,0,0,.68); backdrop-filter: blur(4px); }
+.flick-filter-sheet { width: min(520px, 100%); padding: 18px; border: 1px solid rgba(255,255,255,.12); border-radius: 24px; background: #171513; color: #fff; box-shadow: 0 24px 80px rgba(0,0,0,.5); }
+.flick-filter-sheet-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.flick-filter-sheet-head h2 { margin: 4px 0 0; font-size: 20px; }
+.flick-filter-sheet-head > button { display: grid; width: 38px; height: 38px; place-items: center; border: 1px solid rgba(255,255,255,.12); border-radius: 50%; background: rgba(255,255,255,.07); color: #fff; cursor: pointer; }
+.flick-filter-options { display: grid; gap: 7px; margin-top: 18px; }
+.flick-filter-option { display: flex; min-height: 46px; align-items: center; justify-content: space-between; padding: 10px 13px; border: 1px solid rgba(255,255,255,.1); border-radius: 14px; background: rgba(255,255,255,.045); color: rgba(255,255,255,.75); font: 750 13px/1.2 inherit; cursor: pointer; }
+.flick-filter-option.is-selected { border-color: rgba(196,181,253,.6); background: rgba(124,58,237,.2); color: #fff; }
+.flick-filter-note { margin: 14px 2px 0; color: rgba(255,255,255,.48); font-size: 11px; line-height: 1.5; }
+.flick-sound-button { position: absolute; top: calc(112px + env(safe-area-inset-top, 0px)); right: 14px; z-index: 12; display: grid; width: 40px; height: 40px; place-items: center; border: 1px solid rgba(255,255,255,.14); border-radius: 50%; background: rgba(20,18,17,.58); color: #fff; backdrop-filter: blur(8px); cursor: pointer; }
+.flick-creator-row { display: flex; min-width: 0; align-items: center; gap: 9px; margin-bottom: 7px; }
+.flick-creator-link { display: inline-flex; min-width: 0; align-items: center; gap: 6px; color: #fff; font-size: 14px; font-weight: 800; text-decoration: none; text-shadow: 0 1px 4px rgba(0,0,0,.55); }
+.flick-creator-row .btn-follow { min-height: 30px; padding: 5px 10px; border-radius: 999px !important; font-size: 11px; }
+.flick-context-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-bottom: 7px; }
+.flick-context-row > a, .flick-context-row > span:not(.flick-purpose-badge) { padding: 2px 7px; border: 1px solid rgba(255,255,255,.16); border-radius: 999px; background: rgba(15,13,12,.45); color: rgba(255,255,255,.8); font-size: 10px; font-weight: 750; text-decoration: none; }
+.flick-caption-button { width: 100%; padding: 0; border: 0; background: transparent; text-align: left; cursor: pointer; }
+.flick-meta-row { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; margin-top: 7px; color: rgba(255,255,255,.58); font-size: 10.5px; font-weight: 650; }
+.flick-meta-row button { display: inline-flex; align-items: center; gap: 4px; margin-left: 3px; padding: 3px 7px; border: 1px solid rgba(255,255,255,.14); border-radius: 999px; background: rgba(255,255,255,.07); color: rgba(255,255,255,.82); font: 750 10.5px/1 inherit; cursor: pointer; }
+.flick-translation-error { margin: 5px 0 0; color: #fda4af; font-size: 10.5px; }
+.full-videos-page { max-width: 1100px; margin: 0 auto; padding: 116px 0 36px; }
+.full-videos-intro { padding: 18px 14px 12px; }
+.full-videos-intro h1 { margin: 4px 0 6px; color: #fff; font-size: clamp(25px, 5vw, 38px); line-height: 1.08; }
+.full-videos-intro > p:last-child { max-width: 620px; margin: 0; color: rgba(255,255,255,.52); font-size: 13px; line-height: 1.5; }
+.full-videos-section { margin: 12px 0 16px; }
+.full-videos-section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 0 14px 8px; }
+.full-videos-section-head h2 { margin: 0; color: #fff; font-size: 15px; }
+.full-videos-section-head span { color: rgba(255,255,255,.42); font-size: 10.5px; }
+.full-videos-continue { display: flex; gap: 12px; overflow-x: auto; padding: 0 14px 8px; }
+.full-videos-continue-card { width: min(74vw, 300px); flex: 0 0 auto; }
+.flick-card-progress { position: absolute; right: 0; bottom: 0; left: 0; height: 3px; background: rgba(255,255,255,.22); }
+.flick-card-progress span { display: block; height: 100%; background: var(--nia-violet); }
 .flick-card-save { order: 2; align-self: flex-start; flex: 0 0 auto; min-height: 32px; padding: 6px 8px; border: 1px solid rgba(255,255,255,.14); border-radius: 999px; background: rgba(255,255,255,.07); color: rgba(255,255,255,.75); font: 700 10px/1 inherit; cursor: pointer; }
 .flick-card-save:hover, .flick-card-save:focus-visible { border-color: var(--nia-violet); color: #fff; }
 @media (max-width: 600px) {
-  .flick-discovery-view-bar { top: 102px; justify-content: flex-start; overflow-x: auto; scrollbar-width: none; }
+  .flick-discovery-view-bar { top: 58px; justify-content: flex-start; overflow-x: auto; scrollbar-width: none; }
   .flick-discovery-view-bar::-webkit-scrollbar { display: none; }
   .flick-discovery-view span { display: none; }
+  .flick-create-link span { display: none; }
+  .flick-create-link { width: 36px; padding: 0; border-radius: 50%; }
+  .full-videos-page { padding-top: 106px; }
 }
 
 /* Circle detail: keep prompt/resource headers and composer actions from colliding. */

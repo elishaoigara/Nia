@@ -14,6 +14,7 @@ const LONGS_LIMIT = 40
 const FLICK_SELECT = `
   id, user_id, content, media_url, media_type, created_at, language, video_duration, category, contribution_mode, thumbnail_url, circle_id,
   profiles:user_id (id, username, avatar_url, country),
+  circles:circle_id (name, slug),
   likes (user_id),
   comments (id),
   reposts (user_id),
@@ -111,6 +112,7 @@ export default async function ReelsPage({
   }
 
   const circleIds = (circleMembershipRes.data ?? []).map(row => row.circle_id)
+  const followingIds = [...ctx.followingIds]
 
-  return <FlicksClient shorts={shorts} longs={longs} currentUserId={user.id} circleIds={circleIds} initialVideo={initialVideo} />
+  return <FlicksClient shorts={shorts} longs={longs} currentUserId={user.id} circleIds={circleIds} followingIds={followingIds} initialVideo={initialVideo} />
 }
