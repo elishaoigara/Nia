@@ -2,6 +2,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import {
   ImagePlus,
   Video,
@@ -15,11 +16,14 @@ import {
   MicOff,
   Play,
   Globe,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { VIDEO_CATEGORIES } from '@/lib/video-categories';
 import { trackEngagement } from '@/lib/analytics';
+
+const MediaEditor = dynamic(() => import('@/components/MediaEditor'), { ssr: false });
 
 interface MediaItem {
   file: File;
@@ -90,6 +94,7 @@ export default function CreatePost({
   const [pollOpts, setPollOpts] = useState(['', '']);
   const [pollDur, setPollDur] = useState('24');
   const [recording, setRecording] = useState(false);
+  const [editorIndex, setEditorIndex] = useState<number | null>(null);
 
   const mediaRecRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -197,6 +202,7 @@ export default function CreatePost({
 
     if (items.length) {
       setVoiceBlob(null);
+      setEditorIndex(mediaItems.length);
     }
   }
 
@@ -206,6 +212,24 @@ export default function CreatePost({
 
       return prev.filter((_, i) => i !== idx);
     });
+  }
+
+  function saveEditedMedia(index: number, editedFile: File, metadata: { duration?: number }) {
+    const previousPreview = mediaItems[index]?.preview;
+    const editedPreview = URL.createObjectURL(editedFile);
+    if (previousPreview) URL.revokeObjectURL(previousPreview);
+
+    setMediaItems(prev => prev.map((item, itemIndex) => {
+      if (itemIndex !== index) return item;
+      return {
+        ...item,
+        file: editedFile,
+        preview: editedPreview,
+        duration: metadata.duration ?? item.duration,
+      };
+    }));
+    setEditorIndex(null);
+    setError('');
   }
 
   function getVideoDuration(file: File): Promise<number> {
@@ -707,6 +731,14 @@ export default function CreatePost({
                   >
                     <X size={16} />
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditorIndex(idx)}
+                    aria-label={`Edit ${item.type} ${idx + 1}`}
+                    style={{ position: 'absolute', left: 8, bottom: 8, zIndex: 3, display: 'inline-flex', alignItems: 'center', gap: 5, border: '1px solid rgba(255,255,255,0.22)', borderRadius: 999, padding: '6px 9px', background: 'rgba(8,6,14,0.78)', color: '#fff', fontSize: 11, fontWeight: 750, cursor: 'pointer', backdropFilter: 'blur(8px)' }}
+                  >
+                    <SlidersHorizontal size={12} /> Edit
+                  </button>
                 </div>
               ))}
             </div>
@@ -802,6 +834,16 @@ export default function CreatePost({
         </div>
 
       </div>{/* end compose-panel */}
+      {editorIndex !== null && mediaItems[editorIndex] && (
+        <MediaEditor
+          file={mediaItems[editorIndex].file}
+          type={mediaItems[editorIndex].type}
+          duration={mediaItems[editorIndex].duration}
+          maxOutputBytes={(mediaItems[editorIndex].type === 'video' ? MAX_VIDEO_MB : MAX_IMAGE_MB) * 1024 * 1024}
+          onCancel={() => setEditorIndex(null)}
+          onSave={(editedFile, metadata) => saveEditedMedia(editorIndex, editedFile, metadata)}
+        />
+      )}
     </div>
   );
 }

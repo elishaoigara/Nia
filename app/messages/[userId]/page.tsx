@@ -1,12 +1,13 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import dynamic from 'next/dynamic'
 import { createClient } from '@/lib/supabase/client'
 import { useParams, useRouter } from 'next/navigation'
 import {
   Send, ArrowLeft, ImagePlus, Mic, Video, Sticker,
   X, Loader2, MoreVertical, ShieldOff, Shield, Flag,
-  Check, Plus, File as FileIcon, ChevronDown,
+  Check, Plus, File as FileIcon, ChevronDown, SlidersHorizontal,
 } from 'lucide-react'
 import Link from 'next/link'
 import MessageBubble, { ChatMessage } from '@/components/messages/MessageBubble'
@@ -14,6 +15,8 @@ import MessageActionSheet from '@/components/messages/MessageActionSheet'
 import ChatGifPicker from '@/components/messages/ChatGifPicker'
 import ReportSheet from '@/components/ReportSheet'
 import { asBoolean, asNullableString, asString, isRecord } from '@/lib/validation'
+
+const MediaEditor = dynamic(() => import('@/components/MediaEditor'), { ssr: false })
 
 const PAGE_SIZE = 30
 const TYPING_IDLE_MS = 2500
@@ -124,6 +127,7 @@ export default function DirectMessagePage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [pendingMedia, setPendingMedia] = useState<PendingMedia | null>(null)
   const [mediaCaption, setMediaCaption] = useState('')
+  const [editingMedia, setEditingMedia] = useState(false)
 
   const [isRecording, setIsRecording] = useState(false)
   const [recordDuration, setRecordDuration] = useState(0)
@@ -439,6 +443,7 @@ export default function DirectMessagePage() {
     const previewUrl = URL.createObjectURL(file)
     setPendingMedia({ file, url: previewUrl, detectedType, displayType: type })
     setMediaCaption('')
+    if (type !== 'file') setEditingMedia(true)
     e.target.value = ''
   }
 
@@ -1048,7 +1053,11 @@ export default function DirectMessagePage() {
             <span style={{ color: '#fff', fontSize: 13, fontWeight: 700 }}>
               {pendingMedia.displayType === 'video' ? 'Send video' : pendingMedia.displayType === 'file' ? 'Send file' : 'Send photo'}
             </span>
-            <div style={{ width: 36 }} />
+            {pendingMedia.displayType !== 'file' ? (
+              <button onClick={() => setEditingMedia(true)} aria-label={`Edit ${pendingMedia.displayType}`} className="tap-sm" style={{ width: 36, height: 36, borderRadius: 10, border: 'none', background: 'rgba(255,255,255,0.12)', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <SlidersHorizontal size={16} />
+              </button>
+            ) : <div style={{ width: 36 }} />}
           </div>
 
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', padding: '0 14px', minHeight: 0 }}>
@@ -1088,6 +1097,24 @@ export default function DirectMessagePage() {
             </button>
           </div>
         </div>
+      )}
+      {editingMedia && pendingMedia && pendingMedia.displayType !== 'file' && (
+        <MediaEditor
+          file={pendingMedia.file}
+          type={pendingMedia.displayType}
+          maxOutputBytes={MAX_UPLOAD_BYTES[pendingMedia.displayType]}
+          onCancel={() => setEditingMedia(false)}
+          onSave={editedFile => {
+            URL.revokeObjectURL(pendingMedia.url)
+            setPendingMedia({
+              file: editedFile,
+              url: URL.createObjectURL(editedFile),
+              detectedType: editedFile.type === 'image/gif' ? 'gif' : pendingMedia.displayType,
+              displayType: pendingMedia.displayType,
+            })
+            setEditingMedia(false)
+          }}
+        />
       )}
     </div>
   )

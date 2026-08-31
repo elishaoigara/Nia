@@ -1,10 +1,13 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import dynamic from 'next/dynamic';
 import { createClient } from '@/lib/supabase/client';
-import { X, ChevronLeft, ChevronRight, Plus, Loader2, ImagePlus, Video, Trash2, Eye, Send, MessageCircle } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, Plus, Loader2, ImagePlus, Video, Trash2, Eye, Send, MessageCircle, SlidersHorizontal } from 'lucide-react';
 import type { ProfileSummary, StoryViewRow } from '@/types/domain';
 import { relativeTime } from '@/lib/date';
+
+const MediaEditor = dynamic(() => import('@/components/MediaEditor'), { ssr: false });
 
 type StoryViewerRow = Required<Pick<StoryViewRow, 'viewer_id' | 'viewed_at'>>;
 type StoryProfile = Pick<ProfileSummary, 'id' | 'username' | 'avatar_url'>;
@@ -75,6 +78,7 @@ function StoryUploadModal({
   const [type,    setType]    = useState<'image' | 'video'>('image');
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState('');
+  const [editing, setEditing] = useState(false);
   const imageRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLInputElement>(null);
 
@@ -89,6 +93,7 @@ function StoryUploadModal({
     setType(mediaType);
     if (preview) URL.revokeObjectURL(preview);
     setPreview(URL.createObjectURL(f));
+    setEditing(true);
     if (imageRef.current) imageRef.current.value = '';
     if (videoRef.current) videoRef.current.value = '';
   }
@@ -118,6 +123,7 @@ function StoryUploadModal({
   }
 
   return (
+    <>
     <div
       style={{
         position: 'fixed', inset: 0, zIndex: 1000,
@@ -167,6 +173,13 @@ function StoryUploadModal({
               }}
             >
               <X size={14} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              style={{ position: 'absolute', left: 8, bottom: 8, display: 'inline-flex', alignItems: 'center', gap: 5, border: '1px solid rgba(255,255,255,0.2)', borderRadius: 999, padding: '7px 10px', background: 'rgba(0,0,0,0.65)', color: '#fff', fontSize: 11, fontWeight: 750, cursor: 'pointer', backdropFilter: 'blur(8px)' }}
+            >
+              <SlidersHorizontal size={12} /> Edit
             </button>
           </div>
         ) : (
@@ -220,6 +233,21 @@ function StoryUploadModal({
         </button>
       </div>
     </div>
+    {editing && file && (
+      <MediaEditor
+        file={file}
+        type={type}
+        maxOutputBytes={type === 'video' ? 50 * 1024 * 1024 : 20 * 1024 * 1024}
+        onCancel={() => setEditing(false)}
+        onSave={editedFile => {
+          if (preview) URL.revokeObjectURL(preview);
+          setFile(editedFile);
+          setPreview(URL.createObjectURL(editedFile));
+          setEditing(false);
+        }}
+      />
+    )}
+    </>
   );
 }
 
