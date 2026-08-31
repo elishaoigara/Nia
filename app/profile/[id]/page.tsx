@@ -1,16 +1,18 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import PostCard from '@/components/PostCard'
 import FollowButton from '@/components/FollowButton'
 import LogoutButton from '@/components/LogoutButton'
+import ReportSheet from '@/components/ReportSheet'
 import {
   ArrowLeft, MapPin, Calendar, Pencil, Settings,
   Grid3x3, MessageCircle, Bookmark,
   Loader2, Link as LinkIcon, Globe, Languages,
+  MoreHorizontal, Flag, VolumeX, UserX,
 } from 'lucide-react'
 import { getFlag } from '@/lib/african-data'
 import type { Comment, Post, Profile, StoryRow } from '@/types/domain'
@@ -258,6 +260,11 @@ export default function ProfilePage() {
   const [postCount,      setPostCount]      = useState(0)
   const [hasActiveStory, setHasActiveStory] = useState(false)
   const [storyUnseen,    setStoryUnseen]    = useState(false)
+  const [showSafetyMenu, setShowSafetyMenu] = useState(false)
+  const [showReport,     setShowReport]     = useState(false)
+  const [safetyBusy,     setSafetyBusy]     = useState(false)
+  const [safetyNotice,   setSafetyNotice]   = useState('')
+  const safetyMenuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!id || !currentUserId) return
@@ -280,6 +287,22 @@ export default function ProfilePage() {
   }, [id, currentUserId, supabase])
 
   const isOwner = currentUserId === id
+
+  useEffect(() => {
+    if (!showSafetyMenu) return
+    function closeMenu(event: MouseEvent) {
+      if (safetyMenuRef.current && !safetyMenuRef.current.contains(event.target as Node)) setShowSafetyMenu(false)
+    }
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === 'Escape') setShowSafetyMenu(false)
+    }
+    document.addEventListener('mousedown', closeMenu)
+    document.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.removeEventListener('mousedown', closeMenu)
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [showSafetyMenu])
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setCurrentUserId(data.user?.id ?? null))
@@ -356,6 +379,56 @@ export default function ProfilePage() {
   function handlePostDelete(postId: string) {
     setPosts(prev => prev.filter(p => p.id !== postId))
     setSaved(prev => prev.filter(p => p.id !== postId))
+  }
+
+  async function reportProfile(reason: string, details: string) {
+    if (!currentUserId || !id || safetyBusy) return false
+    setSafetyBusy(true)
+    const { error } = await supabase.from('reports').insert({
+      reporter_id: currentUserId,
+      reported_user_id: id,
+      entity_type: 'profile',
+      entity_id: id,
+      reason: reason.slice(0, 120),
+      details: details ? details.slice(0, 1000) : null,
+    })
+    setSafetyBusy(false)
+    setSafetyNotice(error ? 'Your report could not be sent. Please try again.' : 'Report sent to Nia moderators.')
+    return !error
+  }
+
+  async function muteProfile() {
+    if (!currentUserId || !id || safetyBusy) return
+    setShowSafetyMenu(false)
+    if (!window.confirm(`Mute @${profile?.username ?? 'this account'}? Their posts will be hidden from your feed.`)) return
+    setSafetyBusy(true)
+    const { error } = await supabase.from('mutes').upsert(
+      { muter_id: currentUserId, muted_id: id },
+      { onConflict: 'muter_id,muted_id', ignoreDuplicates: true },
+    )
+    setSafetyBusy(false)
+    if (error) {
+      setSafetyNotice('This account could not be muted. Please try again.')
+      return
+    }
+    router.push('/')
+  }
+
+  async function blockProfile() {
+    if (!currentUserId || !id || safetyBusy) return
+    setShowSafetyMenu(false)
+    if (!window.confirm(`Block @${profile?.username ?? 'this account'}? You will no longer be able to message each other.`)) return
+    setSafetyBusy(true)
+    const { error } = await supabase.from('blocks').upsert(
+      { blocker_id: currentUserId, blocked_id: id },
+      { onConflict: 'blocker_id,blocked_id', ignoreDuplicates: true },
+    )
+    setSafetyBusy(false)
+    if (error) {
+      setSafetyNotice('This account could not be blocked. Please try again.')
+      return
+    }
+    router.push('/')
   }
 
   if (loading) return (
@@ -532,7 +605,7 @@ export default function ProfilePage() {
 
         {/* Follow / Message */}
         {!isOwner && currentUserId && (
-          <div style={{ display: 'flex', gap: 8, marginBottom: 16, marginTop: 4 }}>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 12, marginTop: 4, alignItems: 'center' }}>
             <FollowButton targetUserId={id} currentUserId={currentUserId} initialIsFollowing={isFollowing} />
             <Link href={`/messages/${id}`} style={{
               padding: '7px 18px', borderRadius: 20,
@@ -544,8 +617,29 @@ export default function ProfilePage() {
             }}>
               <MessageCircle size={13} /> Message
             </Link>
+            <div ref={safetyMenuRef} style={{ position: 'relative' }}>
+              <button
+                type="button"
+                onClick={() => setShowSafetyMenu(open => !open)}
+                aria-label="Profile safety actions"
+                aria-expanded={showSafetyMenu}
+                aria-haspopup="menu"
+                style={{ width: 34, height: 34, borderRadius: '50%', border: '1.5px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >
+                <MoreHorizontal size={16} />
+              </button>
+              {showSafetyMenu && (
+                <div role="menu" style={{ position: 'absolute', right: 0, top: 'calc(100% + 6px)', zIndex: 30, minWidth: 188, overflow: 'hidden', borderRadius: 12, border: '1px solid var(--border)', background: 'var(--surface-1)', boxShadow: '0 10px 30px rgba(0,0,0,0.2)' }}>
+                  <button type="button" role="menuitem" disabled={safetyBusy} onClick={() => { setShowSafetyMenu(false); setShowReport(true) }} style={safetyMenuItemStyle()}><Flag size={14} /> Report profile</button>
+                  <button type="button" role="menuitem" disabled={safetyBusy} onClick={muteProfile} style={safetyMenuItemStyle()}><VolumeX size={14} /> Mute account</button>
+                  <button type="button" role="menuitem" disabled={safetyBusy} onClick={blockProfile} style={safetyMenuItemStyle('var(--nia-coral)')}><UserX size={14} /> Block account</button>
+                </div>
+              )}
+            </div>
           </div>
         )}
+
+        {safetyNotice && <p role="status" style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '0 0 12px' }}>{safetyNotice}</p>}
 
         {/* Bio */}
         {profile.bio && (
@@ -854,8 +948,25 @@ export default function ProfilePage() {
           )}
         </>
       )}
+      {showReport && (
+        <ReportSheet
+          title={`Report @${profile.username}`}
+          description="Tell Nia what is concerning about this account. They will not be told who reported them."
+          onClose={() => setShowReport(false)}
+          onSubmit={reportProfile}
+        />
+      )}
     </div>
   )
+}
+
+function safetyMenuItemStyle(color = 'var(--text-primary)'): React.CSSProperties {
+  return {
+    display: 'flex', alignItems: 'center', gap: 9,
+    width: '100%', padding: '11px 14px', border: 'none',
+    background: 'transparent', color, cursor: 'pointer',
+    font: 'inherit', fontSize: 13, fontWeight: 600, textAlign: 'left',
+  }
 }
 
 function EmptyState({ emoji, message, sub }: { emoji?: string; message: string; sub?: string }) {

@@ -96,7 +96,7 @@ export default function SafetyPage() {
         <div>
           <p className="home-eyebrow">Your boundaries</p>
           <h1 className="text-2xl font-extrabold">Safety & support</h1>
-          <p className="mt-1 text-sm" style={{ color: 'var(--text-secondary)' }}>Control who appears in your space and report content from its menu.</p>
+          <p className="mt-1 text-sm" style={{ color: 'var(--text-secondary)' }}>Control who appears in your space and report posts, comments, profiles, or conversations from their menus.</p>
         </div>
       </header>
 
@@ -104,7 +104,7 @@ export default function SafetyPage() {
         <ShieldCheck size={22} style={{ color: 'var(--nia-violet)', flexShrink: 0 }} />
         <div>
           <h2 className="font-extrabold">Need help with content?</h2>
-          <p className="mt-1 text-sm" style={{ color: 'var(--text-secondary)' }}>Open the three-dot menu on a post to report it, mute the account, or block the account. Reports go to Nia’s moderation queue.</p>
+          <p className="mt-1 text-sm" style={{ color: 'var(--text-secondary)' }}>Open the three-dot menu on a post, comment, or profile to report a concern. Profile and post menus also let you mute or block an account. Reports go to Nia’s moderation queue.</p>
         </div>
       </section>
 

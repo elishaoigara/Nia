@@ -5,14 +5,14 @@ import { createClient } from '@/lib/supabase/client'
 import { useParams, useRouter } from 'next/navigation'
 import {
   Send, ArrowLeft, ImagePlus, Mic, Video, Sticker,
-  X, Loader2, MoreVertical, EyeOff, Eye, ShieldOff, Shield, Flag,
+  X, Loader2, MoreVertical, ShieldOff, Shield, Flag,
   Check, Plus, File as FileIcon, ChevronDown,
 } from 'lucide-react'
 import Link from 'next/link'
 import MessageBubble, { ChatMessage } from '@/components/messages/MessageBubble'
 import MessageActionSheet from '@/components/messages/MessageActionSheet'
 import ChatGifPicker from '@/components/messages/ChatGifPicker'
-import ReportSheet from '@/components/messages/ReportSheet'
+import ReportSheet from '@/components/ReportSheet'
 import { asBoolean, asNullableString, asString, isRecord } from '@/lib/validation'
 
 const PAGE_SIZE = 30
@@ -122,7 +122,6 @@ export default function DirectMessagePage() {
   const [sending, setSending] = useState(false)
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [pendingViewOnce, setPendingViewOnce] = useState(false)
   const [pendingMedia, setPendingMedia] = useState<PendingMedia | null>(null)
   const [mediaCaption, setMediaCaption] = useState('')
 
@@ -453,17 +452,16 @@ export default function DirectMessagePage() {
     if (!pendingMedia || !currentUserId || !recipientId) return
     const { file, url: previewUrl, detectedType } = pendingMedia
     const tempId = `temp-${Date.now()}`
-    const viewOnce = pendingMedia.displayType === 'file' ? false : pendingViewOnce
     const replyToId = replyTo?.id ?? null
     const caption = mediaCaption.trim() || null
 
     setMessages(prev => [...prev, {
       id: tempId, sender_id: currentUserId, recipient_id: recipientId,
       content: caption, media_url: previewUrl, media_type: detectedType, file_name: file.name,
-      view_once: viewOnce, viewed_at: null, reply_to: replyToId, is_read: false,
+      view_once: false, viewed_at: null, reply_to: replyToId, is_read: false,
       created_at: new Date().toISOString(), reactions: {}, edited_at: null, deleted_at: null,
     }])
-    setReplyTo(null); setPendingViewOnce(false)
+    setReplyTo(null)
     setPendingMedia(null); setMediaCaption('')
 
     const result = await uploadFile(file)
@@ -471,7 +469,7 @@ export default function DirectMessagePage() {
     await insertMessage({
       sender_id: currentUserId, recipient_id: recipientId, content: caption,
       media_url: result.url, media_type: detectedType, file_name: result.name,
-      view_once: viewOnce, reply_to: replyToId, is_read: false,
+      view_once: false, reply_to: replyToId, is_read: false,
     }, tempId)
   }
 
@@ -550,19 +548,18 @@ export default function DirectMessagePage() {
     setSending(true)
     broadcastTyping(false)
     const tempId = `temp-${Date.now()}`
-    const viewOnce = pendingViewOnce
     const optimistic: ChatMessage = {
       id: tempId, sender_id: currentUserId, recipient_id: recipientId,
       content: text, media_url: null, media_type: null, file_name: null,
-      view_once: viewOnce, viewed_at: null, reply_to: replyTo?.id ?? null, is_read: false,
+      view_once: false, viewed_at: null, reply_to: replyTo?.id ?? null, is_read: false,
       created_at: new Date().toISOString(), reactions: {}, edited_at: null, deleted_at: null,
     }
     setMessages(prev => [...prev, optimistic])
-    setNewMessage(''); setReplyTo(null); setPendingViewOnce(false)
+    setNewMessage(''); setReplyTo(null)
     await insertMessage({
       sender_id: currentUserId, recipient_id: recipientId, content: text,
       media_url: null, media_type: null, file_name: null,
-      view_once: viewOnce, reply_to: optimistic.reply_to, is_read: false,
+      view_once: false, reply_to: optimistic.reply_to, is_read: false,
     }, tempId)
     setSending(false)
   }
@@ -657,12 +654,14 @@ export default function DirectMessagePage() {
     setShowMenu(false)
   }
 
-  async function submitReport(reason: string) {
-    if (!currentUserId || !recipientId) return
-    await supabase.from('message_reports').insert({
+  async function submitReport(reason: string, details: string) {
+    if (!currentUserId || !recipientId) return false
+    const reportReason = details ? `${reason}: ${details}`.slice(0, 500) : reason
+    const { error } = await supabase.from('message_reports').insert({
       reporter_id: currentUserId, reported_user_id: recipientId,
-      message_id: reportTarget?.messageId ?? null, reason,
+      message_id: reportTarget?.messageId ?? null, reason: reportReason,
     })
+    return !error
   }
 
   async function acceptRequest() {
@@ -943,8 +942,7 @@ export default function DirectMessagePage() {
                   { icon: Video, label: 'Video', onClick: () => { setShowAttachTray(false); videoRef.current?.click() } },
                   { icon: Sticker, label: 'GIF', onClick: () => { setShowAttachTray(false); setShowGifPicker(true) } },
                   { icon: FileIcon, label: 'File', onClick: () => { setShowAttachTray(false); fileDocRef.current?.click() } },
-                  { icon: pendingViewOnce ? Eye : EyeOff, label: 'Once', onClick: () => { setPendingViewOnce(v => !v); setShowAttachTray(false) }, active: pendingViewOnce },
-                ].map(({ icon: Icon, label, onClick, active }) => (
+                ].map(({ icon: Icon, label, onClick }) => (
                   <button
                     key={label}
                     onClick={onClick}
@@ -953,7 +951,7 @@ export default function DirectMessagePage() {
                   >
                     <span style={{
                       width: 44, height: 44, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      background: active ? 'var(--nia-violet)' : 'var(--surface-2)', color: active ? '#fff' : 'var(--text-secondary)',
+                      background: 'var(--surface-2)', color: 'var(--text-secondary)',
                     }}>
                       <Icon size={19} />
                     </span>
@@ -978,14 +976,13 @@ export default function DirectMessagePage() {
               </button>
 
               <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, background: 'var(--surface-2)', borderRadius: 20, padding: '0 14px', minHeight: 38 }}>
-                {pendingViewOnce && !editingId && <Eye size={13} color="var(--nia-violet)" style={{ flexShrink: 0 }} />}
                 <input
                   ref={inputRef}
                   value={newMessage}
                   onChange={e => handleTypingInput(e.target.value)}
                   onFocus={() => setShowAttachTray(false)}
                   onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendText() } }}
-                  placeholder={editingId ? 'Edit message…' : pendingViewOnce ? 'Disappearing message…' : messages.length === 0 ? 'Say something kind…' : 'Continue the thought…'}
+                  placeholder={editingId ? 'Edit message…' : messages.length === 0 ? 'Say something kind…' : 'Continue the thought…'}
                   style={{ flex: 1, minWidth: 0, background: 'none', border: 'none', outline: 'none', fontSize: 14.5, color: 'var(--text-primary)', fontFamily: 'inherit' }}
                 />
               </div>
@@ -1034,7 +1031,12 @@ export default function DirectMessagePage() {
       )}
 
       {reportTarget && (
-        <ReportSheet onClose={() => setReportTarget(null)} onSubmit={submitReport} />
+        <ReportSheet
+          title={reportTarget.messageId ? 'Report this message' : 'Report this conversation'}
+          description="Choose the reason that best describes the problem. The other person will not be told who reported it."
+          onClose={() => setReportTarget(null)}
+          onSubmit={submitReport}
+        />
       )}
 
       {pendingMedia && (
@@ -1046,16 +1048,7 @@ export default function DirectMessagePage() {
             <span style={{ color: '#fff', fontSize: 13, fontWeight: 700 }}>
               {pendingMedia.displayType === 'video' ? 'Send video' : pendingMedia.displayType === 'file' ? 'Send file' : 'Send photo'}
             </span>
-            {pendingMedia.displayType !== 'file' && (
-              <button
-                onClick={() => setPendingViewOnce(v => !v)}
-                className="tap-sm"
-                style={{ width: 36, height: 36, borderRadius: 10, border: 'none', background: pendingViewOnce ? 'var(--nia-violet)' : 'rgba(255,255,255,0.12)', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-              >
-                {pendingViewOnce ? <Eye size={16} /> : <EyeOff size={16} />}
-              </button>
-            )}
-            {pendingMedia.displayType === 'file' && <div style={{ width: 36 }} />}
+            <div style={{ width: 36 }} />
           </div>
 
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', padding: '0 14px', minHeight: 0 }}>

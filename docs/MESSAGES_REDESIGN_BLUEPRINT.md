@@ -96,7 +96,7 @@ The header should show the person’s display name, avatar, presence, and a smal
 
 Add one quiet conversation-start context card above the first message. Examples include **“You both answered the same Circle prompt”**, **“Amara replied to your Flick”**, or **“You met in Nairobi Music.”** This makes direct messages feel intentional rather than random.
 
-Use message bubbles with a slightly warmer surface distinction and generous vertical rhythm. Preserve date dividers, new-message dividers, reply previews, media, view-once content, reactions, editing, deletion, and realtime state. Avoid oversized bubbles that consume the conversation canvas on small screens; cap text measure and let long words wrap.
+Use message bubbles with a slightly warmer surface distinction and generous vertical rhythm. Preserve date dividers, new-message dividers, reply previews, media, reactions, editing, deletion, and realtime state. Historical reveal-gated media can remain readable, but the composer must not offer view-once delivery until media is stored privately and served through expiring, recipient-scoped URLs. Avoid oversized bubbles that consume the conversation canvas on small screens; cap text measure and let long words wrap.
 
 The composer should remain one clear row on mobile, with a separate expandable attachment tray. Add quick-reply chips only when the conversation is empty or after a request is accepted. Quick replies should be suggestions, not automatic messages.
 
@@ -120,7 +120,7 @@ The composer should remain one clear row on mobile, with a separate expandable a
 | `ConversationContextCard` | Explain how the connection began | Hide if the context cannot be verified. |
 | `MessageTimeline` | Render dividers, messages, replies, media, and realtime updates | Maintain keyboard focus when new messages arrive; do not steal focus. |
 | `QuickReplyRail` | Offer optional warm starters | Native buttons with `aria-label`; never send without a deliberate click. |
-| `MessageComposer` | Text, attachments, voice, view-once, send | Keep primary send action visible and provide an error region. |
+| `MessageComposer` | Text, attachments, voice, send | Keep primary send action visible, provide an error region, and only add disappearing media after secure delivery infrastructure exists. |
 | `SafetyMenu` | Report, mute, block, and privacy controls | Destructive actions require clear confirmation and status feedback. |
 | `TypingPresence` | Show “Amara is typing…” or online state | Treat as ephemeral; never persist as content. |
 

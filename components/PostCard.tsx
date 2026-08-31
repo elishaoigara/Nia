@@ -26,6 +26,7 @@ import { getStoryRingData } from '@/lib/activeStories';
 import type { Poll, Post } from '@/types/domain';
 import MediaLightbox from './MediaLightbox';
 import FollowButton from './FollowButton';
+import ReportSheet from './ReportSheet';
 import { getFlag } from '@/lib/african-data';
 
 /* ── Types ──────────────────────────────────── */
@@ -143,6 +144,7 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
   const [copied,             setCopied]             = useState(false);
   const [safetyBusy,         setSafetyBusy]         = useState(false);
   const [safetyNotice,       setSafetyNotice]       = useState('');
+  const [showReport,         setShowReport]         = useState(false);
 
   // Edit state
   const [editing,     setEditing]     = useState(false);
@@ -305,23 +307,20 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
     setTimeout(() => setCopied(false), 2000);
   }, [post.id]);
 
-  const handleReport = useCallback(async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!currentUserId || !post.user_id || safetyBusy) return;
-    setShowMenu(false);
-    const details = window.prompt('What should Nia moderators know about this post?');
-    if (!details?.trim()) return;
+  const handleReport = useCallback(async (reason: string, details: string) => {
+    if (!currentUserId || !post.user_id || safetyBusy) return false;
     setSafetyBusy(true);
     const { error } = await supabase.from('reports').insert({
       reporter_id: currentUserId,
       reported_user_id: post.user_id,
       entity_type: 'post',
       entity_id: post.id,
-      reason: 'Post reported from feed',
-      details: details.trim().slice(0, 1000),
+      reason: reason.slice(0, 120),
+      details: details ? details.slice(0, 1000) : null,
     });
     setSafetyBusy(false);
     setSafetyNotice(error ? 'Report could not be sent. Please try again.' : 'Report sent to Nia moderators.');
+    return !error;
   }, [currentUserId, post.id, post.user_id, safetyBusy, supabase]);
 
   const handleMute = useCallback(async (e: React.MouseEvent) => {
@@ -485,7 +484,7 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
 
                     {!isOwner && currentUserId && (
                       <>
-                        <button onClick={handleReport} disabled={safetyBusy} style={menuItemStyle()}>
+                        <button onClick={e => { e.stopPropagation(); setShowMenu(false); setShowReport(true); }} disabled={safetyBusy} style={menuItemStyle()}>
                           <Flag size={14} />
                           Report post
                         </button>
@@ -705,6 +704,14 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
       {/* Lightbox */}
       {lightboxOpen && (
         <MediaLightbox items={allMedia} startIndex={lightboxIndex} onClose={() => setLightboxOpen(false)} />
+      )}
+      {showReport && (
+        <ReportSheet
+          title="Report this post"
+          description="Tell Nia what is wrong with this post. The author will not be told who reported it."
+          onClose={() => setShowReport(false)}
+          onSubmit={handleReport}
+        />
       )}
     </>
   );

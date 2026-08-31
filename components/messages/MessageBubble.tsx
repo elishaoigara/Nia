@@ -275,7 +275,7 @@ export default function MessageBubble({
                     >
                       <Eye size={16} />
                       <span style={{ fontSize: 13, fontWeight: 600 }}>
-                        {isOwn ? (msg.viewed_at ? 'Opened by them · tap to view' : 'Sent · tap to view') : 'Tap to view · disappears after'}
+                        {isOwn ? (msg.viewed_at ? 'Opened by them · tap to view' : 'Sent · tap to view') : 'Tap to view media'}
                       </span>
                     </button>
                   )

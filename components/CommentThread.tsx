@@ -2,10 +2,11 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import Link from 'next/link'
-import { Heart, MoreHorizontal, Play, Trash2, MessageCircle, ImagePlus, X, Loader2 } from 'lucide-react'
+import { Heart, MoreHorizontal, Play, Trash2, MessageCircle, ImagePlus, X, Loader2, Flag } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import type { Comment, CommentNode, GifApiResult, UserReference } from '@/types/domain'
+import ReportSheet from '@/components/ReportSheet'
 
 interface CommentMedia {
   url:  string
@@ -431,6 +432,7 @@ function CommentRow({
   const [softDeleted, setSoftDeleted] = useState(false)
   const [replying,    setReplying]    = useState(false)
   const [showReplies, setShowReplies] = useState(true)
+  const [showReport,  setShowReport]  = useState(false)
 
   const menuRef = useRef<HTMLDivElement>(null)
   const isOwner = currentUserId === comment.user_id
@@ -476,6 +478,18 @@ function CommentRow({
     router.refresh()
   }
 
+  async function reportComment(reason: string, details: string) {
+    const { error } = await supabase.from('reports').insert({
+      reporter_id: currentUserId,
+      reported_user_id: comment.user_id,
+      entity_type: 'comment',
+      entity_id: comment.id,
+      reason: reason.slice(0, 120),
+      details: details ? details.slice(0, 1000) : null,
+    })
+    return !error
+  }
+
   // max indent depth = 2 (keeps layout clean on mobile)
   const canNestDeeper = depth < 2
 
@@ -512,25 +526,32 @@ function CommentRow({
                 <span className="comment-dot">·</span>
                 <span className="comment-time">{timeAgo(comment.created_at)}</span>
 
-                {isOwner && (
-                  <div ref={menuRef} style={{ marginLeft: 'auto', position: 'relative' }}>
-                    <button
-                      onClick={() => setShowMenu(p => !p)}
-                      className="comment-more-btn"
-                      aria-label="More"
-                    >
-                      <MoreHorizontal size={14} />
-                    </button>
-                    {showMenu && (
-                      <div className="comment-menu">
+                <div ref={menuRef} style={{ marginLeft: 'auto', position: 'relative' }}>
+                  <button
+                    onClick={() => setShowMenu(p => !p)}
+                    className="comment-more-btn"
+                    aria-label="Comment actions"
+                    aria-expanded={showMenu}
+                    aria-haspopup="menu"
+                  >
+                    <MoreHorizontal size={14} />
+                  </button>
+                  {showMenu && (
+                    <div className="comment-menu" role="menu">
+                      {isOwner ? (
                         <button onClick={deleteComment} className="comment-menu-item comment-menu-danger">
                           <Trash2 size={13} />
-                          Delete reply
+                          Delete comment
                         </button>
-                      </div>
-                    )}
-                  </div>
-                )}
+                      ) : (
+                        <button onClick={() => { setShowMenu(false); setShowReport(true) }} className="comment-menu-item comment-menu-danger">
+                          <Flag size={13} />
+                          Report comment
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
 
               {comment.content && (
@@ -612,6 +633,14 @@ function CommentRow({
             />
           ))}
         </div>
+      )}
+      {showReport && (
+        <ReportSheet
+          title="Report this comment"
+          description="Tell Nia what is wrong with this comment. The author will not be told who reported it."
+          onClose={() => setShowReport(false)}
+          onSubmit={reportComment}
+        />
       )}
     </div>
   )
