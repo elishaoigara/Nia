@@ -1,5 +1,6 @@
 'use client'
 
+import { mediaUrl } from '@/lib/media-url'
 import { useState, useRef, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { Heart, MoreHorizontal, Play, Trash2, MessageCircle, ImagePlus, X, Loader2, Flag } from 'lucide-react'
@@ -68,21 +69,21 @@ function CommentMediaGrid({ media }: { media: CommentMedia[] }) {
     <div className="comment-media">
       {media.length === 1 ? (
         m.type === 'video'
-          ? <video src={m.url} controls style={{ width: '100%', display: 'block', maxHeight: 240, objectFit: 'cover' }} />
-          : <img src={m.url} alt={m.type === 'gif' ? 'GIF' : ''} loading="lazy" />
+          ? <video src={mediaUrl(m.url)} controls style={{ width: '100%', display: 'block', maxHeight: 240, objectFit: 'cover' }} />
+          : <img src={mediaUrl(m.url)} alt={m.type === 'gif' ? 'GIF' : ''} loading="lazy" />
       ) : (
         <div className="comment-media-grid">
           {media.slice(0, 4).map((item, i) => (
             <div key={i} style={{ position: 'relative' }}>
               {item.type === 'video' ? (
                 <>
-                  <video src={item.url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  <video src={mediaUrl(item.url)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.3)' }}>
                     <Play size={20} fill="#fff" color="#fff" />
                   </div>
                 </>
               ) : (
-                <img src={item.url} alt="" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                <img src={mediaUrl(item.url)} alt="" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
               )}
             </div>
           ))}
@@ -282,7 +283,7 @@ function InlineReplyBox({
         {/* Avatar */}
         <div className="inline-reply-avatar">
           {currentUserProfile?.avatar_url
-            ? <img src={currentUserProfile.avatar_url} alt="" />
+            ? <img src={mediaUrl(currentUserProfile.avatar_url)} alt="" />
             : initials
           }
         </div>
@@ -306,7 +307,7 @@ function InlineReplyBox({
             <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
               {media.map((m, i) => (
                 <div key={i} style={{ position: 'relative' }}>
-                  <img src={m.preview} alt="" style={{ width: 64, height: 64, borderRadius: 10, objectFit: 'cover', border: '1px solid var(--border)', display: 'block' }} />
+                  <img src={mediaUrl(m.preview)} alt="" style={{ width: 64, height: 64, borderRadius: 10, objectFit: 'cover', border: '1px solid var(--border)', display: 'block' }} />
                   {m.type === 'gif' && (
                     <span style={{ position: 'absolute', bottom: 3, left: 3, background: 'rgba(0,0,0,0.6)', color: '#fff', fontSize: 9, fontWeight: 800, borderRadius: 4, padding: '1px 4px', letterSpacing: 0.5 }}>GIF</span>
                   )}
@@ -348,7 +349,7 @@ function InlineReplyBox({
                       border: 'none', padding: 0, cursor: 'pointer', borderRadius: 8,
                       overflow: 'hidden', aspectRatio: '1', background: 'var(--surface-2)',
                     }}>
-                      <img src={g.preview} alt="GIF" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                      <img src={mediaUrl(g.preview)} alt="GIF" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
                     </button>
                   ))}
                 </div>
@@ -499,7 +500,7 @@ function CommentRow({
         {/* Left: avatar + connecting line */}
         <div className="comment-left">
           <Link href={`/profile/${profile?.id}`} className="comment-avatar">
-            {profile?.avatar_url ? <img src={profile.avatar_url} alt={profile.username} /> : initials}
+            {profile?.avatar_url ? <img src={mediaUrl(profile.avatar_url)} alt={profile.username} /> : initials}
           </Link>
           {/* show line if has children/replies or has inline reply box open */}
           {(hasChildren || replying || (children.length > 0 && showReplies)) && (

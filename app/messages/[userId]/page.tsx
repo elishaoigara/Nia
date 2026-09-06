@@ -1,5 +1,11 @@
 'use client'
+import type { Database } from '@/types/database'
 
+
+import { usePreferences } from '@/components/PreferencesProvider'
+import { useDraft } from '@/lib/drafts'
+import { uploadMedia } from '@/lib/upload-media'
+import { mediaUrl } from '@/lib/media-url'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import dynamic from 'next/dynamic'
 import { createClient } from '@/lib/supabase/client'
@@ -108,6 +114,7 @@ function normalizeMsg(raw: unknown): ChatMessage {
 }
 
 export default function DirectMessagePage() {
+  const { preferences, ready: preferencesReady } = usePreferences()
   const supabase = createClient()
   const { userId } = useParams() as { userId?: string }
   const router = useRouter()
@@ -121,7 +128,7 @@ export default function DirectMessagePage() {
   const [hasMore, setHasMore] = useState(true)
   const [loadingOlder, setLoadingOlder] = useState(false)
 
-  const [newMessage, setNewMessage] = useState('')
+  const [newMessage, setNewMessage] = useDraft(`${currentUserId ?? 'signed-out'}:message:${recipientId}`)
   const [sending, setSending] = useState(false)
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -153,7 +160,7 @@ export default function DirectMessagePage() {
   // First unread incoming message, captured once at load — used to render a
   // single "New messages" divider. Stays fixed even after the 1.5s auto
   // mark-as-read flips is_read locally, so the divider doesn't vanish mid-view.
-  const unreadDividerIdRef = useRef<string | null>(null)
+  const [unreadDividerId,setUnreadDividerId] = useState<string | null>(null)
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -166,6 +173,8 @@ export default function DirectMessagePage() {
   const timerRef = useRef<NodeJS.Timeout | null>(null)
   const audioRefs = useRef<Record<string, HTMLAudioElement>>({})
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const uploadedFiles = useRef(new WeakMap<File,string>())
+  const messageRequests = useRef(new Map<string,string>())
   const presenceChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
   const stickToBottom = useRef(true)
 
@@ -180,10 +189,11 @@ export default function DirectMessagePage() {
   // torn down and recreated every time messages/profile data changes.
   // ---------------------------------------------------------------------
   useEffect(() => {
-    if (!recipientId) { setLoading(false); return }
+    if (!recipientId) return
     let cancelled = false
 
     async function init() {
+      if (!recipientId) return
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/login'); return }
       if (cancelled) return
@@ -202,7 +212,7 @@ export default function DirectMessagePage() {
 
       const ordered = (msgs ?? []).map(normalizeMsg).reverse()
       const firstUnread = ordered.find(m => !m.is_read && m.sender_id === recipientId)
-      unreadDividerIdRef.current = firstUnread?.id ?? null
+      setUnreadDividerId(firstUnread?.id ?? null)
       const { data: sharedRows } = await supabase
         .from('circle_members')
         .select('circle_id, user_id')
@@ -216,15 +226,15 @@ export default function DirectMessagePage() {
         setSharedCircle(null)
       }
 
-      setRecipient(profile as Profile)
+      if(profile)setRecipient(profile as Profile)
+      else {const {data:cards}=await supabase.rpc('profile_card',{target_user:recipientId});if(!cancelled&&cards?.[0])setRecipient({...cards[0],full_name:null,last_seen_at:null})}
       setMessages(ordered)
       setHasMore(ordered.length === PAGE_SIZE)
       setAmIBlocking(!!blockRow)
       setPendingRequest(!!reqRow && reqRow.status === 'pending')
       setLoading(false)
 
-      await supabase.from('messages').update({ is_read: true })
-        .eq('recipient_id', user.id).eq('sender_id', recipientId).eq('is_read', false)
+      await supabase.rpc('mark_conversation_read', { other_user: recipientId })
       await supabase.from('profiles').update({ last_seen_at: new Date().toISOString() }).eq('id', user.id)
     }
     init()
@@ -247,7 +257,7 @@ export default function DirectMessagePage() {
         const msg = normalizeMsg(payload.new)
         if (msg.sender_id !== recipientId) return
         setMessages(prev => (prev.some(m => m.id === msg.id) ? prev : [...prev, msg]))
-        supabase.from('messages').update({ is_read: true }).eq('id', msg.id)
+        supabase.rpc('mark_conversation_read', { other_user: recipientId })
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, payload => {
         const msg = normalizeMsg(payload.new)
@@ -266,9 +276,9 @@ export default function DirectMessagePage() {
   // Presence + typing indicator, shared per conversation pair.
   // ---------------------------------------------------------------------
   useEffect(() => {
-    if (!recipientId || !currentUserId) return
+    if (!recipientId || !currentUserId || !preferencesReady || !preferences.show_presence) return
     const roomKey = `presence-${[currentUserId, recipientId].sort().join('_')}`
-    const channel = supabase.channel(roomKey, { config: { presence: { key: currentUserId } } })
+    const channel = supabase.channel(roomKey, { config: { private: true, presence: { key: currentUserId } } })
 
     channel
       .on('presence', { event: 'sync' }, () => {
@@ -288,17 +298,12 @@ export default function DirectMessagePage() {
       })
 
     presenceChannelRef.current = channel
-    const heartbeat = setInterval(() => {
-      supabase.from('profiles').update({ last_seen_at: new Date().toISOString() }).eq('id', currentUserId)
-    }, 30000)
-
     return () => {
-      clearInterval(heartbeat)
-      supabase.from('profiles').update({ last_seen_at: new Date().toISOString() }).eq('id', currentUserId)
-      supabase.removeChannel(channel)
+      setOnlineOther(false)
+      setTypingOther(false)
       presenceChannelRef.current = null
     }
-  }, [currentUserId, recipientId, supabase])
+  }, [currentUserId, recipientId, supabase, preferencesReady, preferences.show_presence])
 
   function broadcastTyping(typing: boolean) {
     presenceChannelRef.current?.send({ type: 'broadcast', event: 'typing', payload: { user: currentUserId, typing } })
@@ -364,20 +369,24 @@ export default function DirectMessagePage() {
   }, [currentUserId, recipientId, loadingOlder, hasMore, messages, supabase])
 
   async function uploadFile(file: File) {
-    const ext = file.name.split('.').pop()
-    const path = `${currentUserId}/${Date.now()}.${ext}`
-    const { error } = await supabase.storage.from('message-media').upload(path, file)
-    if (error) { showToast(`Upload failed: ${error.message}`); return null }
-    const { data } = supabase.storage.from('message-media').getPublicUrl(path)
-    return { url: data.publicUrl, name: file.name }
+    try {
+      const url = uploadedFiles.current.get(file) ?? (await uploadMedia('message-media', file, percent => showToast(`Uploading ${percent}%`))).url
+      uploadedFiles.current.set(file,url)
+      return { url, name: file.name }
+    } catch (error) { showToast(error instanceof Error ? error.message : 'Upload failed. Retry to resume.'); return null }
   }
 
-  async function insertMessage(payload: Record<string, unknown>, tempId: string): Promise<string | null> {
-    const { data, error } = await supabase.from('messages').insert(payload).select().single()
+  async function insertMessage(payload: Database['public']['Tables']['messages']['Insert'], tempId: string): Promise<string | null> {
+    const requestKey=JSON.stringify(payload)
+    const requestId=messageRequests.current.get(requestKey)??crypto.randomUUID()
+    messageRequests.current.set(requestKey,requestId)
+    let { data, error } = await supabase.from('messages').insert({...payload,id:requestId}).select().single()
+    if(error?.code==='23505'){const existing=await supabase.from('messages').select('*').eq('id',requestId).eq('sender_id',payload.sender_id).single();data=existing.data;error=existing.error}
     if (!error && data) {
+      messageRequests.current.delete(requestKey)
       setMessages(prev => prev.map(m => (m.id === tempId ? normalizeMsg(data) : m)))
       await supabase.from('notifications').insert({
-        user_id: recipientId,
+        user_id: payload.recipient_id,
         actor_id: currentUserId,
         type: 'message',
         entity_id: currentUserId,
@@ -406,7 +415,7 @@ export default function DirectMessagePage() {
       const onErr = () => { cleanup(); resolve(0) }
       audio.addEventListener('loadedmetadata', onLoaded)
       audio.addEventListener('error', onErr)
-      audio.src = url
+      audio.src = mediaUrl(url) ?? ''
     })
   }
 
@@ -454,9 +463,10 @@ export default function DirectMessagePage() {
   }
 
   async function confirmSendMedia() {
-    if (!pendingMedia || !currentUserId || !recipientId) return
+    if (!pendingMedia || !currentUserId || !recipientId || sending) return
+    setSending(true)
     const { file, url: previewUrl, detectedType } = pendingMedia
-    const tempId = `temp-${Date.now()}`
+    const tempId = `temp-${crypto.randomUUID()}`
     const replyToId = replyTo?.id ?? null
     const caption = mediaCaption.trim() || null
 
@@ -466,16 +476,16 @@ export default function DirectMessagePage() {
       view_once: false, viewed_at: null, reply_to: replyToId, is_read: false,
       created_at: new Date().toISOString(), reactions: {}, edited_at: null, deleted_at: null,
     }])
-    setReplyTo(null)
-    setPendingMedia(null); setMediaCaption('')
 
     const result = await uploadFile(file)
-    if (!result) { setMessages(prev => prev.filter(m => m.id !== tempId)); return }
-    await insertMessage({
+    if (!result) { setMessages(prev => prev.filter(m => m.id !== tempId)); setSending(false); return }
+    const saved = await insertMessage({
       sender_id: currentUserId, recipient_id: recipientId, content: caption,
       media_url: result.url, media_type: detectedType, file_name: result.name,
       view_once: false, reply_to: replyToId, is_read: false,
     }, tempId)
+    if (saved) { setReplyTo(null); setPendingMedia(null); setMediaCaption(''); URL.revokeObjectURL(previewUrl) }
+    setSending(false)
   }
 
   async function startRecording() {
@@ -483,7 +493,6 @@ export default function DirectMessagePage() {
       // Captured once, at the moment recording starts, so the same value is
       // used for the optimistic bubble and the real insert below — the insert
       // previously hardcoded reply_to: null, dropping any reply context.
-      const replyToId = replyTo?.id ?? null
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       const mr = new MediaRecorder(stream)
       mrRef.current = mr; chunksRef.current = []
@@ -493,41 +502,10 @@ export default function DirectMessagePage() {
         if (!currentUserId || !recipientId) return
         const blob = new Blob(chunksRef.current, { type: 'audio/webm' })
         const file = new File([blob], `voice_${Date.now()}.webm`, { type: 'audio/webm' })
-        const tempId = `temp-${Date.now()}`
-        const previewUrl = URL.createObjectURL(blob)
-        // Read the length off the local blob right away instead of waiting
-        // for someone to tap play.
-        const duration = await getAudioDuration(previewUrl)
-        setAudioDurations(prev => ({ ...prev, [tempId]: duration }))
-        setMessages(prev => [...prev, {
-          id: tempId, sender_id: currentUserId, recipient_id: recipientId,
-          content: null, media_url: previewUrl, media_type: 'audio', file_name: 'Voice message',
-          view_once: false, viewed_at: null, reply_to: replyToId, is_read: false,
-          created_at: new Date().toISOString(), reactions: {}, edited_at: null, deleted_at: null,
-        }])
-        setReplyTo(null)
-        const result = await uploadFile(file)
-        if (!result) {
-          setMessages(prev => prev.filter(m => m.id !== tempId))
-          setAudioDurations(prev => {
-            const next = { ...prev }
-            delete next[tempId]
-            return next
-          })
-          return
-        }
-        const realId = await insertMessage({
-          sender_id: currentUserId, recipient_id: recipientId, content: null,
-          media_url: result.url, media_type: 'audio', file_name: 'Voice message',
-          view_once: false, reply_to: replyToId, is_read: false,
-        }, tempId)
-        if (realId) {
-          setAudioDurations(prev => {
-            const { [tempId]: d, ...rest } = prev
-            return d !== undefined ? { ...rest, [realId]: d } : prev
-          })
-        }
+        setPendingMedia({file,url:URL.createObjectURL(blob),detectedType:'audio',displayType:'file'})
+        setMediaCaption('')
       }
+
       mr.start(); setIsRecording(true)
       timerRef.current = setInterval(() => setRecordDuration(d => d + 1), 1000)
     } catch { showToast('Microphone access denied') }
@@ -545,14 +523,14 @@ export default function DirectMessagePage() {
     setIsRecording(false); setRecordDuration(0)
   }
 
-  async function sendText() {
-    if (!currentUserId || !recipientId) return
+  async function handleSendText() {
+    if (!currentUserId || !recipientId || sending) return
     if (editingId) { await saveEdit(); return }
     const text = newMessage.trim()
     if (!text) return
     setSending(true)
     broadcastTyping(false)
-    const tempId = `temp-${Date.now()}`
+    const tempId = `temp-${crypto.randomUUID()}`
     const optimistic: ChatMessage = {
       id: tempId, sender_id: currentUserId, recipient_id: recipientId,
       content: text, media_url: null, media_type: null, file_name: null,
@@ -560,19 +538,19 @@ export default function DirectMessagePage() {
       created_at: new Date().toISOString(), reactions: {}, edited_at: null, deleted_at: null,
     }
     setMessages(prev => [...prev, optimistic])
-    setNewMessage(''); setReplyTo(null)
-    await insertMessage({
+    const saved = await insertMessage({
       sender_id: currentUserId, recipient_id: recipientId, content: text,
       media_url: null, media_type: null, file_name: null,
       view_once: false, reply_to: optimistic.reply_to, is_read: false,
     }, tempId)
+    if (saved) { setNewMessage(''); setReplyTo(null) }
     setSending(false)
   }
 
   async function sendGif(url: string) {
     if (!currentUserId || !recipientId) return
     setShowGifPicker(false)
-    const tempId = `temp-${Date.now()}`
+    const tempId = `temp-${crypto.randomUUID()}`
     const replyToId = replyTo?.id ?? null
     setMessages(prev => [...prev, {
       id: tempId, sender_id: currentUserId, recipient_id: recipientId,
@@ -596,35 +574,34 @@ export default function DirectMessagePage() {
   }
 
   async function saveEdit() {
-    if (!editingId) return
-    const text = newMessage.trim()
-    if (!text) return
-    const editedAt = new Date().toISOString()
-    setMessages(prev => prev.map(m => (m.id === editingId ? { ...m, content: text, edited_at: editedAt } : m)))
+    if (!editingId || !newMessage.trim()) return
+    const text = newMessage.trim(), editedAt = new Date().toISOString()
+    const { error } = await supabase.from('messages').update({ content: text, edited_at: editedAt }).eq('id', editingId)
+    if (error) { showToast('Edit failed. Your draft is retained.'); return }
+    setMessages(prev => prev.map(m => m.id === editingId ? { ...m, content: text, edited_at: editedAt } : m))
     setEditingId(null); setNewMessage('')
-    await supabase.from('messages').update({ content: text, edited_at: editedAt }).eq('id', editingId)
   }
-
   async function unsendMessage(msg: ChatMessage) {
     const deletedAt = new Date().toISOString()
-    setMessages(prev => prev.map(m => (m.id === msg.id ? { ...m, deleted_at: deletedAt } : m)))
-    await supabase.from('messages').update({ deleted_at: deletedAt }).eq('id', msg.id)
+    const { error } = await supabase.from('messages').update({ deleted_at: deletedAt }).eq('id', msg.id)
+    if (error) { showToast('Could not remove message. Please retry.'); return }
+    setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, content: 'Message removed', media_url: null, deleted_at: deletedAt } : m))
   }
-
   async function reactToMessage(msg: ChatMessage, emoji: string) {
     if (!currentUserId) return
     const reactions = { ...msg.reactions }
     if (reactions[currentUserId] === emoji) delete reactions[currentUserId]
     else reactions[currentUserId] = emoji
-    setMessages(prev => prev.map(m => (m.id === msg.id ? { ...m, reactions } : m)))
-    await supabase.from('messages').update({ reactions }).eq('id', msg.id)
+    const { error } = await supabase.from('messages').update({ reactions }).eq('id', msg.id)
+    if (error) { showToast('Reaction failed. Please retry.'); return }
+    setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, reactions } : m))
   }
 
   function toggleAudio(msgId: string, url: string) {
     if (playingAudio === msgId) { audioRefs.current[msgId]?.pause(); setPlayingAudio(null); return }
     if (playingAudio && audioRefs.current[playingAudio]) audioRefs.current[playingAudio].pause()
     if (!audioRefs.current[msgId]) {
-      const audio = new Audio(url)
+      const audio = new Audio(mediaUrl(url))
       audio.onloadedmetadata = () => setAudioDurations(prev => ({ ...prev, [msgId]: audio.duration }))
       audio.ontimeupdate = () => setAudioProgress(prev => ({ ...prev, [msgId]: audio.currentTime }))
       audio.onended = () => setPlayingAudio(null)
@@ -718,7 +695,7 @@ export default function DirectMessagePage() {
             <div style={{ position: 'relative', flexShrink: 0 }}>
               <div style={{ width: 36, height: 36, borderRadius: '50%', overflow: 'hidden', background: 'var(--grad-brand)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 700, fontSize: 13 }}>
                 {recipient.avatar_url
-                  ? <img src={recipient.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  ? <img src={mediaUrl(recipient.avatar_url)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   : recipient.username?.[0]?.toUpperCase()}
               </div>
               {onlineOther && (
@@ -765,8 +742,8 @@ export default function DirectMessagePage() {
             <strong>@{recipient?.username}</strong> wants to start a conversation. Only accept if you welcome it; you can block or report at any time.
           </p>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={acceptRequest} className="tap-sm" style={{ flex: 1, padding: '8px', borderRadius: 10, border: 'none', background: 'var(--grad-brand)', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Say hello</button>
-            <button onClick={declineRequest} className="tap-sm" style={{ flex: 1, padding: '8px', borderRadius: 10, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Not now</button>
+            <button onClick={acceptRequest} className="tap-sm" style={{ flex: 1, padding: '8px', borderRadius: 10, border: 'none', background: 'var(--grad-brand)', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Accept request</button>
+            <button onClick={declineRequest} className="tap-sm" style={{ flex: 1, padding: '8px', borderRadius: 10, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Decline</button>
           </div>
         </div>
       )}
@@ -791,7 +768,7 @@ export default function DirectMessagePage() {
         {!loading && messages.length === 0 && (
           <div style={{ textAlign: 'center', paddingTop: 64 }}>
             <p style={{ fontWeight: 700, fontSize: 17 }}>A quiet little corner for two</p>
-            <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 4 }}>Say hello, continue a Circle thought, or send a little encouragement.</p>
+            <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 4 }}>Accept request, continue a Circle thought, or send a little encouragement.</p>
           </div>
         )}
         {!pendingRequest && !editingId && messages.length < 2 && (
@@ -816,7 +793,7 @@ export default function DirectMessagePage() {
             new Date(next.created_at).getTime() - new Date(msg.created_at).getTime() < GROUP_WINDOW_MS
 
           const showDateDivider = !prev || !isSameDay(prev.created_at, msg.created_at)
-          const showUnreadDivider = unreadDividerIdRef.current === msg.id
+          const showUnreadDivider = unreadDividerId === msg.id
 
           return (
           <div key={msg.id}>
@@ -862,7 +839,7 @@ export default function DirectMessagePage() {
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, marginBottom: 6 }}>
             <div style={{ width: 26, height: 26, borderRadius: '50%', overflow: 'hidden', background: 'var(--grad-brand)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 700, fontSize: 10 }}>
               {recipient?.avatar_url
-                ? <img src={recipient.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ? <img src={mediaUrl(recipient.avatar_url)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 : recipient?.username?.[0]?.toUpperCase()}
             </div>
             <div className="animate-pop" style={{ display: 'flex', gap: 4, alignItems: 'center', background: 'var(--surface-2)', borderRadius: '18px 18px 18px 5px', padding: '11px 14px' }}>
@@ -943,14 +920,14 @@ export default function DirectMessagePage() {
             {showAttachTray && (
               <div style={{ display: 'flex', gap: 18, padding: '4px 10px 10px', overflowX: 'auto' }}>
                 {[
-                  { icon: ImagePlus, label: 'Photo', onClick: () => { setShowAttachTray(false); fileRef.current?.click() } },
-                  { icon: Video, label: 'Video', onClick: () => { setShowAttachTray(false); videoRef.current?.click() } },
-                  { icon: Sticker, label: 'GIF', onClick: () => { setShowAttachTray(false); setShowGifPicker(true) } },
-                  { icon: FileIcon, label: 'File', onClick: () => { setShowAttachTray(false); fileDocRef.current?.click() } },
-                ].map(({ icon: Icon, label, onClick }) => (
+                  { icon: ImagePlus, label: 'Photo' },
+                  { icon: Video, label: 'Video' },
+                  { icon: Sticker, label: 'GIF' },
+                  { icon: FileIcon, label: 'File' },
+                ].map(({ icon: Icon, label }) => (
                   <button
                     key={label}
-                    onClick={onClick}
+                    onClick={() => {setShowAttachTray(false);if(label==='Photo')fileRef.current?.click();else if(label==='Video')videoRef.current?.click();else if(label==='File')fileDocRef.current?.click();else setShowGifPicker(true)}}
                     className="tap-sm"
                     style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, border: 'none', background: 'none', cursor: 'pointer', flexShrink: 0 }}
                   >
@@ -986,7 +963,7 @@ export default function DirectMessagePage() {
                   value={newMessage}
                   onChange={e => handleTypingInput(e.target.value)}
                   onFocus={() => setShowAttachTray(false)}
-                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendText() } }}
+                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendText() } }}
                   placeholder={editingId ? 'Edit message…' : messages.length === 0 ? 'Say something kind…' : 'Continue the thought…'}
                   style={{ flex: 1, minWidth: 0, background: 'none', border: 'none', outline: 'none', fontSize: 14.5, color: 'var(--text-primary)', fontFamily: 'inherit' }}
                 />
@@ -994,7 +971,7 @@ export default function DirectMessagePage() {
 
               {newMessage.trim() ? (
                 <button
-                  onClick={sendText}
+                  onClick={() => void handleSendText()}
                   disabled={sending}
                   className="tap-sm"
                   style={{ width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'var(--grad-brand)', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, opacity: sending ? 0.6 : 1 }}
@@ -1051,7 +1028,7 @@ export default function DirectMessagePage() {
               <X size={17} />
             </button>
             <span style={{ color: '#fff', fontSize: 13, fontWeight: 700 }}>
-              {pendingMedia.displayType === 'video' ? 'Send video' : pendingMedia.displayType === 'file' ? 'Send file' : 'Send photo'}
+              {pendingMedia.detectedType === 'audio' ? 'Send voice message' : pendingMedia.displayType === 'video' ? 'Send video' : pendingMedia.displayType === 'file' ? 'Send file' : 'Send photo'}
             </span>
             {pendingMedia.displayType !== 'file' ? (
               <button onClick={() => setEditingMedia(true)} aria-label={`Edit ${pendingMedia.displayType}`} className="tap-sm" style={{ width: 36, height: 36, borderRadius: 10, border: 'none', background: 'rgba(255,255,255,0.12)', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -1061,8 +1038,8 @@ export default function DirectMessagePage() {
           </div>
 
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', padding: '0 14px', minHeight: 0 }}>
-            {pendingMedia.displayType === 'video' ? (
-              <video src={pendingMedia.url} controls style={{ maxWidth: '100%', maxHeight: '100%', borderRadius: 12 }} />
+            {pendingMedia.detectedType === 'audio' ? (<audio controls preload="metadata" src={pendingMedia.url}/>) : pendingMedia.displayType === 'video' ? (
+              <video src={mediaUrl(pendingMedia.url)} controls style={{ maxWidth: '100%', maxHeight: '100%', borderRadius: 12 }} />
             ) : pendingMedia.displayType === 'file' ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 20px', borderRadius: 14, background: 'rgba(255,255,255,0.08)', maxWidth: '100%' }}>
                 <div style={{ width: 44, height: 44, borderRadius: 12, flexShrink: 0, background: 'rgba(255,255,255,0.14)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -1073,7 +1050,7 @@ export default function DirectMessagePage() {
                 </p>
               </div>
             ) : (
-              <img src={pendingMedia.url} alt="" style={{ maxWidth: '100%', maxHeight: '100%', borderRadius: 12, objectFit: 'contain' }} />
+              <img src={mediaUrl(pendingMedia.url)} alt="" style={{ maxWidth: '100%', maxHeight: '100%', borderRadius: 12, objectFit: 'contain' }} />
             )}
           </div>
 

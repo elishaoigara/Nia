@@ -1,5 +1,6 @@
 'use client'
 
+import { mediaUrl } from '@/lib/media-url'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useParams, useRouter } from 'next/navigation'
@@ -247,6 +248,7 @@ export default function ProfilePage() {
   const supabase = createClient()
 
   const [currentUserId,  setCurrentUserId]  = useState<string | null>(null)
+  const [privateCard, setPrivateCard] = useState<{ id: string; username: string } | null>(null)
   const [profile,        setProfile]        = useState<Profile | null>(null)
   const [posts,          setPosts]          = useState<Post[]>([])
   const [replies,        setReplies]        = useState<ProfileReply[]>([])
@@ -315,7 +317,8 @@ export default function ProfilePage() {
       supabase.from('follows').select('follower_id', { count: 'exact', head: true }).eq('following_id', id),
       supabase.from('follows').select('following_id', { count: 'exact', head: true }).eq('follower_id', id),
       supabase.from('posts').select('id', { count: 'exact', head: true }).eq('user_id', id),
-    ]).then(([profileRes, followersRes, followingRes, postsRes]) => {
+    ]).then(async ([profileRes, followersRes, followingRes, postsRes]) => {
+      if (!profileRes.data) { const { data } = await supabase.rpc('profile_card', { target_user: id }); setPrivateCard(data?.[0] ?? null) }
       setProfile(profileRes.data as Profile | null)
       setFollowerCount(followersRes.count ?? 0)
       setFollowingCount(followingRes.count ?? 0)
@@ -436,6 +439,8 @@ export default function ProfilePage() {
       <Loader2 size={26} className="animate-spin" style={{ color: 'var(--nia-violet)' }} />
     </div>
   )
+
+  if (!profile && privateCard && currentUserId) return <main className="mx-auto max-w-xl p-6 space-y-4"><h1>@{privateCard.username}</h1><p>This account is private. Send a follow request to see their profile and posts.</p><FollowButton currentUserId={currentUserId} targetUserId={privateCard.id} initialIsFollowing={false} /></main>
 
   if (!profile) return (
     <div style={{ padding: 32, textAlign: 'center', color: 'var(--text-tertiary)' }}>User not found.</div>
@@ -558,7 +563,7 @@ export default function ProfilePage() {
               border: hasActiveStory ? '3px solid var(--surface-0)' : 'none',
             }}>
               {profile.avatar_url
-                ? <img src={profile.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ? <img src={mediaUrl(profile.avatar_url)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 : initials
               }
             </div>
@@ -642,6 +647,8 @@ export default function ProfilePage() {
         {safetyNotice && <p role="status" style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '0 0 12px' }}>{safetyNotice}</p>}
 
         {/* Bio */}
+        {profile.open_to && <p><strong>Open to:</strong> {profile.open_to}</p>}
+        {profile.ask_me_about && <p><strong>Ask me about:</strong> {profile.ask_me_about}</p>}
         {profile.bio && (
           <p style={{
             fontSize: 14, lineHeight: 1.65, color: 'var(--text-primary)',
@@ -930,8 +937,8 @@ export default function ProfilePage() {
                     {reply.media_url && (
                       <div style={{ marginTop: 8, borderRadius: 12, overflow: 'hidden', maxWidth: 280, border: '1px solid var(--divider)' }}>
                         {reply.media_type === 'video'
-                          ? <video src={reply.media_url} controls style={{ width: '100%', display: 'block', maxHeight: 200, objectFit: 'cover' }} />
-                          : <img src={reply.media_url} alt="" style={{ width: '100%', display: 'block', maxHeight: 200, objectFit: 'cover' }} />
+                          ? <video src={mediaUrl(reply.media_url)} controls style={{ width: '100%', display: 'block', maxHeight: 200, objectFit: 'cover' }} />
+                          : <img src={mediaUrl(reply.media_url)} alt="" style={{ width: '100%', display: 'block', maxHeight: 200, objectFit: 'cover' }} />
                         }
                       </div>
                     )}

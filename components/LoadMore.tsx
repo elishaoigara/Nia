@@ -1,86 +1,13 @@
 'use client'
-
 import { useState } from 'react'
-import { Loader2 } from 'lucide-react'
 import PostCard from '@/components/PostCard'
-import { isRecord } from '@/lib/validation'
 import type { Post } from '@/types/domain'
-
-interface LoadMoreProps {
-  currentPage:   number
-  currentTab:    string
-  currentUserId: string
-}
-
-export default function LoadMore({ currentPage, currentTab, currentUserId }: LoadMoreProps) {
-  const [posts,   setPosts]   = useState<Post[]>([])
-  const [page,    setPage]    = useState(currentPage)
-  const [hasMore, setHasMore] = useState(true)
-  const [loading, setLoading] = useState(false)
-  const [error,   setError]   = useState<string | null>(null)
-
-  async function loadMore() {
-    if (loading) return
-    setLoading(true); setError(null)
-    const nextPage = page + 1
-    try {
-      const res  = await fetch(`/api/feed?tab=${currentTab}&page=${nextPage}`)
-      if (!res.ok) throw new Error(`${res.status}`)
-      const data: unknown = await res.json()
-      if (!isRecord(data) || !Array.isArray(data.posts)) {
-        throw new TypeError('Invalid feed response')
-      }
-      const incoming = data.posts as Post[]
-      if (incoming.length > 0) {
-        setPosts(prev => [...prev, ...incoming])
-        setPage(nextPage)
-      }
-      setHasMore(typeof data.hasMore === 'boolean' ? data.hasMore : incoming.length > 0)
-    } catch {
-      setError('Failed to load more posts.')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  return (
-    <>
-      {/* Appended posts */}
-      {posts.map(post => (
-        <PostCard key={post.id} post={post} currentUserId={currentUserId} />
-      ))}
-
-      {error && (
-        <div style={{ textAlign: 'center', padding: '16px', fontSize: 13, color: 'var(--text-secondary)' }}>
-          <span style={{ color: '#f43f5e' }}>⚠ {error} </span>
-          <button onClick={loadMore} style={{ color: 'var(--nia-violet)', fontWeight: 700, background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>
-            Retry
-          </button>
-        </div>
-      )}
-
-      {hasMore && !error && (
-        <div style={{ display: 'flex', justifyContent: 'center', padding: '16px 0 32px' }}>
-          <button
-            onClick={loadMore}
-            disabled={loading}
-            className="tap-sm"
-            style={{
-              display: 'flex', alignItems: 'center', gap: 8,
-              padding: '10px 24px',
-              borderRadius: 12,
-              border: 'none',
-              background: 'var(--surface-2)',
-              color: 'var(--text-secondary)',
-              fontSize: 14, fontWeight: 600,
-              cursor: 'pointer',
-              opacity: loading ? 0.6 : 1,
-            }}
-          >
-            {loading ? <><Loader2 size={15} className="animate-spin" /> Loading…</> : 'Load more'}
-          </button>
-        </div>
-      )}
-    </>
-  )
+export default function LoadMore({initialCursor,currentTab,currentUserId,initialIds=[]}:{initialCursor:string|null;currentTab:string;currentUserId:string;initialIds?:string[]}){
+ const [posts,setPosts]=useState<Post[]>([]),[cursor,setCursor]=useState(initialCursor),[more,setMore]=useState(true),[busy,setBusy]=useState(false),[error,setError]=useState('')
+ async function load(){if(busy)return;setBusy(true);setError('');try{
+  const r=await fetch(`/api/feed?tab=${encodeURIComponent(currentTab)}&cursor=${encodeURIComponent(cursor??'')}`);if(!r.ok)throw Error()
+  const data=await r.json();if(!Array.isArray(data.posts))throw Error()
+  setPosts(old=>{const ids=new Set([...initialIds,...old.map(p=>p.id)]);return [...old,...data.posts.filter((p:Post)=>!ids.has(p.id))]});setCursor(data.cursor);setMore(data.hasMore)
+ }catch{setError('Could not load posts. Retry.')}finally{setBusy(false)}}
+ return <>{posts.map(p=><PostCard key={p.id} post={p} currentUserId={currentUserId}/>)}{error&&<p role="alert">{error}</p>}{more&&<button className="btn-ghost mx-auto my-4 block" disabled={busy} onClick={load}>{busy?'Loading…':error?'Retry':'Load more'}</button>}</>
 }

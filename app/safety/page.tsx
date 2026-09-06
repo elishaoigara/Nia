@@ -1,5 +1,7 @@
 'use client'
+import ModerationAppeals from '@/components/ModerationAppeals'
 
+import { mediaUrl } from '@/lib/media-url'
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, Loader2, ShieldCheck, UserX, VolumeX } from 'lucide-react'
@@ -52,7 +54,7 @@ export default function SafetyPage() {
         .select('id, username, full_name, avatar_url')
         .in('id', ids)
       if (profileError) setError('Some account details could not be loaded.')
-      setProfiles((data ?? []) as SafetyProfile[])
+      setProfiles(ids.map(id => (data ?? []).find(p => p.id === id) ?? { id, username: 'Restricted account', full_name: null, avatar_url: null }))
     } else {
       setProfiles([])
     }
@@ -69,7 +71,7 @@ export default function SafetyPage() {
     setError('')
     const table = kind === 'mute' ? 'mutes' : 'blocks'
     const targetColumn = kind === 'mute' ? 'muted_id' : 'blocked_id'
-    const { error: deleteError } = await supabase.from(table).delete().eq(targetColumn, profileId)
+    const { error: deleteError } = await supabase.from(table).delete().filter(targetColumn, 'eq', profileId)
     if (deleteError) {
       setError(`This account could not be un${kind}d. Please try again.`)
     } else if (kind === 'mute') {
@@ -127,7 +129,7 @@ export default function SafetyPage() {
                 return (
                   <div key={id} className="settings-row">
                     <div className="settings-account-avatar">
-                      {profile?.avatar_url ? <img src={profile.avatar_url} alt="" /> : (profile?.username?.[0] ?? '?').toUpperCase()}
+                      {profile?.avatar_url ? <img src={mediaUrl(profile.avatar_url)} alt="" /> : (profile?.username?.[0] ?? '?').toUpperCase()}
                     </div>
                     <div className="settings-row-copy">
                       <p>{profile?.full_name || `@${profile?.username ?? 'account'}`}</p>
@@ -143,6 +145,6 @@ export default function SafetyPage() {
           )}
         </section>
       ))}
-    </main>
+    <ModerationAppeals/></main>
   )
 }

@@ -41,6 +41,7 @@ export async function exportEditedVideo(
       input,
       output,
       tracks: 'primary',
+      video: { width: Math.min(720, videoTrack.displayWidth), bitrate: 1_200_000 },
       trim: Object.keys(trim).length ? trim : undefined,
       audio: settings.mute ? { discard: true } : undefined,
       showWarnings: false,

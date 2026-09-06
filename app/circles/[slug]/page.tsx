@@ -1,3 +1,4 @@
+import { mediaUrl } from '@/lib/media-url'
 import { createClient } from '@/lib/supabase/server'
 import { redirect, notFound } from 'next/navigation'
 import PostCard from '@/components/PostCard'
@@ -7,7 +8,7 @@ import CircleRequestsPanel from '@/components/CircleRequestsPanel'
 import CirclePrompt from '@/components/CirclePrompt'
 import ReportCircleButton from '@/components/ReportCircleButton'
 import CircleResources from '@/components/CircleResources'
-import CircleResponses from '@/components/CircleResponses'
+import CircleCommunity from '@/components/CircleCommunity'
 import { Users, ArrowLeft, Lock, Globe, School, Calendar } from 'lucide-react'
 import Link from 'next/link'
 import type { Circle, CircleJoinRequest, Post } from '@/types/domain'
@@ -41,13 +42,17 @@ export default async function CirclePage({ params, searchParams }: Props) {
   if (!circleRow) notFound()
   const circle = circleRow as unknown as Circle
 
-  const { data: posts } = await supabase.from('posts')
+  let postQuery = supabase.from('posts')
     .select('*, profiles:user_id (id, username, avatar_url, university), likes (user_id), comments (id)')
     .eq('circle_id', circle.id)
-    .order('created_at', { ascending: false })
+    .order('created_at', { ascending: false }).order('id',{ascending:false})
+  if(filterMode!=='all')postQuery=postQuery.eq('contribution_mode',filterMode!)
+  const {data:posts,error:postsError}=await postQuery.limit(50)
+  if(postsError)throw postsError
 
   const members = circle.circle_members ?? []
-  const isMember = members.some(member => member.user_id === user.id)
+  const isMember = circle.created_by === user.id || members.some(member => member.user_id === user.id)
+  const { data: isManager } = await supabase.rpc('circle_manager', { target_circle: circle.id })
 
   let requestStatus: 'pending' | null = null
   if (circle.is_private && !isMember) {
@@ -64,7 +69,7 @@ export default async function CirclePage({ params, searchParams }: Props) {
   // matches the "members read circle join requests" RLS policy, so this
   // query just returns empty for non-members rather than erroring.
   let pendingRequests: CircleJoinRequest[] = []
-  if (circle.is_private && isMember) {
+  if (circle.is_private && isManager) {
     const { data } = await supabase
       .from('circle_join_requests')
       .select('id, user_id, profiles:user_id (id, username, avatar_url, university)')
@@ -74,7 +79,6 @@ export default async function CirclePage({ params, searchParams }: Props) {
   }
 
   const sortedPosts = ((posts ?? []) as unknown as Post[])
-    .filter(post => filterMode === 'all' || post.contribution_mode === filterMode)
     .sort((a, b) => {
       if (sortMode === 'top') return (b.likes?.length ?? 0) - (a.likes?.length ?? 0)
       return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
@@ -154,7 +158,7 @@ export default async function CirclePage({ params, searchParams }: Props) {
                     }}
                   >
                     {p?.avatar_url
-                      ? <img src={p.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ? <img src={mediaUrl(p.avatar_url)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                       : (p?.username?.[0]?.toUpperCase() ?? '?')}
                   </div>
                 )
@@ -198,7 +202,7 @@ export default async function CirclePage({ params, searchParams }: Props) {
       )}
 
       {isMember && <CircleResources circleId={circle.id} userId={user.id} isOwner={circle.created_by === user.id} />}
-      {isMember && <CircleResponses circleId={circle.id} userId={user.id} />}
+      {isMember && <CircleCommunity circleId={circle.id} userId={user.id} ownerId={circle.created_by ?? ''} welcome={circle.welcome} rules={circle.rules} />}
 
       {/* Post creator — only for members */}
       {isMember && <CreatePost userId={user.id} circleId={circle.id} />}

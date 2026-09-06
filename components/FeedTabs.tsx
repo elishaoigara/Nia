@@ -5,7 +5,7 @@ interface FeedTabsProps {
 }
 
 const TABS = [
-  { key: 'africa',    label: 'For You'    },
+  { key: 'africa',    label: 'Latest'    },
   { key: 'following', label: 'Following'  },
   { key: 'local',     label: 'Local'      },
 ]

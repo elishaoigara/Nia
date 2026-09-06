@@ -15,9 +15,8 @@ export function useUnreadCounts(userId: string | null) {
       return
     }
 
-    const [{ count: messages }, { count: notifications }] = await Promise.all([
-      supabase.from('messages').select('*', { count: 'exact', head: true })
-        .eq('recipient_id', userId).eq('is_read', false),
+    const [{ data: messages }, { count: notifications }] = await Promise.all([
+      supabase.rpc('unread_message_count'),
       supabase.from('notifications').select('*', { count: 'exact', head: true })
         .eq('user_id', userId).eq('is_read', false),
     ])
@@ -29,6 +28,7 @@ export function useUnreadCounts(userId: string | null) {
   useEffect(() => {
     if (!userId) return
     let cancelled = false
+    const interval = window.setInterval(() => { if (!cancelled) void refresh() }, 30000)
     const timer = window.setTimeout(() => {
       if (!cancelled) void refresh()
     }, 0)
@@ -44,6 +44,7 @@ export function useUnreadCounts(userId: string | null) {
 
     return () => {
       cancelled = true
+      window.clearInterval(interval)
       window.clearTimeout(timer)
       void supabase.removeChannel(channel)
     }

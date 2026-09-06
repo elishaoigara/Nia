@@ -1,5 +1,7 @@
 'use client'
 
+import { usePreferences } from '@/components/PreferencesProvider'
+import { mediaUrl } from '@/lib/media-url'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Heart, MessageCircle, Share2, Volume2, VolumeX, Play,
@@ -309,7 +311,7 @@ function CommentSheet({
                     color: 'white', fontWeight: 700, fontSize: 11,
                   }}>
                     {c.profiles?.avatar_url
-                      ? <img src={c.profiles.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />
+                      ? <img src={mediaUrl(c.profiles.avatar_url)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />
                       : c.profiles?.username?.[0]?.toUpperCase()
                     }
                   </div>
@@ -340,8 +342,8 @@ function CommentSheet({
                   {c.media_url && (
                     <div style={{ marginTop: 6 }}>
                       {c.media_type === 'video'
-                        ? <video src={c.media_url} controls style={{ borderRadius: 12, maxHeight: 140, border: '1px solid rgba(255,255,255,0.1)' }} />
-                        : <img src={c.media_url} alt="" style={{ borderRadius: 12, maxHeight: 140, objectFit: 'cover', border: '1px solid rgba(255,255,255,0.1)' }} />
+                        ? <video src={mediaUrl(c.media_url)} controls style={{ borderRadius: 12, maxHeight: 140, border: '1px solid rgba(255,255,255,0.1)' }} />
+                        : <img src={mediaUrl(c.media_url)} alt="" style={{ borderRadius: 12, maxHeight: 140, objectFit: 'cover', border: '1px solid rgba(255,255,255,0.1)' }} />
                       }
                     </div>
                   )}
@@ -371,8 +373,8 @@ function CommentSheet({
           {mediaPreview && (
             <div style={{ position: 'relative', display: 'inline-block', marginLeft: 4 }}>
               {mediaPreview.type === 'video'
-                ? <video src={mediaPreview.url} style={{ height: 64, borderRadius: 10, objectFit: 'cover' }} muted />
-                : <img src={mediaPreview.url} alt="" style={{ height: 64, borderRadius: 10, objectFit: 'cover' }} />
+                ? <video src={mediaUrl(mediaPreview.url)} style={{ height: 64, borderRadius: 10, objectFit: 'cover' }} muted />
+                : <img src={mediaUrl(mediaPreview.url)} alt="" style={{ height: 64, borderRadius: 10, objectFit: 'cover' }} />
               }
               <button
                 onClick={() => setMediaPreview(null)}
@@ -964,7 +966,7 @@ function LongFlicksGrid({ videos, onOpen, savedIds, onToggleSave, watchProgress 
 
 // Mounts a real <video> element only once the card scrolls near the viewport, and
 // keeps it mounted after that. Without this, a grid of 20-30 cards each carrying a
-// live <video preload="metadata"> tag overloads mid/low-end Android GPUs — the
+// live <video preload="none"> tag overloads mid/low-end Android GPUs — the
 // browser can't composite/decode them all at once, which shows up as torn,
 // ghosted, duplicated-looking frames in screenshots and on-device.
 function useInView<T extends HTMLElement>(rootMargin = '600px 0px') {
@@ -1013,7 +1015,7 @@ function LongFlickGridCard({ video: v, onOpen, saved = false, onToggleSave, prog
           // gates when this card's contents mount at all, so a second independent
           // lazy-load timer only adds another source of layout-shift-on-scroll.
           <img
-            src={v.thumbnail_url}
+            src={mediaUrl(v.thumbnail_url)}
             alt=""
             decoding="async"
             style={{ width: '100%', height: '100%', objectFit: 'cover' }}
@@ -1022,8 +1024,8 @@ function LongFlickGridCard({ video: v, onOpen, saved = false, onToggleSave, prog
           // No poster available — only mount a real <video> once this card is
           // actually near the viewport, so we're never decoding 20+ videos at once.
           <video
-            src={v.media_url}
-            preload="metadata"
+            src={mediaUrl(v.media_url)}
+            preload="none"
             style={{ width: '100%', height: '100%', objectFit: 'cover' }}
             muted
           />
@@ -1085,7 +1087,7 @@ function LongFlickGridCard({ video: v, onOpen, saved = false, onToggleSave, prog
           color: 'white', fontWeight: 700, fontSize: 10,
         }}>
           {profile?.avatar_url
-            ? <img src={profile.avatar_url} alt="" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            ? <img src={mediaUrl(profile.avatar_url)} alt="" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             : profile?.username?.[0]?.toUpperCase() ?? '?'
           }
         </div>
@@ -1415,8 +1417,8 @@ function LongFlickPlayer({
 
       {/* Player */}
       <video
-        src={video.media_url}
-        poster={video.thumbnail_url ?? undefined}
+        src={mediaUrl(video.media_url)}
+        poster={mediaUrl(video.thumbnail_url ?? undefined)}
         controls autoPlay playsInline
         onTimeUpdate={event => {
           const player = event.currentTarget
@@ -1439,7 +1441,7 @@ function LongFlickPlayer({
               color: 'white', fontWeight: 700, fontSize: 14,
             }}>
               {profile?.avatar_url
-                ? <img src={profile.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ? <img src={mediaUrl(profile.avatar_url)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 : profile?.username?.[0]?.toUpperCase() ?? '?'
               }
             </div>
@@ -1498,6 +1500,7 @@ function FlickItem({
   onToggleSave: () => void
   isFollowing: boolean
 }) {
+  const { preferences } = usePreferences()
   const videoRef = useRef<HTMLVideoElement>(null)
   const viewTracked = useRef(false)
   const lastTapRef = useRef(0)
@@ -1547,14 +1550,14 @@ function FlickItem({
     loadStartedAtRef.current = null
     timeoutTrackedRef.current = false
     retryCountRef.current = 0
-    if (isActive) {
+    if (isActive && preferences.autoplay && !preferences.data_saver) {
       v.currentTime = 0
       void v.play().catch(() => { /* autoplay may be blocked; the tap overlay remains available */ })
     } else {
       v.pause()
       v.currentTime = 0
     }
-  }, [isActive, shouldMount, video.id])
+  }, [isActive, shouldMount, video.id, preferences.autoplay, preferences.data_saver])
 
   // Never leave a member with an endless spinner when a media URL is slow,
   // unavailable, or incompatible with the browser. The retry action reuses the
@@ -1690,7 +1693,7 @@ function FlickItem({
 
   // Only preload aggressively for the active video, or for neighbors when we're
   // not on a constrained connection — keeps data usage sane on 3G.
-  const preload = isActive ? 'auto' : slowConnection ? 'none' : 'metadata'
+  const preload = preferences.data_saver || !preferences.autoplay ? 'none' : isActive ? 'auto' : slowConnection ? 'none' : 'metadata'
 
   return (
     <div
@@ -1706,8 +1709,8 @@ function FlickItem({
       {shouldMount ? (
         <video
           ref={videoRef}
-          src={video.media_url}
-          poster={video.thumbnail_url ?? undefined}
+          src={mediaUrl(video.media_url)}
+          poster={mediaUrl(video.thumbnail_url ?? undefined)}
           muted={muted}
           aria-label={`Flick by @${profile?.username ?? 'unknown'}`}
           style={{
@@ -1859,7 +1862,7 @@ function FlickItem({
             color: 'white', fontWeight: 700, fontSize: 14,
           }}>
             {profile?.avatar_url
-              ? <img src={profile.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ? <img src={mediaUrl(profile.avatar_url)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               : profile?.username?.[0]?.toUpperCase() ?? '?'
             }
           </div>

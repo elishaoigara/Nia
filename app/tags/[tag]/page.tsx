@@ -1,3 +1,4 @@
+import type { Post } from '@/types/domain'
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import PostCard from '@/components/PostCard'
@@ -64,7 +65,7 @@ export default async function TagPage({
       )}
 
       {posts?.map(post => (
-        <PostCard key={post.id} post={post} currentUserId={user.id} />
+        <PostCard key={post.id} post={post as unknown as Post} currentUserId={user.id} />
       ))}
     </main>
   )

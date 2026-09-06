@@ -2096,3 +2096,14 @@ body {
   .circle-prompt-copy > div:first-child { width: 32px; height: 32px; flex-basis: 32px; }
   .circle-prompt-actions { gap: 8px; }
 }
+
+/* Shared accessibility and narrow-screen controls. */
+:root { --text-tertiary: #625F58; }
+.dark { --text-tertiary: #A6A199; }
+button, .btn-follow, .post-action-btn, .comment-action-btn, .comment-more-btn, .compose-icon-btn, .btn-post, .purpose-mode, .circle-post-filter { min-height: 44px; }
+button[aria-label] { min-width: 44px; }
+input, textarea, select { font-size: max(16px, 1em); }
+main { overflow-wrap: anywhere; }
+.skip-link { position: fixed; top: -100px; left: 12px; z-index: 10000; padding: 12px 18px; background: var(--surface-0); color: var(--text-primary); }
+.skip-link:focus { top: 12px; }
+@media (max-width: 400px) { .comment-children { padding-left: 12px; margin-left: 12px; } .settings-row { flex-wrap: wrap; } }

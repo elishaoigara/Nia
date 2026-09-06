@@ -22,6 +22,8 @@ export interface ProfileSummary {
 }
 
 export interface Profile extends ProfileSummary {
+  open_to?: string | null
+  ask_me_about?: string | null
   banner_url?: string | null
   headline?: string | null
   website?: string | null
@@ -41,6 +43,8 @@ export interface CircleMember {
 }
 
 export interface Circle {
+  welcome?: string | null
+  rules?: string | null
   id: string
   created_by?: string | null
   name: string

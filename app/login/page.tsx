@@ -1,5 +1,6 @@
 'use client';
 
+import { safeNext } from '@/lib/auth-next'
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -48,7 +49,7 @@ export default function LoginPage() {
       return;
     }
 
-    router.push('/');
+    router.push(safeNext(new URLSearchParams(window.location.search).get('next')));
   }
 
   async function handleGoogleLogin() {
@@ -58,7 +59,7 @@ export default function LoginPage() {
     const { error: oauthError } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(safeNext(new URLSearchParams(window.location.search).get('next')))}`,
       },
     });
 

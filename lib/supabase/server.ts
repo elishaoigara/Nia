@@ -1,3 +1,4 @@
+import type { Database } from '@/types/database'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { getServerSupabaseEnv } from '@/lib/env'
@@ -6,7 +7,7 @@ export async function createClient() {
   const cookieStore = await cookies()
   const { url, anonKey } = getServerSupabaseEnv()
 
-  return createServerClient(url, anonKey, {
+  return createServerClient<Database>(url, anonKey, {
     cookies: {
       getAll: () => cookieStore.getAll(),
       setAll: cookiesToSet => {

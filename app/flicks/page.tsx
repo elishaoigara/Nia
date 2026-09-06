@@ -37,12 +37,13 @@ export default async function ReelsPage({
   // but was never actually called anywhere, so Flicks has just been reverse-
   // chronological this whole time — none of the completion-rate/watch-time/
   // diversity-decay logic was doing anything.
-  const [profileRes, followsRes, blocksRes, mutedIds, circleMembershipRes] = await Promise.all([
+  const [profileRes, followsRes, blocksRes, mutedIds, circleMembershipRes, preferenceRes] = await Promise.all([
     supabase.from('profiles').select('country, language').eq('id', user.id).single(),
     supabase.from('follows').select('following_id').eq('follower_id', user.id),
     supabase.from('blocks').select('blocked_id').eq('blocker_id', user.id),
     getMutedIds(supabase),
     supabase.from('circle_members').select('circle_id').eq('user_id', user.id),
+    supabase.from('user_preferences').select('content_languages').eq('user_id',user.id).maybeSingle(),
   ])
 
   const ctx: UserContext = {
@@ -58,10 +59,9 @@ export default async function ReelsPage({
   // one query capped at 60 posts total, split by duration afterwards — if recent
   // uploads skewed short (likely, especially early on), Long Flicks would quietly
   // end up with only a handful of videos even if plenty existed further back.
+  const videoQuery=()=>{let q=supabase.from('posts').select(FLICK_SELECT);if(mutedIds.length)q=q.not('user_id','in',`(${mutedIds.join(',')})`);const languages=preferenceRes.data?.content_languages;if(languages?.length)q=q.in('language',languages);return q}
   const [{ data: shortRows }, { data: unknownDurationRows }, { data: longRows }] = await Promise.all([
-    supabase
-      .from('posts')
-      .select(FLICK_SELECT)
+    videoQuery()
       .eq('media_type', 'video')
       .not('media_url', 'is', null)
       .lte('video_duration', SHORT_FLICK_SEC)
@@ -69,17 +69,13 @@ export default async function ReelsPage({
       .limit(SHORTS_LIMIT),
     // `.lte()` excludes NULLs, so pull older uploads that predate duration
     // tracking into the shorts bucket separately (same behavior as before).
-    supabase
-      .from('posts')
-      .select(FLICK_SELECT)
+    videoQuery()
       .eq('media_type', 'video')
       .not('media_url', 'is', null)
       .is('video_duration', null)
       .order('created_at', { ascending: false })
       .limit(SHORTS_LIMIT),
-    supabase
-      .from('posts')
-      .select(FLICK_SELECT)
+    videoQuery()
       .eq('media_type', 'video')
       .not('media_url', 'is', null)
       .gt('video_duration', SHORT_FLICK_SEC)
@@ -103,9 +99,7 @@ export default async function ReelsPage({
   // list, so we fetch it directly rather than searching for it client-side.
   let initialVideo: FlickPost | null = null
   if (initialVideoId) {
-    const { data: row } = await supabase
-      .from('posts')
-      .select(FLICK_SELECT)
+    const { data: row } = await videoQuery()
       .eq('id', initialVideoId)
       .single()
     if (row) initialVideo = row as unknown as FlickPost

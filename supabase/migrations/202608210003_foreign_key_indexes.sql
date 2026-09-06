@@ -15,7 +15,7 @@ create index if not exists follows_following_id_idx on public.follows (following
 create index if not exists hashtags_post_id_idx on public.hashtags (post_id);
 create index if not exists hashtags_user_id_idx on public.hashtags (user_id);
 create index if not exists likes_user_id_idx on public.likes (user_id);
-create index if not exists marketplace_listings_user_id_idx on public.marketplace_listings (user_id);
+-- Marketplace is deferred; no index on an absent table.
 create index if not exists message_reports_message_id_idx on public.message_reports (message_id);
 create index if not exists message_reports_reported_user_id_idx on public.message_reports (reported_user_id);
 create index if not exists message_reports_reporter_id_idx on public.message_reports (reporter_id);

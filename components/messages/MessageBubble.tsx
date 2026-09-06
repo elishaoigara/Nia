@@ -1,5 +1,6 @@
 'use client'
 
+import { mediaUrl } from '@/lib/media-url'
 import { useRef, useState } from 'react'
 import Link from 'next/link'
 import {
@@ -200,7 +201,7 @@ export default function MessageBubble({
           <Link href={`/profile/${recipient?.id}`} style={{ flexShrink: 0, marginBottom: 2 }}>
             <div style={{ width: 26, height: 26, borderRadius: '50%', overflow: 'hidden', background: 'var(--grad-brand)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 700, fontSize: 10 }}>
               {recipient?.avatar_url
-                ? <img src={recipient.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ? <img src={mediaUrl(recipient.avatar_url)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 : recipient?.username?.[0]?.toUpperCase()}
             </div>
           </Link>
@@ -219,6 +220,7 @@ export default function MessageBubble({
           touchAction: 'pan-y',
         }}
       >
+        <button type="button" className="btn-ghost" aria-label="Message actions: reply, react or report" onClick={()=>onLongPress(msg)}>Message actions</button>
         {msg.reply_to && replyMsg && (
           <div style={{ fontSize: 12, padding: '6px 10px', borderRadius: 10, background: 'var(--surface-3)', borderLeft: '3px solid var(--nia-violet)', maxWidth: '100%', opacity: 0.75 }}>
             <p style={{ fontWeight: 700, color: 'var(--nia-violet)', margin: '0 0 2px' }}>
@@ -280,12 +282,12 @@ export default function MessageBubble({
                     </button>
                   )
                 ) : (
-                  <img src={msg.media_url} alt="" style={{ display: 'block', width: '100%', maxHeight: 300, objectFit: 'cover', maxWidth: 260 }} />
+                  <img src={mediaUrl(msg.media_url)} alt="" style={{ display: 'block', width: '100%', maxHeight: 300, objectFit: 'cover', maxWidth: 260 }} />
                 )
               )}
 
               {msg.media_url && msg.media_type === 'video' && (
-                <video src={msg.media_url} controls style={{ display: 'block', width: '100%', maxHeight: 300, maxWidth: 260 }} />
+                <video src={mediaUrl(msg.media_url)} controls style={{ display: 'block', width: '100%', maxHeight: 300, maxWidth: 260 }} />
               )}
 
               {msg.media_url && msg.media_type === 'audio' && (
@@ -299,7 +301,7 @@ export default function MessageBubble({
               )}
 
               {msg.media_url && msg.media_type === 'file' && (
-                <a href={msg.media_url} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', textDecoration: 'none', minWidth: 160 }}>
+                <a href={mediaUrl(msg.media_url)} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', textDecoration: 'none', minWidth: 160 }}>
                   <div style={{ width: 38, height: 38, borderRadius: 10, flexShrink: 0, background: isOwn ? 'rgba(255,255,255,0.2)' : 'rgba(91,33,182,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <FileIcon size={17} color={isOwn ? '#fff' : 'var(--nia-violet)'} />
                   </div>

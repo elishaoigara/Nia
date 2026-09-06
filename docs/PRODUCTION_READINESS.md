@@ -1,13 +1,13 @@
 # Production readiness checklist
 
-The repository now contains the application-level controls required for a production deployment. The following items depend on real infrastructure, provider accounts, traffic, and organizational policy and must be completed by the deployment owner.
+The repository contains production-hardening changes; launch readiness still depends on live-schema reconciliation and staging acceptance. See [the September release guide](SUPABASE_RELEASE_20260905.md) and [changes 1–47](CHANGES_1_TO_47.md). The following items depend on real infrastructure, provider accounts, traffic, and organizational policy and must be completed by the deployment owner.
 
 ## Required before launch
 
-- [ ] Enable the workflow in `docs/ci.yml.example` as `.github/workflows/ci.yml` and require its quality job on protected branches.
+- [ ] Require the `check` job from `.github/workflows/check.yml` on protected branches.
 
 - [ ] Apply the Supabase migration to staging, run smoke tests, then promote the reviewed migration to production.
-- [ ] Generate Supabase TypeScript types from the deployed schema and compare them with `types/domain.ts` in CI.
+- [ ] Compare the deployed schema with `types/database.ts`. CI runs `db:types:check` against the complete checked-in migration chain; live drift requires separate review.
 - [ ] Configure all production environment variables in the deployment platform and rotate any credentials previously used outside a secret manager.
 - [ ] Add distributed rate limiting and abuse controls for AI, authentication, messaging, and upload endpoints (for example, a managed Redis-backed limiter or an API gateway policy).
 - [ ] Configure error reporting, structured log aggregation, uptime checks, and alerts for authentication, database, and AI-provider failures.

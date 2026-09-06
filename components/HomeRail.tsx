@@ -1,5 +1,6 @@
 'use client'
 
+import { mediaUrl } from '@/lib/media-url'
 import { useState } from 'react'
 import Link from 'next/link'
 import { Play, Heart } from 'lucide-react'
@@ -131,7 +132,7 @@ export default function HomeRail({ circles, suggestedCircles = [], flicks, curre
                     bytes over the network. Tapping hands off to /flicks itself. */}
                 {f.thumbnail_url && (
                   <img
-                    src={f.thumbnail_url}
+                    src={mediaUrl(f.thumbnail_url)}
                     alt=""
                     style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                   />

@@ -1,6 +1,7 @@
 // components/PostCard.tsx
 'use client';
 
+import { mediaUrl } from '@/lib/media-url'
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -180,7 +181,7 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
   }, [profile?.id, currentUserId]);
 
   const allMedia: PostMedia[] = [];
-  if (post.media_url && post.media_type) {
+  if (post.media_url && post.media_type && post.media_type !== 'audio') {
     const type = post.media_type === 'video' ? 'video' : 'image';
     allMedia.push({ url: post.media_url, type });
   }
@@ -222,68 +223,50 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
   }, [editing]);
 
   /* ── Actions ── */
+  const actionBusy = useRef(false);
   const handleLike = useCallback(async () => {
-    if (!currentUserId) return;
-    // Use functional updaters to avoid stale closure on rapid taps
-    let isNowLiked = false;
-    setLiked(prev => { isNowLiked = !prev; return !prev; });
-    setLikesCount((prev: number) => isNowLiked ? prev + 1 : prev - 1);
-    if (liked) {
-      await supabase.from('likes').delete().eq('post_id', post.id).eq('user_id', currentUserId);
-    } else {
-      await supabase.from('likes').insert({ post_id: post.id, user_id: currentUserId });
-      // Notify post owner — skip self-like
-      if (post.user_id && post.user_id !== currentUserId) {
-        await supabase.from('notifications').insert({
-          user_id: post.user_id,
-          actor_id: currentUserId,
-          type: 'like',
-          entity_id: post.id,
-          message: `${profile?.username ?? 'Someone'} liked your post`,
-          is_read: false,
-        });
-      }
-    }
-  }, [currentUserId, liked, post.id, post.user_id, profile?.username, supabase]);
-
+    if (!currentUserId || actionBusy.current) return;
+    actionBusy.current = true;
+    try {
+      const result = liked
+        ? await supabase.from('likes').delete().eq('post_id', post.id).eq('user_id', currentUserId)
+        : await supabase.from('likes').insert({ post_id: post.id, user_id: currentUserId });
+      if (result.error) throw result.error;
+      setLiked(!liked); setLikesCount(n => Math.max(0, n + (liked ? -1 : 1)));
+    } catch { setSafetyNotice('Like could not be saved. Please retry.'); }
+    finally { actionBusy.current = false; }
+  }, [currentUserId, liked, post.id, supabase]);
   const handleRepost = useCallback(async () => {
-    if (!currentUserId) return;
-    setShowRepostMenu(false);
-    setReposted(prev => !prev);
-    setRepostsCount((prev: number) => reposted ? prev - 1 : prev + 1);
-    if (reposted) {
-      await supabase.from('reposts').delete().eq('post_id', post.id).eq('user_id', currentUserId);
-    } else {
-      await supabase.from('reposts').insert({ post_id: post.id, user_id: currentUserId });
-      // Notify post owner — skip self-repost
-      if (post.user_id && post.user_id !== currentUserId) {
-        await supabase.from('notifications').insert({
-          user_id: post.user_id,
-          actor_id: currentUserId,
-          type: 'repost',
-          entity_id: post.id,
-          message: `${profile?.username ?? 'Someone'} reposted your post`,
-          is_read: false,
-        });
-      }
-    }
-  }, [currentUserId, reposted, post.id, post.user_id, profile?.username, supabase]);
-
+    if (!currentUserId || actionBusy.current) return;
+    actionBusy.current = true; setShowRepostMenu(false);
+    try {
+      const result = reposted
+        ? await supabase.from('reposts').delete().eq('post_id', post.id).eq('user_id', currentUserId)
+        : await supabase.from('reposts').insert({ post_id: post.id, user_id: currentUserId });
+      if (result.error) throw result.error;
+      setReposted(!reposted); setRepostsCount(n => Math.max(0, n + (reposted ? -1 : 1)));
+    } catch { setSafetyNotice('Repost could not be saved. Please retry.'); }
+    finally { actionBusy.current = false; }
+  }, [currentUserId, reposted, post.id, supabase]);
   const handleBookmark = useCallback(async () => {
-    if (!currentUserId) return;
-    setBookmarked(prev => !prev);
-    if (bookmarked) {
-      await supabase.from('bookmarks').delete().eq('post_id', post.id).eq('user_id', currentUserId);
-    } else {
-      await supabase.from('bookmarks').insert({ post_id: post.id, user_id: currentUserId });
-    }
+    if (!currentUserId || actionBusy.current) return;
+    actionBusy.current = true;
+    try {
+      const result = bookmarked
+        ? await supabase.from('bookmarks').delete().eq('post_id', post.id).eq('user_id', currentUserId)
+        : await supabase.from('bookmarks').insert({ post_id: post.id, user_id: currentUserId });
+      if (result.error) throw result.error;
+      setBookmarked(!bookmarked);
+    } catch { setSafetyNotice('Save failed. Please retry.'); }
+    finally { actionBusy.current = false; }
   }, [currentUserId, bookmarked, post.id, supabase]);
 
   const handleDelete = useCallback(async (e: React.MouseEvent) => {
     e.stopPropagation();
     setShowMenu(false);
     if (!window.confirm('Delete this post?')) return;
-    await supabase.from('posts').delete().eq('id', post.id);
+    const { error } = await supabase.from('posts').delete().eq('id', post.id);
+    if (error) { setSafetyNotice('Delete failed. Please retry.'); return; }
     onDelete?.(post.id);
     router.refresh();
   }, [post.id, onDelete, router, supabase]);
@@ -392,7 +375,7 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
             className={`post-avatar${hasActiveStory ? (storyUnseen ? ' post-ring-unseen' : ' post-ring-seen') : ''}`}
           >
             {profile?.avatar_url
-              ? <img src={profile.avatar_url} alt={profile.username ?? ''} />
+              ? <img src={mediaUrl(profile.avatar_url)} alt={profile.username ?? ''} />
               : <div className="post-avatar-inner">{initials}</div>
             }
           </Link>
@@ -587,7 +570,8 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
             post.content && <RichText text={post.content} />
           )}
 
-          {/* Media grid */}
+          {post.media_type === 'audio' && post.media_url && <audio controls preload="none" src={mediaUrl(post.media_url)} aria-label="Voice post" style={{ width: '100%' }} />}
+      {/* Media grid */}
           {allMedia.length > 0 && (
             <div className={`post-media ${mediaGridClass(allMedia.length)}`} onClick={e => e.stopPropagation()}>
               {allMedia.map((m, i) => (
@@ -595,7 +579,7 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
                   style={{ position: 'relative', cursor: 'pointer' }}>
                   {m.type === 'video' ? (
                     <>
-                      <video src={m.url} />
+                      <video src={mediaUrl(m.url)} />
                       <div style={{
                         position: 'absolute', inset: 0, display: 'flex',
                         alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.3)',
@@ -604,7 +588,7 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
                       </div>
                     </>
                   ) : (
-                    <img src={m.url} alt={`Post media ${i + 1}`} loading="lazy" />
+                    <img src={mediaUrl(m.url)} alt={`Post media ${i + 1}`} loading="lazy" />
                   )}
                 </div>
               ))}
@@ -734,6 +718,10 @@ function PollCard({
   poll: Poll; postId: string; currentUserId?: string | null;
 }) {
   const supabase = createClient();
+  const [voteError, setVoteError] = useState('');
+  const [closed, setClosed] = useState(false);
+  const voting = useRef(false);
+  useEffect(() => { const update = () => setClosed(Date.now() >= new Date(poll.ends_at).getTime()); const timer = setInterval(update, 1000); const initial = setTimeout(update, 0); return () => { clearInterval(timer); clearTimeout(initial); }; }, [poll.ends_at]);
   const [voted,    setVoted]    = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [results,  setResults]  = useState<Record<string, number>>({});
@@ -756,10 +744,14 @@ function PollCard({
   }, [currentUserId, loadResults, poll.id, supabase]);
 
   async function handleVote(optionId: string) {
-    if (!currentUserId || voted) return;
-    setVoted(true); setSelected(optionId);
-    await supabase.from('poll_votes').insert({ poll_id: poll.id, post_id: postId, user_id: currentUserId, option_id: optionId });
-    loadResults();
+    if (!currentUserId || voted || closed || voting.current) return;
+    voting.current = true; setVoteError('');
+    try {
+      const { error } = await supabase.from('poll_votes').insert({ poll_id: poll.id, post_id: postId, user_id: currentUserId, option_id: optionId });
+      if (error) throw error;
+      setVoted(true); setSelected(optionId); await loadResults();
+    } catch { setVoteError('Vote failed. The poll may have closed. Please retry.'); }
+    finally { voting.current = false; }
   }
 
   const total = Object.values(results).reduce((a, b) => a + b, 0);
@@ -769,12 +761,14 @@ function PollCard({
       <p style={{ fontWeight: 700, fontSize: 14, margin: '0 0 10px', color: 'var(--text-primary)' }}>
         {poll.question}
       </p>
+      {voteError && <p role="alert">{voteError}</p>}
+      {closed && <p>Poll closed</p>}
       {poll.options.map(opt => {
         const count = results[opt.id] ?? 0;
         const pct   = total > 0 ? (count / total) * 100 : 0;
         const isSel = selected === opt.id;
         return (
-          <button key={opt.id} onClick={() => handleVote(opt.id)} disabled={voted && !isSel}
+          <button key={opt.id} onClick={() => handleVote(opt.id)} disabled={voted || closed}
             style={{
               display: 'block', width: '100%', marginBottom: 6, padding: '8px 12px',
               borderRadius: 10, border: `2px solid ${isSel ? 'var(--nia-violet)' : 'var(--border)'}`,

@@ -23,6 +23,10 @@
 --   delete from public.posts where content like '%#nia_seed_v1%';
 
 begin;
+do $$ begin
+ if current_setting('app.environment',true) is distinct from 'staging' then raise exception 'Seeds require app.environment=staging on an isolated database'; end if;
+end $$;
+
 
 do $seed$
 declare
@@ -44,6 +48,7 @@ begin
   from (
     select id, created_at
     from public.profiles
+    where id in (select user_id from public.test_profiles)
     order by created_at, id
     limit 8
   ) profiles_for_seed;

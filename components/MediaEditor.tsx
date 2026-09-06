@@ -1,5 +1,6 @@
 'use client'
 
+import { mediaUrl } from '@/lib/media-url'
 import { useEffect, useId, useRef, useState } from 'react'
 import {
   Check,
@@ -235,7 +236,7 @@ export default function MediaEditor({ file, type, duration, maxOutputBytes, onCa
             ) : previewUrl ? (
               <video
                 ref={videoRef}
-                src={previewUrl}
+                src={mediaUrl(previewUrl)}
                 controls
                 playsInline
                 onLoadedMetadata={event => {

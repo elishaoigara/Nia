@@ -1,5 +1,6 @@
 'use client'
 
+import { mediaUrl } from '@/lib/media-url'
 import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
@@ -71,6 +72,8 @@ export default function EditProfilePage() {
   // Form fields
   const [fullName,    setFullName]    = useState('')
   const [username,    setUsername]    = useState('')
+  const [openTo, setOpenTo] = useState('')
+  const [askAbout, setAskAbout] = useState('')
   const [headline,    setHeadline]    = useState('')
   const [bio,         setBio]         = useState('')
   const [website,     setWebsite]     = useState('')
@@ -102,6 +105,8 @@ export default function EditProfilePage() {
         setFullName(data.full_name ?? '')
         setUsername(data.username ?? '')
         setHeadline(data.headline ?? '')
+        setOpenTo(data.open_to ?? '')
+        setAskAbout(data.ask_me_about ?? '')
         setBio(data.bio ?? '')
         setWebsite(data.website ?? '')
         setCountry(data.country ?? '')
@@ -162,6 +167,8 @@ export default function EditProfilePage() {
     const { error: updateError } = await supabase.from('profiles').update({
       full_name:  fullName.trim(),
       username:   username.trim().toLowerCase().replace(/[^a-z0-9_]/g, ''),
+      open_to: openTo.trim() || null,
+      ask_me_about: askAbout.trim() || null,
       headline:   headline.trim() || null,
       bio:        bio.trim() || null,
       website:    website.trim() || null,
@@ -169,7 +176,7 @@ export default function EditProfilePage() {
       city:       city.trim() || null,
       languages:  languages.length ? languages : null,
       interests:  interests.length ? interests : null,
-      goals:       goals.length ? goals : null,
+      goals:       goals,
       avatar_url,
       banner_url,
     }).eq('id', profile.id)
@@ -303,7 +310,7 @@ export default function EditProfilePage() {
             position: 'relative',
           }}>
             {avatarSrc
-              ? <img src={avatarSrc} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ? <img src={mediaUrl(avatarSrc)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               : initials
             }
             {/* Overlay */}
@@ -588,6 +595,8 @@ export default function EditProfilePage() {
                 })}
               </div>
             </Field>
+            <Field label="Open to (optional)"><input className="input" value={openTo} maxLength={160} onChange={e=>setOpenTo(e.target.value)} placeholder="Friendship, collaborations, opportunities…"/></Field>
+            <Field label="Ask me about (optional)"><input className="input" value={askAbout} maxLength={160} onChange={e=>setAskAbout(e.target.value)} placeholder="Music, design, football…"/></Field>
             <Field label="Your Interests" sub="Pick topics you care about — helps people discover you">
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                 {INTERESTS_OPTIONS.map(tag => {

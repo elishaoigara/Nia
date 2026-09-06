@@ -1,5 +1,6 @@
 'use client'
 
+import { mediaUrl } from '@/lib/media-url'
 import React from 'react'
 import Link from 'next/link'
 import { ArrowRight, CheckCircle2, Compass, HeartHandshake, Plus, Sparkles, Users } from 'lucide-react'
@@ -153,7 +154,7 @@ export function CirclePulseFeed({ items }: { items: CirclePulseItem[] }) {
         <div className="home-pulse-list">
           {items.map(item => (
             <Link key={item.id} href={`/circles/${item.circleSlug}`} className="home-pulse-card tap-sm">
-              <div className="home-pulse-avatar">{item.authorAvatar ? <img src={item.authorAvatar} alt="" /> : item.authorName.slice(0, 1).toUpperCase()}</div>
+              <div className="home-pulse-avatar">{item.authorAvatar ? <img src={mediaUrl(item.authorAvatar)} alt="" /> : item.authorName.slice(0, 1).toUpperCase()}</div>
               <div className="home-pulse-content">
                 <div className="home-pulse-meta"><strong>{item.circleName}</strong><span>{relativeTime(item.createdAt)}</span></div>
                 <p><b>{item.authorName}</b> {PURPOSE_LABELS[item.mode]}.</p>

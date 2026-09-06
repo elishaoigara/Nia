@@ -1,3 +1,4 @@
+import { safeNext } from '@/lib/auth-next'
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
@@ -43,5 +44,5 @@ export async function GET(request: Request) {
     return NextResponse.redirect(`${canonicalOrigin}/login?error=profile_lookup_failed`)
   }
 
-  return NextResponse.redirect(`${canonicalOrigin}${profile ? '/' : '/onboarding'}`)
+  return NextResponse.redirect(`${canonicalOrigin}${profile ? safeNext(searchParams.get('next')) : '/onboarding?next=' + encodeURIComponent(safeNext(searchParams.get('next')))}`)
 }

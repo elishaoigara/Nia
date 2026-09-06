@@ -1,10 +1,11 @@
 'use client'
 
+import { usePreferences } from '@/components/PreferencesProvider'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
-  Home, Compass, Clapperboard,
+  Home, Compass, Users,
   MessageSquare, User, Plus, Settings as SettingsIcon,
 } from 'lucide-react'
 import NotificationBell from '@/components/NotificationBell'
@@ -20,13 +21,14 @@ import { useUnreadCounts } from '@/lib/hooks/useUnreadCounts'
 */
 const LINKS = [
   { href: '/',         icon: Home,          label: 'Home'     },
-  { href: '/explore',  icon: Compass,       label: 'Explore'  },
-  { href: '/flicks',   icon: Clapperboard,  label: 'Flicks'   },
+  { href: '/circles',  icon: Users,   label: 'Circles'  },
+  { href: '/explore',  icon: Compass,       label: 'Discover' },
   { href: '/messages', icon: MessageSquare, label: 'Messages' },
   { href: '/profile',  icon: User,          label: 'Me'       },
 ]
 
 export default function Navbar() {
+  const { t } = usePreferences()
   const pathname = usePathname() ?? ''
   const router   = useRouter()
   const supabase = createClient()
@@ -138,7 +140,7 @@ export default function Navbar() {
               <Link
                 key={href}
                 href={href}
-                aria-label={label}
+                aria-label={t(label)}
                 style={{
                   display: 'flex', flexDirection: 'column',
                   alignItems: 'center', justifyContent: 'center',
@@ -199,7 +201,7 @@ export default function Navbar() {
                     letterSpacing: active ? '0.01em' : '0',
                     transition: 'color 0.15s, font-weight 0.15s',
                   }}>
-                    {label}
+                    {t(label)}
                   </span>
                 </div>
               </Link>
@@ -268,7 +270,7 @@ export default function Navbar() {
                     </span>
                   )}
                 </div>
-                <span>{label}</span>
+                <span>{t(label)}</span>
                 {active && (
                   <div style={{
                     marginLeft: 'auto',

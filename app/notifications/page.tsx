@@ -1,6 +1,7 @@
 // app/notifications/page.tsx
 'use client';
 
+import { mediaUrl } from '@/lib/media-url'
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { Bell, Heart, UserPlus, MessageCircle, Repeat2, AtSign } from 'lucide-react';
@@ -572,7 +573,7 @@ function NotifRow({ n }: { n: GroupedNotification }) {
               style={{ width: 28, height: 28, left: 12, top: 12, borderColor: 'var(--surface-0)', zIndex: 0 }}
             >
               {n.extraActors[0].avatar_url ? (
-                <img src={n.extraActors[0].avatar_url} alt="" className="w-full h-full object-cover" />
+                <img src={mediaUrl(n.extraActors[0].avatar_url)} alt="" className="w-full h-full object-cover" />
               ) : (
                 <div className="w-full h-full flex items-center justify-center text-white text-[11px] font-bold" style={{ background: 'var(--grad-brand)' }}>
                   {(n.extraActors[0].full_name || n.extraActors[0].username || '?')[0]?.toUpperCase()}
@@ -583,7 +584,7 @@ function NotifRow({ n }: { n: GroupedNotification }) {
           <div className="relative" style={{ zIndex: 1 }}>
             {avatarUrl ? (
               <img
-                src={avatarUrl}
+                src={mediaUrl(avatarUrl)}
                 alt={displayName}
                 className="w-10 h-10 rounded-full object-cover"
               />
