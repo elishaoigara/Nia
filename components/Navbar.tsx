@@ -1,16 +1,18 @@
 'use client'
 
+import { usePreferences } from '@/components/PreferencesProvider'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
-  Home, Compass, Clapperboard,
-  MessageSquare, User, Plus,
+  Home, Compass, Users,
+  MessageSquare, User, Plus, Settings as SettingsIcon,
 } from 'lucide-react'
 import NotificationBell from '@/components/NotificationBell'
 import ThemeToggle      from '@/components/ThemeToggle'
 import LogoutButton     from '@/components/LogoutButton'
 import { createClient } from '@/lib/supabase/client'
+import { useUnreadCounts } from '@/lib/hooks/useUnreadCounts'
 
 /* ── 5 nav items only ─────────────────────────────────────
    Discover absorbed Search → /explore
@@ -19,19 +21,20 @@ import { createClient } from '@/lib/supabase/client'
 */
 const LINKS = [
   { href: '/',         icon: Home,          label: 'Home'     },
-  { href: '/explore',  icon: Compass,       label: 'Explore'  },
-  { href: '/flicks',   icon: Clapperboard,  label: 'Flicks'   },
+  { href: '/circles',  icon: Users,   label: 'Circles'  },
+  { href: '/explore',  icon: Compass,       label: 'Discover' },
   { href: '/messages', icon: MessageSquare, label: 'Messages' },
   { href: '/profile',  icon: User,          label: 'Me'       },
 ]
 
 export default function Navbar() {
+  const { t } = usePreferences()
   const pathname = usePathname() ?? ''
   const router   = useRouter()
   const supabase = createClient()
 
-  const [userId,         setUserId]         = useState<string | null>(null)
-  const [unreadMessages, setUnreadMessages] = useState(0)
+  const [userId, setUserId] = useState<string | null>(null)
+  const { unreadMessages, unreadNotifications } = useUnreadCounts(userId)
 
   function scrollToCompose() {
     if (pathname !== '/') { router.push('/#compose'); return }
@@ -44,36 +47,16 @@ export default function Navbar() {
   }
 
   useEffect(() => {
+    let cancelled = false
     supabase.auth.getUser().then(({ data: { user } }) => {
-      if (!user) return
-      setUserId(user.id)
-
-      const fetchUnread = async () => {
-        const { count } = await supabase
-          .from('messages')
-          .select('*', { count: 'exact', head: true })
-          .eq('recipient_id', user.id)
-          .eq('is_read', false)
-        setUnreadMessages(count ?? 0)
-      }
-      fetchUnread()
-
-      const ch = supabase.channel('nav-msgs')
-        .on('postgres_changes', {
-          event: 'INSERT', schema: 'public', table: 'messages',
-          filter: `recipient_id=eq.${user.id}`,
-        }, () => setUnreadMessages(p => p + 1))
-        .on('postgres_changes', {
-          event: 'UPDATE', schema: 'public', table: 'messages',
-          filter: `recipient_id=eq.${user.id}`,
-        }, fetchUnread)
-        .subscribe()
-
-      return () => { supabase.removeChannel(ch) }
+      if (!cancelled && user) setUserId(user.id)
     })
+    return () => { cancelled = true }
   }, [supabase])
 
   const isFlicks   = pathname === '/flicks'
+  const isSetup    = pathname === '/setup'
+  const isAuthPage = ['/login', '/signup', '/forgot-password', '/reset-password', '/auth/callback'].some(path => pathname === path || pathname.startsWith(path + '/'))
   const isDmThread = pathname.startsWith('/messages/') && pathname.split('/').length === 3
 
   function isActive(href: string) {
@@ -84,7 +67,7 @@ export default function Navbar() {
     return pathname.startsWith(href)
   }
 
-  if (isFlicks) return null
+  if (isFlicks || isSetup || isAuthPage) return null
 
   /* ── Sidebar active style (desktop) ── */
   const activeStyle = {
@@ -120,17 +103,12 @@ export default function Navbar() {
           {/* Right cluster — notification + post only (ThemeToggle → sidebar, Logout → sidebar) */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 'auto' }}>
             <ThemeToggle />
-            {userId && <NotificationBell userId={userId} />}
+            {userId && <NotificationBell unreadCount={unreadNotifications} />}
             <button
+              type="button"
               onClick={scrollToCompose}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 6,
-                background: 'var(--grad-brand)', color: '#fff',
-                fontSize: 13, fontWeight: 700,
-                padding: '7px 14px', borderRadius: 10,
-                border: 'none', cursor: 'pointer', minHeight: 34,
-              }}
-              className="tap-sm"
+              className="btn-primary navbar-post-button tap-sm"
+              aria-label="Create a new post"
             >
               <Plus size={15} strokeWidth={2.5} />
               <span className="hidden xs:inline">Post</span>
@@ -145,7 +123,7 @@ export default function Navbar() {
           style={{
             position: 'fixed', bottom: 0, left: 0, right: 0,
             height: 'var(--nav-bottom)', zIndex: 50,
-            display: 'flex', alignItems: 'center', justifyContent: 'space-around',
+            alignItems: 'center', justifyContent: 'space-around',
             background: 'var(--surface-0)',
             borderTop: '1px solid var(--border)',
             paddingBottom: 'env(safe-area-inset-bottom, 0px)',
@@ -162,7 +140,7 @@ export default function Navbar() {
               <Link
                 key={href}
                 href={href}
-                aria-label={label}
+                aria-label={t(label)}
                 style={{
                   display: 'flex', flexDirection: 'column',
                   alignItems: 'center', justifyContent: 'center',
@@ -223,7 +201,7 @@ export default function Navbar() {
                     letterSpacing: active ? '0.01em' : '0',
                     transition: 'color 0.15s, font-weight 0.15s',
                   }}>
-                    {label}
+                    {t(label)}
                   </span>
                 </div>
               </Link>
@@ -292,7 +270,7 @@ export default function Navbar() {
                     </span>
                   )}
                 </div>
-                <span>{label}</span>
+                <span>{t(label)}</span>
                 {active && (
                   <div style={{
                     marginLeft: 'auto',
@@ -306,17 +284,15 @@ export default function Navbar() {
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 16 }}>
+          <Link href="/settings" className="settings-nav-link tap-sm" aria-label="Open settings">
+            <SettingsIcon size={17} />
+            <span>Settings</span>
+          </Link>
           <button
+            type="button"
             onClick={scrollToCompose}
-            style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-              background: 'var(--grad-brand)', color: '#fff',
-              fontWeight: 700, fontSize: 14,
-              padding: '12px', borderRadius: 14,
-              border: 'none', cursor: 'pointer',
-              boxShadow: '0 4px 16px rgba(91, 33, 182, 0.2)',
-            }}
-            className="tap-sm"
+            className="btn-primary sidebar-post-button tap-sm"
+            aria-label="Create a new post"
           >
             <Plus size={17} strokeWidth={2.5} />
             New Post

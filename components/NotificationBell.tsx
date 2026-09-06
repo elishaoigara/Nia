@@ -1,68 +1,13 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { Bell } from 'lucide-react'
-import { createClient } from '@/lib/supabase/client'
-
 interface NotificationBellProps {
-  userId: string
+  unreadCount: number
 }
 
-export default function NotificationBell({ userId }: NotificationBellProps) {
-  const supabase = createClient()
-  const [count, setCount] = useState(0)
-
-  // FIX (Bug 6): wrap in useCallback so useEffect dependency is stable
-  const fetchUnreadCount = useCallback(async () => {
-    const { count: unreadCount, error } = await supabase
-      .from('notifications')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', userId)
-      .eq('is_read', false)
-
-    if (!error) setCount(unreadCount ?? 0)
-  }, [supabase, userId])
-
-  useEffect(() => {
-    if (!userId) return
-
-    const timer = window.setTimeout(() => void fetchUnreadCount(), 0)
-
-    const channel = supabase
-      .channel(`bell-${userId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'notifications',
-          filter: `user_id=eq.${userId}`,
-        },
-        // Re-fetch exact count instead of incrementing to avoid
-        // double-counting on reconnect/replay
-        () => fetchUnreadCount()
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'notifications',
-          filter: `user_id=eq.${userId}`,
-        },
-        // FIX (Bug 5): listening to UPDATE means when the notifications page marks
-        // items read in the DB, the bell re-fetches and clears immediately
-        () => fetchUnreadCount()
-      )
-      .subscribe()
-
-    return () => {
-      window.clearTimeout(timer)
-      void supabase.removeChannel(channel)
-    }
-  }, [userId, fetchUnreadCount, supabase])
-
+export default function NotificationBell({ unreadCount }: NotificationBellProps) {
+  const count = unreadCount
   const hasUnread = count > 0
 
   return (

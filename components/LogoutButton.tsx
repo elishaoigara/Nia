@@ -1,5 +1,6 @@
 'use client'
 
+import { clearLocalUserData } from '@/lib/drafts'
 import { useState, type CSSProperties } from 'react'
 import { LogOut, Loader2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
@@ -19,7 +20,9 @@ export default function LogoutButton({ className = '', variant = 'full', style }
   async function handleLogout() {
     if (loading) return
     setLoading(true)
-    await supabase.auth.signOut()
+    const { error } = await supabase.auth.signOut()
+    if (error) { setLoading(false); window.alert('Log out failed. Please retry.'); return }
+    clearLocalUserData()
     router.replace('/login')
     router.refresh()
   }

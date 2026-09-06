@@ -1,5 +1,6 @@
 'use client'
 
+import { mediaUrl } from '@/lib/media-url'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { X, ChevronLeft, ChevronRight, Play, Pause, Volume2, VolumeX } from 'lucide-react'
 
@@ -141,7 +142,7 @@ export default function MediaLightbox({ items, startIndex = 0, onClose }: MediaL
       >
         {current.type === 'image' ? (
           <img
-            src={current.url}
+            src={mediaUrl(current.url)}
             alt=""
             className="max-w-full max-h-full rounded-2xl object-contain select-none shadow-2xl"
             draggable={false}
@@ -150,7 +151,7 @@ export default function MediaLightbox({ items, startIndex = 0, onClose }: MediaL
           <div className="relative w-full max-w-2xl flex items-center justify-center">
             <video
               ref={videoRef}
-              src={current.url}
+              src={mediaUrl(current.url)}
               className="w-full rounded-2xl object-contain shadow-2xl cursor-pointer"
               style={{ maxHeight: 'calc(100vh - 160px)', background: '#000' }}
               muted={muted}

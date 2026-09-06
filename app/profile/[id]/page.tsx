@@ -1,16 +1,19 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { mediaUrl } from '@/lib/media-url'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import PostCard from '@/components/PostCard'
 import FollowButton from '@/components/FollowButton'
 import LogoutButton from '@/components/LogoutButton'
+import ReportSheet from '@/components/ReportSheet'
 import {
-  ArrowLeft, MapPin, Calendar, Pencil,
+  ArrowLeft, MapPin, Calendar, Pencil, Settings,
   Grid3x3, MessageCircle, Bookmark,
   Loader2, Link as LinkIcon, Globe, Languages,
+  MoreHorizontal, Flag, VolumeX, UserX,
 } from 'lucide-react'
 import { getFlag } from '@/lib/african-data'
 import type { Comment, Post, Profile, StoryRow } from '@/types/domain'
@@ -233,12 +236,19 @@ function parseTags(profile: Profile): string[] {
   return tags.slice(0, 6)
 }
 
+function parseGoals(profile: Profile): string[] {
+  if (Array.isArray(profile.goals)) return profile.goals.filter(Boolean).slice(0, 4)
+  if (typeof profile.goals === 'string') return profile.goals.split(',').map(goal => goal.trim()).filter(Boolean).slice(0, 4)
+  return []
+}
+
 export default function ProfilePage() {
   const { id }   = useParams() as { id: string }
   const router   = useRouter()
   const supabase = createClient()
 
   const [currentUserId,  setCurrentUserId]  = useState<string | null>(null)
+  const [privateCard, setPrivateCard] = useState<{ id: string; username: string } | null>(null)
   const [profile,        setProfile]        = useState<Profile | null>(null)
   const [posts,          setPosts]          = useState<Post[]>([])
   const [replies,        setReplies]        = useState<ProfileReply[]>([])
@@ -252,6 +262,11 @@ export default function ProfilePage() {
   const [postCount,      setPostCount]      = useState(0)
   const [hasActiveStory, setHasActiveStory] = useState(false)
   const [storyUnseen,    setStoryUnseen]    = useState(false)
+  const [showSafetyMenu, setShowSafetyMenu] = useState(false)
+  const [showReport,     setShowReport]     = useState(false)
+  const [safetyBusy,     setSafetyBusy]     = useState(false)
+  const [safetyNotice,   setSafetyNotice]   = useState('')
+  const safetyMenuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!id || !currentUserId) return
@@ -276,6 +291,22 @@ export default function ProfilePage() {
   const isOwner = currentUserId === id
 
   useEffect(() => {
+    if (!showSafetyMenu) return
+    function closeMenu(event: MouseEvent) {
+      if (safetyMenuRef.current && !safetyMenuRef.current.contains(event.target as Node)) setShowSafetyMenu(false)
+    }
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === 'Escape') setShowSafetyMenu(false)
+    }
+    document.addEventListener('mousedown', closeMenu)
+    document.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.removeEventListener('mousedown', closeMenu)
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [showSafetyMenu])
+
+  useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setCurrentUserId(data.user?.id ?? null))
   }, [supabase.auth])
 
@@ -286,7 +317,8 @@ export default function ProfilePage() {
       supabase.from('follows').select('follower_id', { count: 'exact', head: true }).eq('following_id', id),
       supabase.from('follows').select('following_id', { count: 'exact', head: true }).eq('follower_id', id),
       supabase.from('posts').select('id', { count: 'exact', head: true }).eq('user_id', id),
-    ]).then(([profileRes, followersRes, followingRes, postsRes]) => {
+    ]).then(async ([profileRes, followersRes, followingRes, postsRes]) => {
+      if (!profileRes.data) { const { data } = await supabase.rpc('profile_card', { target_user: id }); setPrivateCard(data?.[0] ?? null) }
       setProfile(profileRes.data as Profile | null)
       setFollowerCount(followersRes.count ?? 0)
       setFollowingCount(followingRes.count ?? 0)
@@ -352,11 +384,63 @@ export default function ProfilePage() {
     setSaved(prev => prev.filter(p => p.id !== postId))
   }
 
+  async function reportProfile(reason: string, details: string) {
+    if (!currentUserId || !id || safetyBusy) return false
+    setSafetyBusy(true)
+    const { error } = await supabase.from('reports').insert({
+      reporter_id: currentUserId,
+      reported_user_id: id,
+      entity_type: 'profile',
+      entity_id: id,
+      reason: reason.slice(0, 120),
+      details: details ? details.slice(0, 1000) : null,
+    })
+    setSafetyBusy(false)
+    setSafetyNotice(error ? 'Your report could not be sent. Please try again.' : 'Report sent to Nia moderators.')
+    return !error
+  }
+
+  async function muteProfile() {
+    if (!currentUserId || !id || safetyBusy) return
+    setShowSafetyMenu(false)
+    if (!window.confirm(`Mute @${profile?.username ?? 'this account'}? Their posts will be hidden from your feed.`)) return
+    setSafetyBusy(true)
+    const { error } = await supabase.from('mutes').upsert(
+      { muter_id: currentUserId, muted_id: id },
+      { onConflict: 'muter_id,muted_id', ignoreDuplicates: true },
+    )
+    setSafetyBusy(false)
+    if (error) {
+      setSafetyNotice('This account could not be muted. Please try again.')
+      return
+    }
+    router.push('/')
+  }
+
+  async function blockProfile() {
+    if (!currentUserId || !id || safetyBusy) return
+    setShowSafetyMenu(false)
+    if (!window.confirm(`Block @${profile?.username ?? 'this account'}? You will no longer be able to message each other.`)) return
+    setSafetyBusy(true)
+    const { error } = await supabase.from('blocks').upsert(
+      { blocker_id: currentUserId, blocked_id: id },
+      { onConflict: 'blocker_id,blocked_id', ignoreDuplicates: true },
+    )
+    setSafetyBusy(false)
+    if (error) {
+      setSafetyNotice('This account could not be blocked. Please try again.')
+      return
+    }
+    router.push('/')
+  }
+
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}>
       <Loader2 size={26} className="animate-spin" style={{ color: 'var(--nia-violet)' }} />
     </div>
   )
+
+  if (!profile && privateCard && currentUserId) return <main className="mx-auto max-w-xl p-6 space-y-4"><h1>@{privateCard.username}</h1><p>This account is private. Send a follow request to see their profile and posts.</p><FollowButton currentUserId={currentUserId} targetUserId={privateCard.id} initialIsFollowing={false} /></main>
 
   if (!profile) return (
     <div style={{ padding: 32, textAlign: 'center', color: 'var(--text-tertiary)' }}>User not found.</div>
@@ -365,6 +449,7 @@ export default function ProfilePage() {
   const initials     = (profile.full_name ?? profile.username ?? '?').split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()
   const countryFlag  = profile.country ? getFlag(profile.country) : null
   const tags         = parseTags(profile)
+  const goals        = parseGoals(profile)
   const strength     = calcStrength(profile)
 
   // Banner: uploaded > city skyline SVG
@@ -402,6 +487,14 @@ export default function ProfilePage() {
         </div>
         {isOwner && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+            <Link href="/settings" aria-label="Open settings" title="Settings" style={{
+              width: 34, height: 34, borderRadius: '50%', fontSize: 13, fontWeight: 700,
+              border: '1.5px solid var(--border)', background: 'none',
+              color: 'var(--text-primary)', textDecoration: 'none',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+            }}>
+              <Settings size={14} />
+            </Link>
             <Link href="/profile/edit" style={{
               padding: '6px 14px', borderRadius: 20, fontSize: 13, fontWeight: 700,
               border: '1.5px solid var(--border)', background: 'none',
@@ -470,7 +563,7 @@ export default function ProfilePage() {
               border: hasActiveStory ? '3px solid var(--surface-0)' : 'none',
             }}>
               {profile.avatar_url
-                ? <img src={profile.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ? <img src={mediaUrl(profile.avatar_url)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 : initials
               }
             </div>
@@ -517,7 +610,7 @@ export default function ProfilePage() {
 
         {/* Follow / Message */}
         {!isOwner && currentUserId && (
-          <div style={{ display: 'flex', gap: 8, marginBottom: 16, marginTop: 4 }}>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 12, marginTop: 4, alignItems: 'center' }}>
             <FollowButton targetUserId={id} currentUserId={currentUserId} initialIsFollowing={isFollowing} />
             <Link href={`/messages/${id}`} style={{
               padding: '7px 18px', borderRadius: 20,
@@ -529,10 +622,33 @@ export default function ProfilePage() {
             }}>
               <MessageCircle size={13} /> Message
             </Link>
+            <div ref={safetyMenuRef} style={{ position: 'relative' }}>
+              <button
+                type="button"
+                onClick={() => setShowSafetyMenu(open => !open)}
+                aria-label="Profile safety actions"
+                aria-expanded={showSafetyMenu}
+                aria-haspopup="menu"
+                style={{ width: 34, height: 34, borderRadius: '50%', border: '1.5px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >
+                <MoreHorizontal size={16} />
+              </button>
+              {showSafetyMenu && (
+                <div role="menu" style={{ position: 'absolute', right: 0, top: 'calc(100% + 6px)', zIndex: 30, minWidth: 188, overflow: 'hidden', borderRadius: 12, border: '1px solid var(--border)', background: 'var(--surface-1)', boxShadow: '0 10px 30px rgba(0,0,0,0.2)' }}>
+                  <button type="button" role="menuitem" disabled={safetyBusy} onClick={() => { setShowSafetyMenu(false); setShowReport(true) }} style={safetyMenuItemStyle()}><Flag size={14} /> Report profile</button>
+                  <button type="button" role="menuitem" disabled={safetyBusy} onClick={muteProfile} style={safetyMenuItemStyle()}><VolumeX size={14} /> Mute account</button>
+                  <button type="button" role="menuitem" disabled={safetyBusy} onClick={blockProfile} style={safetyMenuItemStyle('var(--nia-coral)')}><UserX size={14} /> Block account</button>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
+        {safetyNotice && <p role="status" style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '0 0 12px' }}>{safetyNotice}</p>}
+
         {/* Bio */}
+        {profile.open_to && <p><strong>Open to:</strong> {profile.open_to}</p>}
+        {profile.ask_me_about && <p><strong>Ask me about:</strong> {profile.ask_me_about}</p>}
         {profile.bio && (
           <p style={{
             fontSize: 14, lineHeight: 1.65, color: 'var(--text-primary)',
@@ -540,6 +656,20 @@ export default function ProfilePage() {
           }}>
             {profile.bio}
           </p>
+        )}
+
+        {/* Purpose goals */}
+        {goals.length > 0 && (
+          <div style={{ width: '100%', maxWidth: 400, marginBottom: 16, padding: '14px 16px', borderRadius: 16, background: 'var(--surface-1)', border: '1px solid var(--border)' }}>
+            <p style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.7px', margin: '0 0 8px' }}>Here to</p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {goals.map(goal => (
+                <span key={goal} style={{ fontSize: 12, fontWeight: 700, padding: '5px 10px', borderRadius: 999, background: 'rgba(91,33,182,0.1)', color: 'var(--nia-violet)' }}>
+                  {goal}
+                </span>
+              ))}
+            </div>
+          </div>
         )}
 
         {/* Interest tags */}
@@ -807,8 +937,8 @@ export default function ProfilePage() {
                     {reply.media_url && (
                       <div style={{ marginTop: 8, borderRadius: 12, overflow: 'hidden', maxWidth: 280, border: '1px solid var(--divider)' }}>
                         {reply.media_type === 'video'
-                          ? <video src={reply.media_url} controls style={{ width: '100%', display: 'block', maxHeight: 200, objectFit: 'cover' }} />
-                          : <img src={reply.media_url} alt="" style={{ width: '100%', display: 'block', maxHeight: 200, objectFit: 'cover' }} />
+                          ? <video src={mediaUrl(reply.media_url)} controls style={{ width: '100%', display: 'block', maxHeight: 200, objectFit: 'cover' }} />
+                          : <img src={mediaUrl(reply.media_url)} alt="" style={{ width: '100%', display: 'block', maxHeight: 200, objectFit: 'cover' }} />
                         }
                       </div>
                     )}
@@ -825,8 +955,25 @@ export default function ProfilePage() {
           )}
         </>
       )}
+      {showReport && (
+        <ReportSheet
+          title={`Report @${profile.username}`}
+          description="Tell Nia what is concerning about this account. They will not be told who reported them."
+          onClose={() => setShowReport(false)}
+          onSubmit={reportProfile}
+        />
+      )}
     </div>
   )
+}
+
+function safetyMenuItemStyle(color = 'var(--text-primary)'): React.CSSProperties {
+  return {
+    display: 'flex', alignItems: 'center', gap: 9,
+    width: '100%', padding: '11px 14px', border: 'none',
+    background: 'transparent', color, cursor: 'pointer',
+    font: 'inherit', fontSize: 13, fontWeight: 600, textAlign: 'left',
+  }
 }
 
 function EmptyState({ emoji, message, sub }: { emoji?: string; message: string; sub?: string }) {

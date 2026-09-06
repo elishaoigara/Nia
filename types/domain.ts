@@ -15,32 +15,38 @@ export interface ProfileSummary {
   city?: string | null
   university?: string | null
   bio?: string | null
+  interests?: string[] | string | null
+  goals?: string[] | string | null
   language?: string | null
   last_seen_at?: string | null
 }
 
 export interface Profile extends ProfileSummary {
+  open_to?: string | null
+  ask_me_about?: string | null
   banner_url?: string | null
   headline?: string | null
   website?: string | null
   languages?: string[] | string | null
   interests?: string[] | string | null
+  goals?: string[] | string | null
   created_at?: string | null
   tribe?: string | null
   gender?: string | null
   birth_date?: string | null
-  verified?: boolean | null
-  is_verified?: boolean | null
-  verification_status?: string | null
 }
 
 export interface CircleMember {
-  user_id: string
+  user_id?: string
+  count?: number
   profiles?: ProfileSummary | null
 }
 
 export interface Circle {
+  welcome?: string | null
+  rules?: string | null
   id: string
+  created_by?: string | null
   name: string
   slug: string
   description?: string | null
@@ -50,6 +56,8 @@ export interface Circle {
   is_private?: boolean | null
   created_at?: string | null
   circle_members?: CircleMember[]
+  member_count?: number
+  relevance_score?: number
 }
 
 export interface CircleJoinRequest {
@@ -96,6 +104,7 @@ export interface Post {
   thumbnail_url?: string | null
   video_duration?: number | null
   category?: string | null
+  contribution_mode?: 'ask' | 'offer' | 'update' | 'opportunity' | 'reflection' | null
   language: string | null
   circle_id?: string | null
   profiles: ProfileSummary | null

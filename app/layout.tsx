@@ -1,8 +1,9 @@
 import type { Metadata, Viewport } from 'next'
 import './globals.css'
+import { PreferencesProvider } from '@/components/PreferencesProvider'
+import DialogAccessibility from '@/components/DialogAccessibility'
 import Navbar from '@/components/Navbar'
 import { ThemeProvider } from '@/components/ThemeProvider'
-import SplashScreen from '@/components/SplashScreen'
 import { getAppUrl } from '@/lib/app-url'
 
 export const metadata: Metadata = {
@@ -47,11 +48,14 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     <html lang="en" suppressHydrationWarning>
       <body className="bg-(--surface-0) text-(--text-primary) antialiased">
         <ThemeProvider>
-          <SplashScreen />
+          <PreferencesProvider>
+          <DialogAccessibility/>
+          <a href="#main-content" className="skip-link">Skip to content</a>
           <Navbar />
-          <div id="main-content" className="page-wrap">
+          <div id="main-content" tabIndex={-1} className="page-wrap">
             {children}
           </div>
+          </PreferencesProvider>
         </ThemeProvider>
       </body>
     </html>

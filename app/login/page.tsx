@@ -1,9 +1,11 @@
 'use client';
 
-import React, { useState } from 'react';
+import { safeNext } from '@/lib/auth-next'
+import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
+import { friendlyAuthError } from '@/lib/auth-errors';
 import UnityLine from '@/components/UnityLine';
 
 export default function LoginPage() {
@@ -14,6 +16,22 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const callbackError = new URLSearchParams(window.location.search).get('error');
+    if (!callbackError) return;
+
+    const messages: Record<string, string> = {
+      missing_auth_code: 'That sign-in link is incomplete. Please start again.',
+      auth_callback_failed: 'We could not finish signing you in. Please try again.',
+      profile_lookup_failed: 'You are signed in, but your profile could not be loaded. Please try again.',
+    };
+    const timer = window.setTimeout(() => {
+      setError(messages[callbackError] ?? 'We could not finish signing you in. Please try again.');
+      window.history.replaceState({}, '', window.location.pathname);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   async function handleEmailLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -26,12 +44,12 @@ export default function LoginPage() {
     });
 
     if (signInError) {
-      setError(signInError.message);
+      setError(friendlyAuthError(signInError.message));
       setLoading(false);
       return;
     }
 
-    router.push('/');
+    router.push(safeNext(new URLSearchParams(window.location.search).get('next')));
   }
 
   async function handleGoogleLogin() {
@@ -41,12 +59,12 @@ export default function LoginPage() {
     const { error: oauthError } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(safeNext(new URLSearchParams(window.location.search).get('next')))}`,
       },
     });
 
     if (oauthError) {
-      setError(oauthError.message);
+      setError(friendlyAuthError(oauthError.message));
       setLoading(false);
     }
   }
@@ -136,7 +154,8 @@ export default function LoginPage() {
             <button
               onClick={handleGoogleLogin}
               disabled={loading}
-              className="tap-sm"
+                className="btn-ghost tap-sm"
+              aria-label="Continue with Google"
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -193,48 +212,37 @@ export default function LoginPage() {
           {/* Email form */}
           <form onSubmit={handleEmailLogin}>
             <div style={{ marginBottom: 14 }}>
+              <label htmlFor="login-email" className="visually-hidden">Email address</label>
               <input
+                id="login-email"
                 type="email"
+                inputMode="email"
+                autoComplete="email"
                 placeholder="Email"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
                 required
-                style={{
-                  background: 'var(--surface-0)',
-                  border: '1px solid var(--border)',
-                  color: 'var(--text-primary)',
-                  width: '100%',
-                  padding: '12px 16px',
-                  borderRadius: 12,
-                  fontSize: 15,
-                  outline: 'none',
-                  fontFamily: 'inherit',
-                }}
+                className="input"
               />
             </div>
             <div style={{ marginBottom: 20 }}>
+              <label htmlFor="login-password" className="visually-hidden">Password</label>
               <input
+                id="login-password"
                 type="password"
+                autoComplete="current-password"
                 placeholder="Password"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 required
-                style={{
-                  background: 'var(--surface-0)',
-                  border: '1px solid var(--border)',
-                  color: 'var(--text-primary)',
-                  width: '100%',
-                  padding: '12px 16px',
-                  borderRadius: 12,
-                  fontSize: 15,
-                  outline: 'none',
-                  fontFamily: 'inherit',
-                }}
+                className="input"
               />
             </div>
 
             {error && (
               <p
+                role="alert"
+                aria-live="polite"
                 style={{
                   color: 'var(--nia-coral)',
                   fontSize: 13,
@@ -249,10 +257,9 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="tap-sm"
+              className="btn-primary tap-sm"
               style={{
                 width: '100%',
-                padding: '12px 0',
                 borderRadius: 12,
                 border: 'none',
                 background: 'var(--grad-brand)',
@@ -294,16 +301,8 @@ export default function LoginPage() {
           </p>
           <Link
             href="/signup"
-            style={{
-              display: 'inline-block',
-              padding: '9px 20px',
-              borderRadius: 10,
-              background: 'var(--grad-brand)',
-              color: '#fff',
-              fontWeight: 700,
-              fontSize: 13.5,
-              textDecoration: 'none',
-            }}
+            className="btn-primary"
+            style={{ textDecoration: 'none', fontSize: 13.5 }}
           >
             Create your account →
           </Link>

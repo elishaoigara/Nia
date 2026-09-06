@@ -1,5 +1,6 @@
 'use client'
 
+import { mediaUrl } from '@/lib/media-url'
 import { useState } from 'react'
 import Link from 'next/link'
 import { Play, Heart } from 'lucide-react'
@@ -31,8 +32,9 @@ export interface HomeFlick {
 // Shows "Your Circles" and "Trending" as a single segmented rail rather than
 // two stacked strips, so people see one horizontal row — not three rails of
 // teasers (Stories, Circles, Trending) — before they hit an actual post.
-export default function HomeRail({ circles, flicks, currentUserId }: { circles: HomeCircle[]; flicks: HomeFlick[]; currentUserId: string }) {
+export default function HomeRail({ circles, suggestedCircles = [], flicks, currentUserId }: { circles: HomeCircle[]; suggestedCircles?: HomeCircle[]; flicks: HomeFlick[]; currentUserId: string }) {
   const hasFlicks = flicks.length > 0
+  const displayCircles = circles.length > 0 ? circles : suggestedCircles
   const [tab, setTab] = useState<'circles' | 'trending'>(hasFlicks ? 'trending' : 'circles')
 
   const showCircles = tab === 'circles' || !hasFlicks
@@ -62,14 +64,14 @@ export default function HomeRail({ circles, flicks, currentUserId }: { circles: 
         </div>
       ) : (
         <p style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-tertiary)', margin: '0 0 10px' }}>
-          Your Circles
+          {circles.length > 0 ? 'Your Circles' : 'Circles for you'}
         </p>
       )}
 
       {showCircles && (
         <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4, WebkitOverflowScrolling: 'touch' } as React.CSSProperties}>
           <CreateCircle userId={currentUserId} compact />
-          {circles.map(c => {
+          {displayCircles.map(c => {
             const cat = c.category?.toLowerCase() ?? 'default'
             const emoji = CATEGORY_EMOJI[cat] ?? CATEGORY_EMOJI.default
             const color = CATEGORY_COLORS[cat] ?? CATEGORY_COLORS.default
@@ -130,7 +132,7 @@ export default function HomeRail({ circles, flicks, currentUserId }: { circles: 
                     bytes over the network. Tapping hands off to /flicks itself. */}
                 {f.thumbnail_url && (
                   <img
-                    src={f.thumbnail_url}
+                    src={mediaUrl(f.thumbnail_url)}
                     alt=""
                     style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                   />

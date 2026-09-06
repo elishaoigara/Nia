@@ -1,291 +1,36 @@
 'use client'
-
-import { useState, useEffect, useMemo } from 'react'
+import { useCallback,useEffect,useRef,useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { MessageSquare, Search, ArrowRight, Loader2, Inbox } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
-import type { BlockRow, ConversationMessageRow, MessageRequestRow } from '@/types/domain'
-
-function timeAgo(date: string) {
-  const s = Math.floor((Date.now() - new Date(date).getTime()) / 1000)
-  if (s < 60) return `${s}s`
-  if (s < 3600) return `${Math.floor(s / 60)}m`
-  if (s < 86400) return `${Math.floor(s / 3600)}h`
-  return new Date(date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
-}
-
-type Convo = {
-  profile: { id: string; username: string; avatar_url: string | null; full_name?: string | null }
-  lastMsg: string
-  time: string
-  unread: boolean
-  isRequest: boolean
-}
-
-export default function MessagesPage() {
-  const supabase = createClient()
-  const router = useRouter()
-  const [convos, setConvos] = useState<Convo[]>([])
-  const [loading, setLoading] = useState(true)
-  const [query, setQuery] = useState('')
-  const [tab, setTab] = useState<'primary' | 'requests'>('primary')
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
-  const [busyId, setBusyId] = useState<string | null>(null)
-
-  useEffect(() => {
-    async function load() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { router.push('/login'); return }
-      setCurrentUserId(user.id)
-
-      const [{ data: sent }, { data: received }, { data: blocks }, { data: requests }] = await Promise.all([
-        supabase.from('messages')
-          .select('recipient_id, created_at, content, profiles:recipient_id (id, username, avatar_url, full_name)')
-          .eq('sender_id', user.id)
-          .order('created_at', { ascending: false }),
-        supabase.from('messages')
-          .select('sender_id, created_at, content, is_read, profiles:sender_id (id, username, avatar_url, full_name)')
-          .eq('recipient_id', user.id)
-          .order('created_at', { ascending: false }),
-        supabase.from('blocks').select('blocked_id').eq('blocker_id', user.id),
-        supabase.from('message_requests').select('other_id, status').eq('user_id', user.id),
-      ])
-
-      const blockedIds = new Set(((blocks ?? []) as BlockRow[]).map(block => block.blocked_id))
-      const requestStatus = new Map<string, string>(
-        ((requests ?? []) as MessageRequestRow[]).map(request => [request.other_id, request.status]),
-      )
-      const sentRows = (sent ?? []) as unknown as ConversationMessageRow[]
-      const receivedRows = (received ?? []) as unknown as ConversationMessageRow[]
-
-      const map = new Map<string, Convo>()
-
-      for (const m of sentRows) {
-        const pid = m.recipient_id
-        if (blockedIds.has(pid)) continue
-        if (!map.has(pid)) {
-          map.set(pid, {
-            profile: m.profiles,
-            lastMsg: m.content ?? '📎 Media',
-            time: m.created_at,
-            unread: false,
-            isRequest: false, // I messaged them — never a "request" for me
-          })
-        }
-      }
-
-      for (const m of receivedRows) {
-        const pid = m.sender_id
-        if (blockedIds.has(pid)) continue
-        const status = requestStatus.get(pid)
-        if (status === 'declined') continue
-        const existing = map.get(pid)
-        const isRequest = status === 'pending'
-        if (!existing || new Date(m.created_at) > new Date(existing.time)) {
-          map.set(pid, {
-            profile: m.profiles,
-            lastMsg: m.content ?? '📎 Media',
-            time: m.created_at,
-            unread: !m.is_read,
-            isRequest: existing ? existing.isRequest && isRequest : isRequest,
-          })
-        }
-      }
-
-      const sorted = Array.from(map.values())
-        .filter(c => c.profile)
-        .sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())
-
-      setConvos(sorted)
-      setLoading(false)
-    }
-
-    load()
-
-    const channel = supabase
-      .channel('messages-list')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, () => load())
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'message_requests' }, () => load())
-      .subscribe()
-
-    return () => { supabase.removeChannel(channel) }
-  }, [router, supabase])
-
-  async function accept(otherId: string) {
-    if (!currentUserId) return
-    setBusyId(otherId)
-    await supabase.from('message_requests').update({ status: 'accepted', updated_at: new Date().toISOString() })
-      .eq('user_id', currentUserId).eq('other_id', otherId)
-    setConvos(prev => prev.map(c => (c.profile.id === otherId ? { ...c, isRequest: false } : c)))
-    setBusyId(null)
-  }
-
-  async function decline(otherId: string) {
-    if (!currentUserId) return
-    setBusyId(otherId)
-    await supabase.from('message_requests').update({ status: 'declined', updated_at: new Date().toISOString() })
-      .eq('user_id', currentUserId).eq('other_id', otherId)
-    setConvos(prev => prev.filter(c => c.profile.id !== otherId))
-    setBusyId(null)
-  }
-
-  const { primary, requests } = useMemo(() => {
-    const primary = convos.filter(c => !c.isRequest)
-    const requests = convos.filter(c => c.isRequest)
-    return { primary, requests }
-  }, [convos])
-
-  const activeList = tab === 'primary' ? primary : requests
-
-  const filtered = query.trim()
-    ? activeList.filter(c =>
-        c.profile.username?.toLowerCase().includes(query.toLowerCase()) ||
-        c.profile.full_name?.toLowerCase().includes(query.toLowerCase())
-      )
-    : activeList
-
-  const unreadTotal = primary.filter(c => c.unread).length
-
-  return (
-    <main style={{ width: '100%', maxWidth: 600, margin: '0 auto' }}>
-      {/* Header */}
-      <div style={{ padding: '16px 16px 0', borderBottom: '1px solid var(--border)', position: 'sticky', top: 0, zIndex: 10, background: 'var(--surface-0)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
-          <div style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--grad-brand)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <MessageSquare size={16} color="white" />
-          </div>
-          <div style={{ flex: 1 }}>
-            <h1 style={{ fontWeight: 800, fontSize: 18, lineHeight: 1.2, margin: 0 }}>Messages</h1>
-            <p style={{ fontSize: 12, color: 'var(--text-tertiary)', margin: 0 }}>
-              {unreadTotal > 0 ? `${unreadTotal} unread` : 'Your conversations'}
-            </p>
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--surface-2)', borderRadius: 12, padding: '8px 12px', marginBottom: 12 }}>
-          <Search size={15} color="var(--text-tertiary)" style={{ flexShrink: 0 }} />
-          <input
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-            placeholder="Search conversations…"
-            style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontSize: 14, color: 'var(--text-primary)', fontFamily: 'inherit' }}
-          />
-        </div>
-
-        {/* Tabs */}
-        <div style={{ display: 'flex', gap: 4 }}>
-          {(['primary', 'requests'] as const).map(t => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              className="tap-sm"
-              style={{
-                flex: 1, padding: '10px 0', border: 'none', background: 'transparent',
-                fontSize: 13.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
-                color: tab === t ? 'var(--nia-violet)' : 'var(--text-tertiary)',
-                borderBottom: tab === t ? '2px solid var(--nia-violet)' : '2px solid transparent',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-              }}
-            >
-              {t === 'primary' ? 'Primary' : 'Requests'}
-              {t === 'requests' && requests.length > 0 && (
-                <span style={{ background: 'var(--nia-violet)', color: 'white', borderRadius: 10, fontSize: 10.5, fontWeight: 800, padding: '1px 6px' }}>
-                  {requests.length}
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* List */}
-      {loading ? (
-        <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 48 }}>
-          <Loader2 size={22} className="animate-spin" style={{ color: 'var(--text-tertiary)' }} />
-        </div>
-      ) : filtered.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '64px 24px' }}>
-          {query ? (
-            <>
-              <p style={{ fontWeight: 700, fontSize: 16 }}>No results for “{query}”</p>
-              <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 4 }}>Try a different name</p>
-            </>
-          ) : tab === 'requests' ? (
-            <>
-              <Inbox size={40} style={{ color: 'var(--text-tertiary)', marginBottom: 10 }} />
-              <p style={{ fontWeight: 700, fontSize: 16 }}>No message requests</p>
-              <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 4 }}>DMs from people you don’t follow will land here.</p>
-            </>
-          ) : (
-            <>
-              <div style={{ fontSize: 44, marginBottom: 10 }}>💬</div>
-              <p style={{ fontWeight: 700, fontSize: 17 }}>No messages yet</p>
-              <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 4, marginBottom: 20 }}>
-                Visit someone’s profile and tap <strong>Message</strong> to start a conversation.
-              </p>
-              <Link href="/explore" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '10px 20px', borderRadius: 20, background: 'var(--grad-brand)', color: 'white', fontWeight: 700, fontSize: 14, textDecoration: 'none' }}>
-                Find people <ArrowRight size={14} />
-              </Link>
-            </>
-          )}
-        </div>
-      ) : (
-        <div>
-          {filtered.map(({ profile, lastMsg, time, unread, isRequest }) => (
-            <div key={profile.id} style={{ borderBottom: '1px solid var(--divider)' }}>
-              <Link
-                href={`/messages/${profile.id}`}
-                style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: unread ? 'rgba(91,33,182,0.04)' : 'transparent', textDecoration: 'none', transition: 'background 0.12s' }}
-              >
-                <div style={{ position: 'relative', flexShrink: 0 }}>
-                  <div style={{ width: 48, height: 48, borderRadius: '50%', overflow: 'hidden', background: 'var(--grad-brand)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 700, fontSize: 16, boxShadow: unread ? '0 0 0 2.5px var(--surface-0), 0 0 0 4px var(--nia-violet)' : 'none' }}>
-                    {profile.avatar_url
-                      ? <img src={profile.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      : profile.username?.[0]?.toUpperCase()}
-                  </div>
-                </div>
-
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginBottom: 2 }}>
-                    <p style={{ fontWeight: unread ? 700 : 600, fontSize: 14, color: 'var(--text-primary)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {profile.full_name || `@${profile.username}`}
-                    </p>
-                    <span style={{ fontSize: 11, color: 'var(--text-tertiary)', flexShrink: 0 }}>{timeAgo(time)}</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                    <p style={{ fontSize: 13, margin: 0, color: unread ? 'var(--text-primary)' : 'var(--text-tertiary)', fontWeight: unread ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {lastMsg}
-                    </p>
-                    {unread && <div style={{ width: 9, height: 9, borderRadius: '50%', background: 'var(--nia-violet)', flexShrink: 0 }} />}
-                  </div>
-                </div>
-              </Link>
-
-              {isRequest && tab === 'requests' && (
-                <div style={{ display: 'flex', gap: 8, padding: '0 16px 12px 76px' }}>
-                  <button
-                    onClick={() => accept(profile.id)}
-                    disabled={busyId === profile.id}
-                    className="tap-sm"
-                    style={{ flex: 1, padding: '7px', borderRadius: 10, border: 'none', background: 'var(--grad-brand)', color: 'white', fontWeight: 700, fontSize: 12.5, cursor: 'pointer' }}
-                  >
-                    Accept
-                  </button>
-                  <button
-                    onClick={() => decline(profile.id)}
-                    disabled={busyId === profile.id}
-                    className="tap-sm"
-                    style={{ flex: 1, padding: '7px', borderRadius: 10, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', fontWeight: 700, fontSize: 12.5, cursor: 'pointer' }}
-                  >
-                    Decline
-                  </button>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-    </main>
-  )
+import { usePreferences } from '@/components/PreferencesProvider'
+type Conversation={other_id:string;content:string|null;created_at:string;is_read:boolean;sender_id:string;username:string;request:boolean}
+export default function Messages(){
+ const {t}=usePreferences(),[rows,setRows]=useState<Conversation[]>([]),[more,setMore]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(''),[tab,setTab]=useState('all')
+ const cursor=useRef<{time:string;id:string}|null>(null),pending=useRef(false)
+ const load=useCallback(async(reset=false)=>{
+  if(pending.current)return;pending.current=true;setBusy(true);setError('')
+  try{
+   const s=createClient(),{data:{user}}=await s.auth.getUser();if(!user)throw Error('Sign in again.')
+   const before=reset?null:cursor.current
+   const {data,error}=await s.rpc('conversation_page',{before_time:before?.time??null,before_user:before?.id??null,page_size:20});if(error)throw error
+   const {data:requests,error:requestError}=await s.from('message_requests').select('other_id,status').eq('user_id',user.id);if(requestError)throw requestError
+   const status=new Map((requests??[]).map(r=>[r.other_id,r.status]))
+   const incoming=await Promise.all((data??[]).map(async(row:Omit<Conversation,'username'|'request'>)=>{
+    const {data:card}=await s.rpc('profile_card',{target_user:row.other_id})
+    return {...row,username:card?.[0]?.username??'Unavailable account',request:status.get(row.other_id)==='pending'}
+   }))
+   const visible=incoming.filter(r=>status.get(r.other_id)!=='declined')
+   setRows(old=>reset?visible:[...old,...visible.filter(r=>!old.some(o=>o.other_id===r.other_id))]);setMore(incoming.length===20)
+   const last=incoming.at(-1);if(last)cursor.current={time:last.created_at,id:last.other_id}
+  }catch{setError('Messages could not be loaded. Please retry.')}finally{setBusy(false);pending.current=false}
+ },[])
+ useEffect(()=>{const timer=setTimeout(()=>void load(true),0);const s=createClient();let channel:ReturnType<typeof s.channel>|undefined;void s.auth.getUser().then(({data:{user}})=>{if(user)channel=s.channel(`inbox-${user.id}`).on('postgres_changes',{event:'INSERT',schema:'public',table:'messages',filter:`recipient_id=eq.${user.id}`},()=>void load(true)).subscribe()});return()=>{clearTimeout(timer);if(channel)void s.removeChannel(channel)}},[load])
+ async function respond(other:string,accept:boolean){
+  const s=createClient(),{data:{user}}=await s.auth.getUser();if(!user)return
+  const {error}=await s.from('message_requests').update({status:accept?'accepted':'declined'}).match({user_id:user.id,other_id:other});if(error)setError('Request could not be updated. Please retry.');else void load(true)
+ }
+ return <main className="mx-auto max-w-xl p-4 space-y-4"><h1 className="text-2xl font-bold">{t('Messages')}</h1><p>Continue a conversation or review a message request.</p><nav className="flex gap-3" aria-label="Message filters"><button className="btn-ghost" aria-pressed={tab==='all'} onClick={()=>setTab('all')}>All conversations</button><button className="btn-ghost" aria-pressed={tab==='requests'} onClick={()=>setTab('requests')}>Requests</button><Link className="btn-ghost" href="/settings">Privacy</Link></nav>
+ {rows.filter(r=>tab==='all'||r.request).map(r=><article key={r.other_id} className="card p-4 space-y-3"><Link className="block" href={`/messages/${r.other_id}`}><strong>@{r.username}</strong><p className="truncate">{r.content??'Attachment'}</p><time className="text-sm">{new Date(r.created_at).toLocaleString()}</time></Link>{r.request&&<div className="flex gap-2"><button className="btn-primary" onClick={()=>respond(r.other_id,true)}>Accept request</button><button className="btn-ghost" onClick={()=>respond(r.other_id,false)}>Decline</button></div>}</article>)}
+ {!busy&&!rows.length&&!error&&<p>No conversations yet. Open a member’s profile to send a message.</p>}{error&&<p role="alert">{error}</p>}{(more||error)&&<button className="btn-ghost" disabled={busy} onClick={()=>load(!!error)}>{error?'Retry':t('Load more')}</button>}{busy&&<p role="status">Loading conversations…</p>}
+ </main>
 }

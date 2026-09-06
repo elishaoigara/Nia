@@ -1,209 +1,27 @@
-import { createClient }  from '@/lib/supabase/server'
-import { redirect }       from 'next/navigation'
-import CreatePost         from '@/components/CreatePost'
-import PostCard           from '@/components/PostCard'
-import LoadMore           from '@/components/LoadMore'
-import FeedTabs           from '@/components/FeedTabs'
-import StoriesBar         from '@/components/StoriesBar'
-import HomeRail           from '@/components/HomeRail'
-import WelcomeBanner      from '@/components/WelcomeBanner'
-import { Suspense }       from 'react'
-import { scorePosts }     from '@/lib/feed-scorer'
-import { scoreFlicks }    from '@/lib/flicks-scorer'
-import type { UserContext, ScorerPost } from '@/lib/feed-scorer'
-import type { HomeCircle, HomeFlick } from '@/components/HomeRail'
-import type { BlockRow, FollowRow, MuteRow } from '@/types/domain'
-import { hoursAgoIso } from '@/lib/date'
-
-const PAGE_SIZE      = 15
-const POOL_MULTIPLIER = 6
-const TRENDING_FLICKS_LIMIT = 10
-const TRENDING_WINDOW_HOURS = 72
-
-const BASE_SELECT = `
-  *,
-  profiles:user_id (id, username, full_name, avatar_url, country, city),
-  circles:circle_id (id, name, slug),
-  likes (user_id),
-  comments (id, profiles:user_id (id, username, avatar_url)),
-  reactions (user_id, emoji),
-  reposts (user_id),
-  bookmarks (user_id),
-  polls:polls (*)
-`
-
-export default async function FeedPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ page?: string; tab?: string }>
-}) {
-  const { page, tab } = await searchParams
-  const parsedPage = Number.parseInt(page ?? '1', 10)
-  const currentPage = Number.isFinite(parsedPage) ? Math.min(Math.max(parsedPage, 1), 100) : 1
-  const currentTab = tab === 'local' || tab === 'following' ? tab : 'africa'
-  const offset = (currentPage - 1) * PAGE_SIZE
-
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
-
-  const { data: profileCheck, error: profileCheckError } = await supabase
-    .from('profiles').select('id').eq('id', user.id).maybeSingle()
-  if (profileCheckError) throw profileCheckError
-  if (!profileCheck) redirect('/onboarding')
-
-  const [profileRes, followsRes, blocksRes, mutesRes] = await Promise.all([
-    supabase.from('profiles').select('country, language').eq('id', user.id).single(),
-    supabase.from('follows').select('following_id').eq('follower_id', user.id),
-    supabase.from('blocks').select('blocked_id').eq('blocker_id', user.id),
-    supabase.from('mutes').select('muted_id').eq('muter_id', user.id),
-  ])
-
-  const contextError = profileRes.error ?? followsRes.error ?? blocksRes.error ?? mutesRes.error
-  if (contextError) throw contextError
-
-  const myProfile = profileRes.data
-  const ctx: UserContext = {
-    userId:       user.id,
-    followingIds: new Set(((followsRes.data as FollowRow[] | null) ?? []).map(f => f.following_id)),
-    blockedIds: new Set(((blocksRes.data as BlockRow[] | null) ?? []).map(b => b.blocked_id)),
-    mutedIds: new Set(((mutesRes.data as MuteRow[] | null) ?? []).map(m => m.muted_id)),
-    country:      myProfile?.country  ?? null,
-    language:     myProfile?.language ?? null,
-  }
-
-  const candidatePool = PAGE_SIZE * POOL_MULTIPLIER * currentPage
-  let candidates: ScorerPost[] = []
-
-  // "Your Circles" + "Trending Flicks" for the combined home rail. Both are
-  // independent of the feed tab, so they run once alongside (not blocking)
-  // the tab-specific candidates query below.
-  const trendingSince = hoursAgoIso(TRENDING_WINDOW_HOURS)
-  const [circleResponse, trendingResponse] = await Promise.all([
-    supabase.from('circle_members')
-      .select('circles:circle_id (id, name, slug, category)')
-      .eq('user_id', user.id)
-      .limit(12),
-    supabase.from('posts')
-      .select(`
-        id, user_id, content, media_url, thumbnail_url, created_at, language, video_duration, category,
-        profiles:user_id (id, username, avatar_url, country),
-        likes (user_id),
-        comments (id),
-        reposts (user_id)
-      `)
-      .eq('media_type', 'video')
-      .not('media_url', 'is', null)
-      .gte('created_at', trendingSince)
-      .order('created_at', { ascending: false })
-      .limit(60),
-  ])
-  const railError = circleResponse.error ?? trendingResponse.error
-  if (railError) throw railError
-  const circleRows = (circleResponse.data ?? []) as unknown as { circles: HomeCircle | null }[]
-  const myCircles = circleRows
-    .map(row => row.circles)
-    .filter((circle): circle is HomeCircle => circle !== null)
-  const trendingFlicks = scoreFlicks(
-    (trendingResponse.data ?? []) as unknown as ScorerPost[],
-    ctx,
-  ).slice(0, TRENDING_FLICKS_LIMIT) as HomeFlick[]
-
-  if (currentTab === 'following') {
-    if (ctx.followingIds.size > 0) {
-      const { data, error } = await supabase
-        .from('posts').select(BASE_SELECT)
-        .in('user_id', [...ctx.followingIds])
-        .order('created_at', { ascending: false })
-        .limit(candidatePool)
-      if (error) throw error
-      candidates = (data ?? []) as unknown as ScorerPost[]
-    }
-  } else if (currentTab === 'local' && myProfile?.country) {
-    const { data: countryUsers, error: countryError } = await supabase
-      .from('profiles').select('id').eq('country', myProfile.country)
-    if (countryError) throw countryError
-    const countryIds = ((countryUsers ?? []) as { id: string }[]).map(profile => profile.id)
-    if (countryIds.length > 0) {
-      const { data, error } = await supabase
-        .from('posts').select(BASE_SELECT)
-        .in('user_id', countryIds)
-        .order('created_at', { ascending: false })
-        .limit(candidatePool)
-      if (error) throw error
-      candidates = (data ?? []) as unknown as ScorerPost[]
-    }
-  } else {
-    const { data, error } = await supabase
-      .from('posts').select(BASE_SELECT)
-      .order('created_at', { ascending: false })
-      .limit(candidatePool)
-    if (error) throw error
-    candidates = (data ?? []) as unknown as ScorerPost[]
-  }
-
-  const ranked = scorePosts(candidates, ctx)
-  const pageSlice = ranked.slice(offset, offset + PAGE_SIZE)
-  const posts = pageSlice.map(p => ({
-    ...p,
-    viewer_is_following: ctx.followingIds.has(p.user_id),
-  })) as ScorerPost[]
-  const hasMore = ranked.length > offset + PAGE_SIZE || candidates.length === candidatePool
-
-  const EMPTY: Record<string, { emoji: string; title: string; body: string }> = {
-    africa:    { emoji: '🌍', title: 'Start the conversation', body: 'Share the first post for all of Africa to see.' },
-    local:     { emoji: '📍', title: 'Your local feed lights up once neighbours join', body: myProfile?.country ? `Be the first to post from ${myProfile.country}.` : 'Set your country in your profile to see local posts.' },
-    following: { emoji: '👀', title: 'Find your circle',    body: 'Follow people or join a Circle to fill this feed.' },
-  }
-  const empty = EMPTY[currentTab] ?? EMPTY.africa
-
-  return (
-    <div style={{ maxWidth: 620, margin: '0 auto', width: '100%' }}>
-
-      <WelcomeBanner />
-
-      {/* Stories */}
-      <StoriesBar currentUserId={user.id} />
-
-      {/* Your Circles / Trending Flicks — one combined rail, not two */}
-      <HomeRail circles={myCircles} flicks={trendingFlicks} currentUserId={user.id} />
-
-      {/* Feed tabs — sticky under top nav */}
-      <Suspense fallback={null}>
-        <FeedTabs currentTab={currentTab} />
-      </Suspense>
-
-      {/* Compose */}
-      <div id="compose">
-        <CreatePost userId={user.id} />
-      </div>
-
-      {/* Empty state */}
-      {posts.length === 0 && (
-        <div style={{ textAlign: 'center', padding: '72px 24px' }}>
-          <div style={{ fontSize: 48, marginBottom: 12 }}>{empty.emoji}</div>
-          <p style={{ fontWeight: 700, fontSize: 18, marginBottom: 6 }}>{empty.title}</p>
-          <p style={{ fontSize: 14, color: 'var(--text-tertiary)' }}>{empty.body}</p>
-        </div>
-      )}
-
-      {/* Posts — flat rows, NO wrapping div with margin/padding */}
-      {posts.map(post => (
-        <PostCard
-          key={post.id}
-          post={post}
-          currentUserId={user.id}
-        />
-      ))}
-
-      {hasMore && (
-        <LoadMore
-          key={`${currentTab}:${currentPage}`}
-          currentPage={currentPage}
-          currentTab={currentTab}
-          currentUserId={user.id}
-        />
-      )}
-    </div>
-  )
+import Link from 'next/link'
+import { createClient } from '@/lib/supabase/server'
+import { redirect } from 'next/navigation'
+import { queryFeed } from '@/lib/feed-query'
+import PostCard from '@/components/PostCard'
+import CreatePost from '@/components/CreatePost'
+import LoadMore from '@/components/LoadMore'
+import FeedTabs from '@/components/FeedTabs'
+import StoriesBar from '@/components/StoriesBar'
+export default async function Home({searchParams}:{searchParams:Promise<{tab?:string}>}){
+ const {tab}=await searchParams,currentTab=tab==='following'||tab==='local'?tab:'africa'
+ const s=await createClient(),{data:{user}}=await s.auth.getUser();if(!user)redirect('/login')
+ const {data:profile,error}=await s.from('profiles').select('id').eq('id',user.id).maybeSingle();if(error)throw error;if(!profile)redirect('/onboarding')
+ const [feed,memberships]=await Promise.all([queryFeed(s,user.id,currentTab),s.from('circle_members').select('circles:circle_id(id,name,slug)').eq('user_id',user.id).limit(6)])
+ const circles=(memberships.data??[]) as unknown as {circles:{id:string;name:string;slug:string}|null}[]
+ return <main className="feed-col">
+  <header className="px-4 py-3 flex items-center justify-between"><h1 className="text-xl font-bold">Your community</h1><Link href="/explore">Discover</Link></header>
+  <nav aria-label="Your Circles" className="flex gap-2 overflow-x-auto px-4 pb-3">{circles.map(({circles:c})=>c&&<Link className="btn-ghost whitespace-nowrap" key={c.id} href={`/circles/${c.slug}`}>{c.name}</Link>)}<Link className="btn-ghost whitespace-nowrap" href="/circles">{circles.length?'All Circles':'Find a Circle'}</Link></nav>
+  <div id="compose"><CreatePost userId={user.id}/></div>
+  <details className="px-4 py-2"><summary>Stories from your community</summary><StoriesBar currentUserId={user.id}/></details>
+  <FeedTabs currentTab={currentTab}/>
+  <p className="px-4 py-2 text-sm text-(--text-secondary)">Latest posts · your language and safety preferences apply</p>
+  {feed.posts.map(post=><PostCard key={post.id} post={post} currentUserId={user.id}/>)}
+  {!feed.posts.length&&<div className="p-6 space-y-3"><h2 className="font-bold">Make yourself at home</h2><p>Share a thought, a joke, a question, or something you made.</p><Link href="/circles">Explore Circles →</Link></div>}
+  {feed.hasMore&&<LoadMore key={currentTab} initialCursor={feed.cursor} currentTab={currentTab} currentUserId={user.id} initialIds={feed.posts.map(p=>p.id)}/>}
+ </main>
 }

@@ -1,5 +1,6 @@
 'use client'
 
+import { mediaUrl } from '@/lib/media-url'
 import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
@@ -16,6 +17,11 @@ const INTERESTS_OPTIONS = [
   'Art', 'Photography', 'Film', 'Sports', 'Football', 'Politics',
   'Business', 'Health', 'Education', 'Agriculture', 'Climate',
   'Literature', 'Gaming', 'Travel', 'Food', 'Culture',
+]
+
+const GOALS_OPTIONS = [
+  'Learn from people', 'Build a project', 'Find opportunities',
+  'Meet collaborators', 'Share ideas', 'Support my community',
 ]
 
 type Section = 'basic' | 'location' | 'identity' | 'interests'
@@ -66,6 +72,8 @@ export default function EditProfilePage() {
   // Form fields
   const [fullName,    setFullName]    = useState('')
   const [username,    setUsername]    = useState('')
+  const [openTo, setOpenTo] = useState('')
+  const [askAbout, setAskAbout] = useState('')
   const [headline,    setHeadline]    = useState('')
   const [bio,         setBio]         = useState('')
   const [website,     setWebsite]     = useState('')
@@ -73,6 +81,7 @@ export default function EditProfilePage() {
   const [city,        setCity]        = useState('')
   const [languages,   setLanguages]   = useState<string[]>([])
   const [interests,   setInterests]   = useState<string[]>([])
+  const [goals,       setGoals]       = useState<string[]>([])
 
   // Media
   const [avatarFile,    setAvatarFile]    = useState<File | null>(null)
@@ -96,12 +105,15 @@ export default function EditProfilePage() {
         setFullName(data.full_name ?? '')
         setUsername(data.username ?? '')
         setHeadline(data.headline ?? '')
+        setOpenTo(data.open_to ?? '')
+        setAskAbout(data.ask_me_about ?? '')
         setBio(data.bio ?? '')
         setWebsite(data.website ?? '')
         setCountry(data.country ?? '')
         setCity(data.city ?? '')
         setLanguages(Array.isArray(data.languages) ? data.languages : data.languages ? [data.languages] : [])
         setInterests(Array.isArray(data.interests) ? data.interests : data.interests ? [data.interests] : [])
+        setGoals(Array.isArray(data.goals) ? data.goals : data.goals ? [data.goals] : [])
       }
       setLoading(false)
     }
@@ -155,6 +167,8 @@ export default function EditProfilePage() {
     const { error: updateError } = await supabase.from('profiles').update({
       full_name:  fullName.trim(),
       username:   username.trim().toLowerCase().replace(/[^a-z0-9_]/g, ''),
+      open_to: openTo.trim() || null,
+      ask_me_about: askAbout.trim() || null,
       headline:   headline.trim() || null,
       bio:        bio.trim() || null,
       website:    website.trim() || null,
@@ -162,6 +176,7 @@ export default function EditProfilePage() {
       city:       city.trim() || null,
       languages:  languages.length ? languages : null,
       interests:  interests.length ? interests : null,
+      goals:       goals,
       avatar_url,
       banner_url,
     }).eq('id', profile.id)
@@ -181,6 +196,10 @@ export default function EditProfilePage() {
 
   function toggleInterest(tag: string) {
     setInterests(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag])
+  }
+
+  function toggleGoal(goal: string) {
+    setGoals(prev => prev.includes(goal) ? prev.filter(item => item !== goal) : [...prev, goal])
   }
 
   const filteredCountries = AFRICAN_COUNTRIES.filter(c =>
@@ -291,7 +310,7 @@ export default function EditProfilePage() {
             position: 'relative',
           }}>
             {avatarSrc
-              ? <img src={avatarSrc} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ? <img src={mediaUrl(avatarSrc)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               : initials
             }
             {/* Overlay */}
@@ -551,6 +570,33 @@ export default function EditProfilePage() {
         {/* INTERESTS */}
         {activeSection === 'interests' && (
           <>
+            <Field label="What are you here to do?" sub="This helps people and Circles understand how to connect with you">
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {GOALS_OPTIONS.map(goal => {
+                  const selected = goals.includes(goal)
+                  return (
+                    <button
+                      key={goal}
+                      type="button"
+                      onClick={() => toggleGoal(goal)}
+                      aria-pressed={selected}
+                      style={{
+                        padding: '8px 14px', borderRadius: 20,
+                        border: `1.5px solid ${selected ? 'var(--nia-violet)' : 'var(--border)'}`,
+                        background: selected ? 'rgba(91,33,182,0.1)' : 'var(--surface-2)',
+                        color: selected ? 'var(--nia-violet)' : 'var(--text-primary)',
+                        fontWeight: selected ? 700 : 500,
+                        fontSize: 13, cursor: 'pointer', fontFamily: 'inherit',
+                      }}
+                    >
+                      {goal}
+                    </button>
+                  )
+                })}
+              </div>
+            </Field>
+            <Field label="Open to (optional)"><input className="input" value={openTo} maxLength={160} onChange={e=>setOpenTo(e.target.value)} placeholder="Friendship, collaborations, opportunities…"/></Field>
+            <Field label="Ask me about (optional)"><input className="input" value={askAbout} maxLength={160} onChange={e=>setAskAbout(e.target.value)} placeholder="Music, design, football…"/></Field>
             <Field label="Your Interests" sub="Pick topics you care about — helps people discover you">
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                 {INTERESTS_OPTIONS.map(tag => {

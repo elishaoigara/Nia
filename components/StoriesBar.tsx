@@ -1,10 +1,15 @@
 'use client';
 
+import { uploadMedia } from '@/lib/upload-media'
+import { mediaUrl } from '@/lib/media-url'
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import dynamic from 'next/dynamic';
 import { createClient } from '@/lib/supabase/client';
-import { X, ChevronLeft, ChevronRight, Plus, Loader2, ImagePlus, Video, Trash2, Eye, Send, MessageCircle } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, Plus, Loader2, ImagePlus, Video, Trash2, Eye, Send, MessageCircle, SlidersHorizontal } from 'lucide-react';
 import type { ProfileSummary, StoryViewRow } from '@/types/domain';
 import { relativeTime } from '@/lib/date';
+
+const MediaEditor = dynamic(() => import('@/components/MediaEditor'), { ssr: false });
 
 type StoryViewerRow = Required<Pick<StoryViewRow, 'viewer_id' | 'viewed_at'>>;
 type StoryProfile = Pick<ProfileSummary, 'id' | 'username' | 'avatar_url'>;
@@ -51,7 +56,7 @@ function Avatar({ url, name, size = 40 }: { url: string | null; name: string; si
         color: '#fff', fontWeight: 700, fontSize: size * 0.38,
       }}>
         {url
-          ? <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          ? <img src={mediaUrl(url)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           : name[0]?.toUpperCase()
         }
       </div>
@@ -75,6 +80,7 @@ function StoryUploadModal({
   const [type,    setType]    = useState<'image' | 'video'>('image');
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState('');
+  const [editing, setEditing] = useState(false);
   const imageRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLInputElement>(null);
 
@@ -89,6 +95,7 @@ function StoryUploadModal({
     setType(mediaType);
     if (preview) URL.revokeObjectURL(preview);
     setPreview(URL.createObjectURL(f));
+    setEditing(true);
     if (imageRef.current) imageRef.current.value = '';
     if (videoRef.current) videoRef.current.value = '';
   }
@@ -97,15 +104,10 @@ function StoryUploadModal({
     if (!file || loading) return;
     setLoading(true); setError('');
     try {
-      const ext  = file.name.split('.').pop() ?? (type === 'video' ? 'mp4' : 'jpg');
-      const path = `${currentUserId}/story_${Date.now()}.${ext}`;
-      const { error: upErr } = await supabase.storage
-        .from('post-media').upload(path, file, { contentType: file.type });
-      if (upErr) { setError(upErr.message); setLoading(false); return; }
-      const media_url  = supabase.storage.from('post-media').getPublicUrl(path).data.publicUrl;
+      const { url: media_url } = await uploadMedia('post-media', file);
       const expires_at = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
       const { error: dbErr } = await supabase.from('stories').insert({
-        user_id: currentUserId, media_url, media_type: type, expires_at,
+        user_id: currentUserId, media_url, media_type: type, expires_at, audience: 'followers',
       });
       if (dbErr) { setError(dbErr.message); setLoading(false); return; }
       if (preview) URL.revokeObjectURL(preview);
@@ -118,6 +120,7 @@ function StoryUploadModal({
   }
 
   return (
+    <>
     <div
       style={{
         position: 'fixed', inset: 0, zIndex: 1000,
@@ -154,8 +157,8 @@ function StoryUploadModal({
         {preview ? (
           <div style={{ position: 'relative', borderRadius: 16, overflow: 'hidden', background: '#000', aspectRatio: '9/16', maxHeight: 320 }}>
             {type === 'video'
-              ? <video src={preview} style={{ width: '100%', height: '100%', objectFit: 'cover' }} controls />
-              : <img src={preview} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ? <video src={mediaUrl(preview)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} controls />
+              : <img src={mediaUrl(preview)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             }
             <button
               onClick={() => { if (preview) URL.revokeObjectURL(preview); setFile(null); setPreview(null); }}
@@ -167,6 +170,13 @@ function StoryUploadModal({
               }}
             >
               <X size={14} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              style={{ position: 'absolute', left: 8, bottom: 8, display: 'inline-flex', alignItems: 'center', gap: 5, border: '1px solid rgba(255,255,255,0.2)', borderRadius: 999, padding: '7px 10px', background: 'rgba(0,0,0,0.65)', color: '#fff', fontSize: 11, fontWeight: 750, cursor: 'pointer', backdropFilter: 'blur(8px)' }}
+            >
+              <SlidersHorizontal size={12} /> Edit
             </button>
           </div>
         ) : (
@@ -220,6 +230,21 @@ function StoryUploadModal({
         </button>
       </div>
     </div>
+    {editing && file && (
+      <MediaEditor
+        file={file}
+        type={type}
+        maxOutputBytes={type === 'video' ? 50 * 1024 * 1024 : 20 * 1024 * 1024}
+        onCancel={() => setEditing(false)}
+        onSave={editedFile => {
+          if (preview) URL.revokeObjectURL(preview);
+          setFile(editedFile);
+          setPreview(URL.createObjectURL(editedFile));
+          setEditing(false);
+        }}
+      />
+    )}
+    </>
   );
 }
 
@@ -533,8 +558,8 @@ function StoryViewer({
         {/* ── Media ── */}
         {story.media_type === 'video' ? (
           <video
-            key={story.id} ref={videoRef} src={story.media_url}
-            autoPlay playsInline muted={false}
+            key={story.id} ref={videoRef} src={mediaUrl(story.media_url)}
+            controls preload="none" playsInline muted={false}
             style={{ width: '100%', height: '100%', objectFit: 'cover' }}
             onEnded={advance}
             onTimeUpdate={() => {
@@ -543,7 +568,7 @@ function StoryViewer({
             }}
           />
         ) : (
-          <img key={story.id} src={story.media_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          <img key={story.id} src={mediaUrl(story.media_url)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         )}
 
         {/* ── Gradient overlays ── */}
@@ -758,7 +783,7 @@ function StoryBubble({
             overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
             {group.avatar_url
-              ? <img src={group.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ? <img src={mediaUrl(group.avatar_url)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               : isMine && !hasOwnStories
                 ? <Plus size={24} color="var(--text-secondary)" />
                 : <span style={{ color: unread ? '#fff' : 'var(--text-secondary)', fontWeight: 700, fontSize: 20 }}>

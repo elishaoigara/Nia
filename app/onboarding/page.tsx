@@ -1,242 +1,37 @@
 'use client'
-import { useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, ArrowRight } from 'lucide-react'
-import { AFRICAN_COUNTRIES, COUNTRY_FLAGS } from '@/lib/african-data'
+import Link from 'next/link'
+import { createClient } from '@/lib/supabase/client'
+import { INTERESTS, normalizeInterest } from '@/lib/interests'
+import { safeNext } from '@/lib/auth-next'
 
-const STEPS = ['Profile', 'Location', 'Bio']
-
-export default function OnboardingPage() {
-  const supabase = createClient()
-  const router = useRouter()
-  const [step, setStep] = useState(0)
-  const [username, setUsername] = useState('')
-  const [fullName, setFullName] = useState('')
-  const [country, setCountry] = useState('')
-  const [city, setCity] = useState('')
-  const [bio, setBio] = useState('')
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [countrySearch, setCountrySearch] = useState('')
-
-  const filteredCountries = AFRICAN_COUNTRIES.filter(c =>
-    c.toLowerCase().includes(countrySearch.toLowerCase())
-  )
-
-  async function handleComplete() {
-    setLoading(true); setError('')
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { router.push('/login'); return }
-
-    const { data: existing } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('username', username.toLowerCase().trim())
-      .single()
-    if (existing) { setError('Username taken. Try another.'); setLoading(false); return }
-
-    const { error: insertError } = await supabase.from('profiles').insert({
-      id: user.id,
-      username: username.toLowerCase().replace(/\s+/g, '').trim(),
-      full_name: fullName.trim(),
-      country,
-      city: city.trim() || null,
-      bio: bio.trim() || null,
-      // keep university column null for non-campus users
-    })
-
-    if (insertError) { setError(insertError.message); setLoading(false) }
-    else { router.push('/') }
-  }
-
-  return (
-    <div
-      className="min-h-screen flex items-center justify-center px-4 py-12 relative overflow-hidden"
-      style={{ background: 'var(--surface-0)' }}
-    >
-      {/* Progress bar */}
-      <div className="onboarding-progress">
-        <div className="onboarding-progress-fill" style={{ width: `${((step + 1) / STEPS.length) * 100}%` }} />
-      </div>
-      {/* Step counter */}
-      <div style={{ position: 'fixed', top: 12, right: 16, fontSize: 12, fontWeight: 600, color: 'var(--text-tertiary)', zIndex: 101 }}>
-        {step + 1} / {STEPS.length}
-      </div>
-      {/* Ambient blobs */}
-      <div className="absolute top-0 left-0 w-64 h-64 rounded-full blur-[120px] opacity-10" style={{ background: 'var(--nia-amber)', transform: 'translate(-30%,-30%)' }} />
-      <div className="absolute bottom-0 right-0 w-64 h-64 rounded-full blur-[120px] opacity-10" style={{ background: 'var(--nia-violet)', transform: 'translate(30%,30%)' }} />
-
-      <div className="w-full max-w-sm space-y-6 relative z-10">
-        {/* Logo */}
-        <div className="text-center space-y-2">
-          <div
-            className="w-16 h-16 rounded-3xl mx-auto flex items-center justify-center text-white font-black text-3xl"
-            style={{ background: 'var(--grad-brand)', boxShadow: '0 8px 30px rgba(168,85,247,0.35)' }}
-          >
-            N
-          </div>
-          <h1 className="font-extrabold text-2xl">Welcome to Nia 🌍</h1>
-          <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-            Connecting African youth — let’s set up your profile
-          </p>
-        </div>
-
-        {/* Progress */}
-        <div className="flex gap-2">
-          {STEPS.map((s, i) => (
-            <div key={s} className="flex-1 flex flex-col items-center gap-1">
-              <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--surface-2)' }}>
-                <div
-                  className="h-full rounded-full transition-all duration-500"
-                  style={{ width: i <= step ? '100%' : '0%', background: 'var(--grad-brand)' }}
-                />
-              </div>
-              <span className="text-[10px] font-semibold" style={{ color: i <= step ? 'var(--nia-violet)' : 'var(--text-tertiary)' }}>
-                {s}
-              </span>
-            </div>
-          ))}
-        </div>
-
-        <div className="card p-6 space-y-4">
-          {/* Step 0 — Name + username */}
-          {step === 0 && (
-            <>
-              <div className="space-y-1.5">
-                <label className="text-sm font-bold">Full name</label>
-                <input
-                  value={fullName}
-                  onChange={e => setFullName(e.target.value)}
-                  placeholder="Amara Osei"
-                  className="input"
-                  autoFocus
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-sm font-bold">Username</label>
-                <div className="flex input p-0 overflow-hidden">
-                  <span className="px-3 py-3 text-sm font-semibold flex-shrink-0" style={{ color: 'var(--text-tertiary)', background: 'var(--surface-2)', borderRight: '1.5px solid var(--border)' }}>@</span>
-                  <input
-                    value={username}
-                    onChange={e => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_.]/g, ''))}
-                    placeholder="amara"
-                    className="flex-1 px-3 py-3 bg-transparent focus:outline-none text-sm"
-                    onKeyDown={e => e.key === 'Enter' && fullName.trim() && username.trim() && setStep(1)}
-                  />
-                </div>
-                <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>Only letters, numbers, _ and .</p>
-              </div>
-              <button
-                onClick={() => setStep(1)}
-                disabled={!fullName.trim() || !username.trim()}
-                className="btn-primary w-full flex items-center justify-center gap-2"
-              >
-                Continue <ArrowRight size={16} />
-              </button>
-            </>
-          )}
-
-          {/* Step 1 — Country + city */}
-          {step === 1 && (
-            <>
-              <div>
-                <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 4 }}>Pick your flag 🌍</h2>
-                <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginBottom: 12 }}>This connects you with your community on Nia.</p>
-                <input
-                  value={countrySearch}
-                  onChange={e => setCountrySearch(e.target.value)}
-                  placeholder="Search country…"
-                  className="input mb-3 text-sm"
-                />
-                <div className="flag-grid" style={{ maxHeight: 260, overflowY: 'auto' }}>
-                  {filteredCountries.map(c => (
-                    <button
-                      key={c}
-                      onClick={() => { setCountry(c); setCountrySearch('') }}
-                      className={`flag-btn${country === c ? ' selected' : ''}`}
-                      title={c}
-                    >
-                      <span style={{ fontSize: 24 }}>{COUNTRY_FLAGS[c] ?? '🌍'}</span>
-                      <span className="flag-name">{c.length > 8 ? c.split(' ')[0] : c}</span>
-                    </button>
-                  ))}
-                </div>
-                {country && (
-                  <div style={{ marginTop: 10, padding: '8px 14px', borderRadius: 10, background: 'rgba(91,33,182,0.08)', color: 'var(--nia-violet)', fontWeight: 700, fontSize: 14 }}>
-                    {COUNTRY_FLAGS[country] ?? '🌍'} {country} selected
-                  </div>
-                )}
-              </div>
-
-              {country && (
-                <div className="space-y-1.5">
-                  <label className="text-sm font-bold">City <span className="font-normal" style={{ color: 'var(--text-tertiary)' }}>(optional)</span></label>
-                  <input
-                    value={city}
-                    onChange={e => setCity(e.target.value)}
-                    placeholder={`City in ${country}`}
-                    className="input"
-                  />
-                </div>
-              )}
-
-              <div className="flex gap-2">
-                <button onClick={() => setStep(0)} className="btn-ghost flex-1">Back</button>
-                <button
-                  onClick={() => setStep(2)}
-                  disabled={!country}
-                  className="btn-primary flex-1 flex items-center justify-center gap-2"
-                >
-                  Continue <ArrowRight size={16} />
-                </button>
-              </div>
-            </>
-          )}
-
-          {/* Step 2 — Bio */}
-          {step === 2 && (
-            <>
-              <div className="space-y-1.5">
-                <label className="text-sm font-bold">
-                  Bio <span className="font-normal" style={{ color: 'var(--text-tertiary)' }}>(optional)</span>
-                </label>
-                <textarea
-                  value={bio}
-                  onChange={e => setBio(e.target.value)}
-                  placeholder="Developer from Nairobi. Building Africa's future ✊🌍"
-                  rows={3}
-                  className="input resize-none"
-                  autoFocus
-                />
-              </div>
-              {error && (
-                <div className="px-3 py-2 rounded-xl text-sm font-semibold text-red-500" style={{ background: 'rgba(239,68,68,0.08)' }}>
-                  {error}
-                </div>
-              )}
-              <div className="flex gap-2">
-                <button onClick={() => setStep(1)} className="btn-ghost flex-1">Back</button>
-                <button
-                  onClick={handleComplete}
-                  disabled={loading || !fullName || !username || !country}
-                  className="btn-primary flex-1 flex items-center justify-center gap-2"
-                >
-                  {loading ? <Loader2 size={16} className="animate-spin" /> : '🚀'}
-                  {loading ? 'Setting up…' : "Let's go!"}
-                </button>
-              </div>
-            </>
-          )}
-        </div>
-
-        {step === 0 && (
-          <p className="text-center text-xs" style={{ color: 'var(--text-tertiary)' }}>
-            Already have an account?{' '}
-            <a href="/login" className="font-bold" style={{ color: 'var(--nia-violet)' }}>Sign in</a>
-          </p>
-        )}
-      </div>
-    </div>
-  )
+export default function OnboardingPage(){
+ const router=useRouter(),[name,setName]=useState(''),[username,setUsername]=useState(''),[interests,setInterests]=useState<string[]>([]),[busy,setBusy]=useState(false),[error,setError]=useState(''),[done,setDone]=useState(false)
+ const [circles,setCircles]=useState<{id:string;name:string;slug:string;description:string|null}[]>([])
+ useEffect(()=>{void createClient().auth.getUser().then(({data:{user}})=>{if(!user)router.replace('/login')})},[router])
+ async function start(e:React.FormEvent){
+  e.preventDefault();if(busy)return
+  setBusy(true);setError('')
+  try{
+   if(!/^[a-z0-9_]{2,30}$/.test(username))throw Error('Use 2–30 lowercase letters, numbers or underscores for your handle.')
+   if(!name.trim())throw Error('Choose a display name.')
+   if(interests.length<1)throw Error('Choose at least one interest to find your communities.')
+   const s=createClient(),{data:{user}}=await s.auth.getUser();if(!user)throw Error('Sign in again.')
+   const {error}=await s.from('profiles').upsert({id:user.id,username,full_name:name.trim(),interests:interests.map(normalizeInterest),goals:[]},{onConflict:'id'});if(error)throw error
+   const {data,error:recommendationError}=await s.rpc('get_recommended_circles',{p_user_id:user.id,p_limit:6})
+   if(recommendationError)throw recommendationError
+   setCircles(data??[]);setDone(true)
+  }catch(e){setError(e instanceof Error?e.message:'Could not finish setup. Please retry.')}finally{setBusy(false)}
+ }
+ return <main className="mx-auto max-w-xl p-5 space-y-6">
+  <h1 className="text-3xl font-bold">Find your people</h1><p>Music, friendships, ideas, opportunities—make room for what you enjoy.</p>
+  {!done?<form onSubmit={start} className="space-y-5">
+   <label className="block">What should we call you?<input className="input" value={name} maxLength={80} onChange={e=>setName(e.target.value)} autoComplete="nickname" required/></label>
+   <label className="block">Choose a handle<input className="input" value={username} onChange={e=>setUsername(e.target.value.toLowerCase())} maxLength={30} pattern="[a-z0-9_]{2,30}" autoCapitalize="none" required/></label>
+   <fieldset><legend className="font-bold mb-3">Pick a few interests</legend><div className="flex flex-wrap gap-2">{INTERESTS.map(i=><button type="button" key={i} className={interests.includes(i)?'btn-primary':'btn-ghost'} aria-pressed={interests.includes(i)} onClick={()=>setInterests(old=>old.includes(i)?old.filter(v=>v!==i):[...old,i])}>{i}</button>)}</div></fieldset>
+   <p className="text-sm">Your photo, location and bio can wait. You control what to share.</p><button className="btn-primary" disabled={busy}>{busy?'Finding Circles…':'Find my Circles'}</button>
+  </form>:<section className="space-y-4"><h2 className="text-xl font-bold">Your first communities</h2>{circles.map(c=><Link className="card p-4 block" key={c.id} href={`/circles/${c.slug}`}><strong>{c.name}</strong><p>{c.description}</p><span>Explore Circle →</span></Link>)}{!circles.length&&<p>Choose a community or start one with friends.</p>}<Link className="btn-ghost inline-flex" href="/circles">Browse all Circles</Link><button className="btn-primary" onClick={()=>router.replace(safeNext(new URLSearchParams(window.location.search).get('next')))}>Continue to Nia</button></section>}
+  {error&&<p role="alert">{error}</p>}
+ </main>
 }

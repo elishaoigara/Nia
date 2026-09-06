@@ -1,6 +1,7 @@
 // app/notifications/page.tsx
 'use client';
 
+import { mediaUrl } from '@/lib/media-url'
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { Bell, Heart, UserPlus, MessageCircle, Repeat2, AtSign } from 'lucide-react';
@@ -36,6 +37,7 @@ const FILTERS = [
   { key: 'follow',   label: 'Follows' },
   { key: 'comment',  label: 'Comments' },
   { key: 'mention',  label: 'Mentions' },
+  { key: 'message',  label: 'Messages' },
 ] as const;
 
 function timeAgo(date: string): string {
@@ -61,6 +63,7 @@ function verbForType(type: string): string {
     case 'follow':  return 'started following you';
     case 'comment': return 'commented on your post';
     case 'mention': return 'mentioned you';
+    case 'message': return 'sent you a message';
     default:        return 'interacted with you';
   }
 }
@@ -118,6 +121,7 @@ function NotifBadge({ type }: { type: string }) {
       case 'comment': return <MessageCircle size={iconSize} color={iconColor} strokeWidth={2} />;
       case 'repost':  return <Repeat2 size={iconSize} color={iconColor} strokeWidth={2} />;
       case 'mention': return <AtSign size={iconSize} color={iconColor} strokeWidth={2} />;
+      case 'message': return <MessageCircle size={iconSize} color={iconColor} strokeWidth={2} />;
       default:        return <Bell size={iconSize} color="var(--text-tertiary)" strokeWidth={2} />;
     }
   })();
@@ -155,6 +159,7 @@ export default function Notifications() {
   const [fetchError, setFetchError]       = useState<string | null>(null);
   const [userId, setUserId]               = useState<string | null>(null);
   const [filter, setFilter]               = useState<typeof FILTERS[number]['key']>('all');
+  const [live, setLive]                   = useState(false);
   const markedRef = useRef<Set<string>>(new Set());
 
   // Hydrate actor data for notifications that came back without a join
@@ -291,7 +296,7 @@ export default function Notifications() {
             }
           }
         )
-        .subscribe();
+        .subscribe(status => setLive(status === 'SUBSCRIBED'));
     });
 
     return () => {
@@ -315,7 +320,7 @@ export default function Notifications() {
           className="sticky top-0 z-10 flex items-center justify-between px-4 py-3.5 border-b"
           style={{ borderColor: 'var(--divider)', background: 'var(--surface-0)' }}
         >
-          <h1 className="text-[17px] font-bold tracking-tight text-(--text-primary)">Notifications</h1>
+          <div className="flex items-center gap-2"><h1 className="text-[17px] font-bold tracking-tight text-(--text-primary)">Notifications</h1>{live && <span className="rounded-full px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide" style={{ background: 'rgba(16,185,129,0.12)', color: 'var(--nia-mint)' }}>Live</span>}</div>
         </div>
         <div className="mt-2">
           {[...Array(5)].map((_, i) => (
@@ -354,7 +359,7 @@ export default function Notifications() {
           className="sticky top-0 z-10 px-4 py-3.5 border-b"
           style={{ borderColor: 'var(--divider)', background: 'var(--surface-0)' }}
         >
-          <h1 className="text-[17px] font-bold tracking-tight text-(--text-primary)">Notifications</h1>
+          <div className="flex items-center gap-2"><h1 className="text-[17px] font-bold tracking-tight text-(--text-primary)">Notifications</h1>{live && <span className="rounded-full px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide" style={{ background: 'rgba(16,185,129,0.12)', color: 'var(--nia-mint)' }}>Live</span>}</div>
         </div>
         <div className="flex flex-col items-center gap-3 py-16 text-(--text-secondary)">
           <div
@@ -392,7 +397,7 @@ export default function Notifications() {
           WebkitBackdropFilter: 'blur(12px)',
         }}
       >
-        <h1 className="text-[17px] font-bold tracking-tight text-(--text-primary)">Notifications</h1>
+        <div className="flex items-center gap-2"><h1 className="text-[17px] font-bold tracking-tight text-(--text-primary)">Notifications</h1>{live && <span className="rounded-full px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide" style={{ background: 'rgba(16,185,129,0.12)', color: 'var(--nia-mint)' }}>Live</span>}</div>
         {hasUnread && (
           <button
             onClick={handleMarkAllRead}
@@ -511,7 +516,9 @@ export default function Notifications() {
 
 /* ── Individual notification row ── */
 function NotifRow({ n }: { n: GroupedNotification }) {
-  const href = n.entity_id
+  const href = n.type === 'message' && n.actor_id
+    ? `/messages/${n.actor_id}`
+    : n.entity_id
     ? `/posts/${n.entity_id}`
     : n.actor_id
     ? `/profile/${n.actor_id}`
@@ -566,7 +573,7 @@ function NotifRow({ n }: { n: GroupedNotification }) {
               style={{ width: 28, height: 28, left: 12, top: 12, borderColor: 'var(--surface-0)', zIndex: 0 }}
             >
               {n.extraActors[0].avatar_url ? (
-                <img src={n.extraActors[0].avatar_url} alt="" className="w-full h-full object-cover" />
+                <img src={mediaUrl(n.extraActors[0].avatar_url)} alt="" className="w-full h-full object-cover" />
               ) : (
                 <div className="w-full h-full flex items-center justify-center text-white text-[11px] font-bold" style={{ background: 'var(--grad-brand)' }}>
                   {(n.extraActors[0].full_name || n.extraActors[0].username || '?')[0]?.toUpperCase()}
@@ -577,7 +584,7 @@ function NotifRow({ n }: { n: GroupedNotification }) {
           <div className="relative" style={{ zIndex: 1 }}>
             {avatarUrl ? (
               <img
-                src={avatarUrl}
+                src={mediaUrl(avatarUrl)}
                 alt={displayName}
                 className="w-10 h-10 rounded-full object-cover"
               />
