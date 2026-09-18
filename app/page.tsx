@@ -17,7 +17,7 @@ export default async function Home({searchParams}:{searchParams:Promise<{tab?:st
   <header className="px-4 py-3 flex items-center justify-between"><h1 className="text-xl font-bold">Your community</h1><Link href="/explore">Discover</Link></header>
   <nav aria-label="Your Circles" className="flex gap-2 overflow-x-auto px-4 pb-3">{circles.map(({circles:c})=>c&&<Link className="btn-ghost whitespace-nowrap" key={c.id} href={`/circles/${c.slug}`}>{c.name}</Link>)}<Link className="btn-ghost whitespace-nowrap" href="/circles">{circles.length?'All Circles':'Find a Circle'}</Link></nav>
   <div id="compose"><CreatePost userId={user.id}/></div>
-  <details className="px-4 py-2"><summary>Stories from your community</summary><StoriesBar currentUserId={user.id}/></details>
+  <StoriesBar currentUserId={user.id}/>
   <FeedTabs currentTab={currentTab}/>
   <p className="px-4 py-2 text-sm text-(--text-secondary)">Latest posts · your language and safety preferences apply</p>
   {feed.posts.map(post=><PostCard key={post.id} post={post} currentUserId={user.id}/>)}

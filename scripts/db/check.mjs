@@ -57,6 +57,23 @@ try{
  await db.exec(`update user_preferences set show_presence=false where user_id='${b}'`)
  await as(a,()=>{return db.query(`select private.can_join_presence(realtime.topic()) ok`).then(r=>{assert.equal(r.rows[0].ok,false);checks++})})
  await as(mod,()=>denied(`insert into moderation_actions(moderator_id,action) values('${mod}','unaudited')`))
+ // Stories: follower visibility, idempotent views, contextual replies and confirmed deletion.
+ const story='20000000-0000-4000-8000-000000000001'
+ await db.exec(`insert into storage.objects(bucket_id,name,owner_id) values('post-media','${b}/story.png','${b}')`)
+ await as(b,()=>db.exec(`insert into stories(id,user_id,media_url,media_type,audience,expires_at) values('${story}','${b}','storage://post-media/${b}/story.png','image','followers',now()+interval '24 hours')`))
+ await as(a,()=>count(`select count(*) n from stories where id='${story}'`,1))
+ await as(c,()=>count(`select count(*) n from stories where id='${story}'`,0))
+ await as(a,async()=>{
+  const view=`insert into story_views(story_id,viewer_id) values('${story}','${a}') on conflict(story_id,viewer_id) do nothing`
+  await db.exec(view);await db.exec(view)
+  await count(`select count(*) n from story_views where story_id='${story}'`,1)
+  await db.exec(`insert into messages(sender_id,recipient_id,content,story_id) values('${a}','${b}','Nice story','${story}')`)
+  await count(`select count(*) n from messages where story_id='${story}'`,1)
+  await count(`with removed as (delete from stories where id='${story}' returning id) select count(*) n from removed`,0)
+ })
+ await as(b,()=>count(`with removed as (delete from stories where id='${story}' returning id) select count(*) n from removed`,1))
+ await count(`select count(*) n from story_views where story_id='${story}'`,0)
+ await count(`select count(*) n from messages where content='Nice story' and story_id is null`,1)
  await db.exec(`insert into account_settings(user_id,account_status) values('${a}','suspended')`)
  await as(a,()=>denied(`insert into posts(user_id,content) values('${a}','Suspended')`))
  console.log(`Fresh migration chain and ${checks} PostgreSQL/RLS assertions passed`)
