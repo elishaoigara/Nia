@@ -472,6 +472,56 @@ Relationships: [
 { foreignKeyName: "comments_parent_id_fkey"; columns: ["parent_id"]; isOneToOne: false; referencedRelation: "comments"; referencedColumns: ["id"] },
 ]
 }
+"creator_featured_posts": {
+Row: {
+"user_id": string
+"slot": number
+"post_id": string
+}
+Insert: {
+"user_id": string
+"slot": number
+"post_id": string
+}
+Update: {
+"user_id"?: string
+"slot"?: number
+"post_id"?: string
+}
+Relationships: [
+{ foreignKeyName: "creator_featured_posts_user_id_fkey"; columns: ["user_id"]; isOneToOne: false; referencedRelation: "creator_profiles"; referencedColumns: ["user_id"] },
+{ foreignKeyName: "creator_featured_posts_post_id_fkey"; columns: ["post_id"]; isOneToOne: false; referencedRelation: "posts"; referencedColumns: ["id"] },
+]
+}
+"creator_profiles": {
+Row: {
+"user_id": string
+"enabled": boolean
+"category": string | null
+"introduction": string
+"open_to_collaborations": boolean
+"links": Json
+}
+Insert: {
+"user_id": string
+"enabled"?: boolean
+"category"?: string | null
+"introduction"?: string
+"open_to_collaborations"?: boolean
+"links"?: Json
+}
+Update: {
+"user_id"?: string
+"enabled"?: boolean
+"category"?: string | null
+"introduction"?: string
+"open_to_collaborations"?: boolean
+"links"?: Json
+}
+Relationships: [
+{ foreignKeyName: "creator_profiles_user_id_fkey"; columns: ["user_id"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },
+]
+}
 "engagement_events": {
 Row: {
 "id": string
@@ -1407,6 +1457,7 @@ Relationships: [
 "circle_activity": { Args: {"circle_ids": (string)[] | null;}; Returns: {"circle_id": string;"last_post": string}[] };
 "circle_manager": { Args: {"target_circle": string | null;}; Returns: boolean };
 "conversation_page": { Args: {"before_time"?: string | null;"before_user"?: string | null;"page_size"?: number | null;}; Returns: {"other_id": string;"content": string;"created_at": string;"is_read": boolean;"sender_id": string;"media_type": string}[] };
+"creator_insights": { Args: Record<never, never>; Returns: Json };
 "get_recommended_circles": { Args: {"p_user_id": string | null;"p_limit"?: number | null;}; Returns: {"id": string;"name": string;"slug": string;"description": string;"university": string;"category": string;"country": string;"is_private": boolean;"created_at": string;"member_count": number;"relevance_score": number}[] };
 "get_trending_hashtags": { Args: {"p_since"?: string | null;"p_limit"?: number | null;}; Returns: {"tag": string;"post_count": number}[] };
 "manage_circle_member": { Args: {"target_circle": string | null;"target_user": string | null;"new_role": string | null;}; Returns: undefined };
@@ -1421,5 +1472,6 @@ Relationships: [
 "respond_follow": { Args: {"requester": string | null;"accept": boolean | null;}; Returns: undefined };
 "review_appeal": { Args: {"appeal_id": string | null;"approve": boolean | null;"explanation": string | null;}; Returns: undefined };
 "save_preferences": { Args: {"settings": Json | null;"private_account": boolean | null;}; Returns: undefined };
+"set_creator_featured_work": { Args: {"post_ids": (string)[] | null;}; Returns: undefined };
 "unread_message_count": { Args: Record<never, never>; Returns: number };
 }; Enums: Record<never, never>; CompositeTypes: Record<never, never> } }
