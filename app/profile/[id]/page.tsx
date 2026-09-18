@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
+import CreatorProfile from '@/components/creator/CreatorProfile'
 import PostCard from '@/components/PostCard'
 import FollowButton from '@/components/FollowButton'
 import LogoutButton from '@/components/LogoutButton'
@@ -870,6 +871,8 @@ export default function ProfilePage() {
           </div>
         )}
       </div>
+
+      <CreatorProfile key={id} userId={id} isOwner={isOwner} />
 
       {/* ── Tabs ── */}
       <div style={{
