@@ -4,6 +4,7 @@ import { publicSupabaseEnv } from '@/lib/env';
 import { NextResponse } from 'next/server';
 
 const publicPaths = [
+  '/welcome',
   '/login',
   '/signup',
   '/forgot-password',
