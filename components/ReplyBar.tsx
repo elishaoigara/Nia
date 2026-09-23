@@ -1,5 +1,6 @@
 'use client'
 
+import { mediaUrl } from '@/lib/media-url'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Send, Loader2, ImagePlus, Video, X, Play } from 'lucide-react'
@@ -272,7 +273,7 @@ export default function ReplyBar({ postId, currentUserId, postOwnerId, currentUs
                     aspectRatio: '1', background: 'var(--surface-2)',
                   }}
                 >
-                  <img src={g.preview} alt="GIF"
+                  <img src={mediaUrl(g.preview)} alt="GIF"
                     style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
                 </button>
               ))}
@@ -300,7 +301,7 @@ export default function ReplyBar({ postId, currentUserId, postOwnerId, currentUs
                   <Play size={20} fill="#fff" color="#fff" />
                 </div>
               ) : (
-                <img src={m.preview} alt="" style={{
+                <img src={mediaUrl(m.preview)} alt="" style={{
                   width: 64, height: 64, borderRadius: 10,
                   objectFit: 'cover', border: '1px solid var(--border)',
                 }} />
@@ -333,7 +334,7 @@ export default function ReplyBar({ postId, currentUserId, postOwnerId, currentUs
           color: '#fff', fontWeight: 700, fontSize: 12, overflow: 'hidden',
         }}>
           {currentUserProfile?.avatar_url
-            ? <img src={currentUserProfile.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            ? <img src={mediaUrl(currentUserProfile.avatar_url)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             : initials
           }
         </div>

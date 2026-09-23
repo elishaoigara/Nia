@@ -1,7 +1,11 @@
 // components/CreatePost.tsx
 'use client';
 
+import { uploadMedia } from '@/lib/upload-media'
+import { useDraft } from '@/lib/drafts'
+import { mediaUrl } from '@/lib/media-url'
 import React, { useState, useRef, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import {
   ImagePlus,
   Video,
@@ -15,10 +19,14 @@ import {
   MicOff,
   Play,
   Globe,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { VIDEO_CATEGORIES } from '@/lib/video-categories';
+import { trackEngagement } from '@/lib/analytics';
+
+const MediaEditor = dynamic(() => import('@/components/MediaEditor'), { ssr: false });
 
 interface MediaItem {
   file: File;
@@ -30,6 +38,7 @@ interface MediaItem {
 interface CreatePostProps {
   userId: string;
   circleId?: string | null;
+  purposeMode?: 'ask' | 'offer' | 'update' | 'opportunity' | 'reflection';
 }
 
 interface Profile {
@@ -57,21 +66,24 @@ const AFRICAN_LANGUAGES: LanguageOption[] = [
 const MAX_MEDIA = 5;
 const MAX_CHARS = 500;
 const MAX_IMAGE_MB = 20;
-const MAX_VIDEO_MB = 150;
-const MAX_VIDEO_SEC = 600; // 10 min ceiling — short vs long is decided automatically by duration
+const MAX_VIDEO_MB = 30;
+const MAX_VIDEO_SEC = 60; // Short video pilot
 
 export default function CreatePost({
   userId,
   circleId = null,
+  purposeMode = 'reflection',
 }: CreatePostProps) {
   const supabase = createClient();
   const router = useRouter();
 
+  const publishRequest = useRef<string | null>(null);
+  const uploadCache = useRef(new WeakMap<Blob, string>());
   const imageRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLInputElement>(null);
   const textRef = useRef<HTMLTextAreaElement>(null);
 
-  const [content, setContent] = useState('');
+  const [content, setContent] = useDraft(`${userId}:post:${circleId ?? 'home'}`);
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
   const [voiceBlob, setVoiceBlob] = useState<Blob | null>(null);
   const [loading, setLoading] = useState(false);
@@ -87,6 +99,7 @@ export default function CreatePost({
   const [pollOpts, setPollOpts] = useState(['', '']);
   const [pollDur, setPollDur] = useState('24');
   const [recording, setRecording] = useState(false);
+  const [editorIndex, setEditorIndex] = useState<number | null>(null);
 
   const mediaRecRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -194,6 +207,7 @@ export default function CreatePost({
 
     if (items.length) {
       setVoiceBlob(null);
+      setEditorIndex(mediaItems.length);
     }
   }
 
@@ -203,6 +217,24 @@ export default function CreatePost({
 
       return prev.filter((_, i) => i !== idx);
     });
+  }
+
+  function saveEditedMedia(index: number, editedFile: File, metadata: { duration?: number }) {
+    const previousPreview = mediaItems[index]?.preview;
+    const editedPreview = URL.createObjectURL(editedFile);
+    if (previousPreview) URL.revokeObjectURL(previousPreview);
+
+    setMediaItems(prev => prev.map((item, itemIndex) => {
+      if (itemIndex !== index) return item;
+      return {
+        ...item,
+        file: editedFile,
+        preview: editedPreview,
+        duration: metadata.duration ?? item.duration,
+      };
+    }));
+    setEditorIndex(null);
+    setError('');
   }
 
   function getVideoDuration(file: File): Promise<number> {
@@ -285,7 +317,7 @@ export default function CreatePost({
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ content }),
+        body: JSON.stringify({ content, language }),
       });
 
       const data = await res.json();
@@ -327,95 +359,41 @@ export default function CreatePost({
     }
 
     try {
-      /* Upload voice */
+      publishRequest.current ??= crypto.randomUUID();
+      /* Reuse uploads while this composer remains open. */
+      const uploaded: { url: string; type: string }[] = [];
       if (voiceBlob) {
-        const path = `${userId}/voice_${Date.now()}.webm`;
-
-        const { error: upErr } = await supabase.storage
-          .from('post-media')
-          .upload(path, voiceBlob, {
-            contentType: 'audio/webm',
-          });
-
-        if (upErr) {
-          setError('Voice upload failed.');
-          return;
+        const voiceFile = new File([voiceBlob], 'voice.webm', { type: 'audio/webm', lastModified: 0 });
+        const result = { url: uploadCache.current.get(voiceBlob) ?? (await uploadMedia('post-media', voiceFile, percent => setUploadProgress({ done: percent, total: 100 }))).url };
+        uploadCache.current.set(voiceBlob, result.url);
+        uploaded.push({ url: result.url, type: 'audio' });
+      } else {
+        for (const item of mediaItems) {
+          const result = { url: uploadCache.current.get(item.file) ?? (await uploadMedia('post-media', item.file, percent => setUploadProgress({ done: percent, total: 100 }))).url };
+          uploadCache.current.set(item.file, result.url);
+          uploaded.push({ url: result.url, type: item.type });
         }
-
-        media_url = supabase.storage
-          .from('post-media')
-          .getPublicUrl(path)
-          .data.publicUrl;
-
-        media_type = 'audio';
-        setUploadProgress({ done: 1, total: 1 });
-
-      /* Upload images/videos */
-      } else if (mediaItems.length > 0) {
-        const uploaded: { url: string; type: string }[] = [];
-
-        for (let i = 0; i < mediaItems.length; i++) {
-          const item = mediaItems[i];
-          const ext =
-            item.file.name.split('.').pop() ??
-            (item.type === 'video' ? 'mp4' : 'jpg');
-
-          const path =
-            `${userId}/${Date.now()}_${Math.random()
-              .toString(36)
-              .slice(2)}.${ext}`;
-
-          const { error: upErr } = await supabase.storage
-            .from('post-media')
-            .upload(path, item.file, {
-              contentType: item.file.type,
-            });
-
-          if (upErr) {
-            setError(`Upload failed: ${upErr.message}`);
-            return;
-          }
-
-          uploaded.push({
-            url: supabase.storage
-              .from('post-media')
-              .getPublicUrl(path)
-              .data.publicUrl,
-            type: item.type,
-          });
-
-          setUploadProgress({ done: i + 1, total: mediaItems.length });
-        }
-
-        media_url = uploaded[0].url;
-        media_type = uploaded[0].type;
-        extra_media = uploaded.slice(1);
       }
-
-      /* Insert post */
-      const isVideo = media_type === 'video';
-      const videoDuration = isVideo ? (mediaItems[0]?.duration ?? null) : null;
-
-      const { data: post, error: postErr } = await supabase
-        .from('posts')
-        .insert({
-          user_id: userId,
-          circle_id: circleId,
-          content: content.trim() || null,
-          media_url,
-          media_type,
-          video_duration: videoDuration,
+      media_url = uploaded[0]?.url ?? null;
+      media_type = uploaded[0]?.type ?? null;
+      extra_media = uploaded.slice(1);
+      const hasPoll = Boolean(showPoll && pollQ.trim() && pollOpts.filter(o => o.trim()).length >= 2);
+      const { data: post, error: postErr } = await supabase.rpc('publish_post', {
+        payload: {
+          nia_request_id: publishRequest.current,
+          circle_id: circleId, content: content.trim() || null, media_url, media_type,
           extra_media: extra_media.length ? extra_media : null,
-          language,
-          category: isVideo ? (category ?? 'other') : null,
-        })
-        .select()
-        .single();
-
-      if (postErr) {
-        setError(postErr.message);
-        return;
-      }
+          video_duration: media_type === 'video' ? mediaItems[0]?.duration ?? null : null,
+          language, contribution_mode: purposeMode,
+          category: media_type === 'video' ? category ?? 'other' : null,
+        },
+        poll: hasPoll ? {
+          question: pollQ.trim(),
+          options: pollOpts.filter(o => o.trim()).map((text, i) => ({ id: `opt_${i}`, text: text.trim(), votes: 0 })),
+          ends_at: new Date(Date.now() + Number(pollDur) * 3600000).toISOString(),
+        } : null,
+      });
+      if (postErr) throw postErr;
 
       /* Hashtags */
       if (post && content.trim()) {
@@ -439,30 +417,15 @@ export default function CreatePost({
         }
       }
 
-      /* Poll */
-      const hasPoll =
-        showPoll &&
-        pollQ.trim() &&
-        pollOpts.filter(o => o.trim()).length >= 2;
-
-      if (hasPoll && post) {
-        const validOpts = pollOpts.filter(o => o.trim());
-
-        await supabase.from('polls').insert({
-          post_id: post.id,
-          question: pollQ.trim(),
-          options: validOpts.map((text, i) => ({
-            id: `opt_${i}`,
-            text,
-            votes: 0,
-          })),
-          ends_at: new Date(
-            Date.now() + parseInt(pollDur) * 3_600_000
-          ).toISOString(),
-        });
-      }
+      void trackEngagement('post_created', userId, purposeMode, {
+        has_media: Boolean(media_url),
+        media_type: media_type ?? 'none',
+        has_circle: Boolean(circleId),
+        has_poll: Boolean(hasPoll),
+      });
 
       /* Reset */
+      publishRequest.current = null;
       mediaItems.forEach(m => URL.revokeObjectURL(m.preview));
 
       setContent('');
@@ -495,6 +458,13 @@ export default function CreatePost({
 
   /* ── Collapsed / expanded state ─────────────────── */
   const [isOpen, setIsOpen] = useState(false);
+  const purposePlaceholder = {
+    ask: 'What are you trying to figure out?',
+    offer: 'What can you help someone with?',
+    update: 'What moved forward this week?',
+    opportunity: 'What opportunity should the community know about?',
+    reflection: 'What did you learn or notice?',
+  }[purposeMode];
 
   function openCompose() {
     setIsOpen(true);
@@ -530,14 +500,15 @@ export default function CreatePost({
         >
           <div className="compose-trigger-avatar">
             {profile?.avatar_url
-              ? <img src={profile.avatar_url} alt="" />
+              ? <img src={mediaUrl(profile.avatar_url)} alt="" />
               : <span>{initials}</span>
             }
           </div>
           <div className="compose-trigger-pill">
-            <span className="compose-trigger-placeholder">
-              Share something with Africa 🌍
-            </span>
+                          <span className="compose-trigger-placeholder">
+                {purposePlaceholder}
+              </span>
+
           </div>
           <button
             className="compose-trigger-media"
@@ -566,7 +537,7 @@ export default function CreatePost({
           <div className="compose-left">
             <div className="post-avatar">
               {profile?.avatar_url ? (
-                <img src={profile.avatar_url} alt={profile.username ?? 'Your avatar'} />
+                <img src={mediaUrl(profile.avatar_url)} alt={profile.username ?? 'Your avatar'} />
               ) : (
                 <div className="post-avatar-inner">{initials}</div>
               )}
@@ -576,7 +547,7 @@ export default function CreatePost({
             <textarea
               ref={textRef}
               className="compose-textarea"
-              placeholder="Share something with Africa 🌍"
+              placeholder={purposePlaceholder}
               value={content}
               onChange={e => { setContent(e.target.value); grow(); }}
               rows={1}
@@ -672,10 +643,10 @@ export default function CreatePost({
               {mediaItems.map((item, idx) => (
                 <div key={idx} className="compose-media-item">
                   {item.type === 'image' ? (
-                    <img src={item.preview} alt={`Upload ${idx + 1}`} />
+                    <img src={mediaUrl(item.preview)} alt={`Upload ${idx + 1}`} />
                   ) : (
                     <>
-                      <video src={item.preview} muted playsInline />
+                      <video src={mediaUrl(item.preview)} muted playsInline />
                       <span className="compose-media-badge">
                         <Play size={12} fill="currentColor" />
                       </span>
@@ -687,6 +658,14 @@ export default function CreatePost({
                     aria-label="Remove media"
                   >
                     <X size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditorIndex(idx)}
+                    aria-label={`Edit ${item.type} ${idx + 1}`}
+                    style={{ position: 'absolute', left: 8, bottom: 8, zIndex: 3, display: 'inline-flex', alignItems: 'center', gap: 5, border: '1px solid rgba(255,255,255,0.22)', borderRadius: 999, padding: '6px 9px', background: 'rgba(8,6,14,0.78)', color: '#fff', fontSize: 11, fontWeight: 750, cursor: 'pointer', backdropFilter: 'blur(8px)' }}
+                  >
+                    <SlidersHorizontal size={12} /> Edit
                   </button>
                 </div>
               ))}
@@ -783,6 +762,16 @@ export default function CreatePost({
         </div>
 
       </div>{/* end compose-panel */}
+      {editorIndex !== null && mediaItems[editorIndex] && (
+        <MediaEditor
+          file={mediaItems[editorIndex].file}
+          type={mediaItems[editorIndex].type}
+          duration={mediaItems[editorIndex].duration}
+          maxOutputBytes={(mediaItems[editorIndex].type === 'video' ? MAX_VIDEO_MB : MAX_IMAGE_MB) * 1024 * 1024}
+          onCancel={() => setEditorIndex(null)}
+          onSave={(editedFile, metadata) => saveEditedMedia(editorIndex, editedFile, metadata)}
+        />
+      )}
     </div>
   );
 }

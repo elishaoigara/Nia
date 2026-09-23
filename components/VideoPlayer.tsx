@@ -1,5 +1,7 @@
 'use client'
 
+import { usePreferences } from '@/components/PreferencesProvider'
+import { mediaUrl } from '@/lib/media-url'
 import { useEffect, useRef, useState } from 'react'
 import { Play, Pause, Volume2, VolumeX, Maximize2 } from 'lucide-react'
 import MediaLightbox from '@/components/MediaLightbox'
@@ -11,6 +13,7 @@ interface VideoPlayerProps {
 }
 
 export default function VideoPlayer({ src, poster, className = '' }: VideoPlayerProps) {
+  const { preferences } = usePreferences()
   const videoRef = useRef<HTMLVideoElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   
@@ -51,7 +54,7 @@ export default function VideoPlayer({ src, poster, className = '' }: VideoPlayer
           }
         } else {
           // If it re-enters viewport and was manually left playing, resume playback
-          if (wasPlayingRef.current) {
+          if (wasPlayingRef.current && preferences.autoplay && !preferences.data_saver) {
             video.play().then(() => setPlaying(true)).catch(() => {})
             wasPlayingRef.current = false
           }
@@ -62,7 +65,7 @@ export default function VideoPlayer({ src, poster, className = '' }: VideoPlayer
 
     observer.observe(element)
     return () => observer.disconnect()
-  }, [])
+  }, [preferences.autoplay, preferences.data_saver])
 
   function togglePlay() {
     const video = videoRef.current
@@ -114,8 +117,8 @@ export default function VideoPlayer({ src, poster, className = '' }: VideoPlayer
         {/* HTML Canvas Video Node */}
         <video
           ref={videoRef}
-          src={src}
-          poster={poster}
+          src={mediaUrl(src)}
+          poster={mediaUrl(poster)}
           preload="none"
           playsInline
           onTimeUpdate={() => {

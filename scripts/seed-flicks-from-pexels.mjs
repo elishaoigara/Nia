@@ -66,6 +66,8 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !PEXELS_API_KEY) {
   process.exit(1)
 }
 
+if (process.env.NIA_ENVIRONMENT !== 'staging' || process.env.NIA_STAGING_URL !== SUPABASE_URL) throw new Error('Set an explicit isolated staging URL and NIA_ENVIRONMENT=staging before seeding.')
+
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
 // Reuse the same 5 demo profiles from the earlier Flicks seed SQL.
@@ -313,6 +315,8 @@ async function makeLongFlick(categoryId, workDir) {
 // ── Run ──────────────────────────────────────────────────────────────────────
 
 async function main() {
+  const { data: approved, error: approvedError } = await supabase.from('test_profiles').select('user_id')
+  if (approvedError || PROFILE_IDS.some(id => !approved?.some(p => p.user_id === id))) throw new Error('Every seed author must be explicitly enrolled in test_profiles.')
   const workDir = await mkdtemp(path.join(tmpdir(), 'nia-flicks-seed-'))
   console.log(`Working dir: ${workDir}`)
   console.log(`Categories: ${ONLY.join(', ')} | short/cat: ${SHORT_PER_CATEGORY} | long/cat: ${LONG_PER_CATEGORY}\n`)

@@ -9,6 +9,8 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
+    include: ['lib/**/*.test.ts'],
+    exclude: ['node_modules/**', '.next/**'],
     coverage: {
       reporter: ['text', 'json', 'html'],
     },

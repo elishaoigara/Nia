@@ -8,6 +8,7 @@ export const AFRICAN_COUNTRIES = [
   'Botswana', 'Namibia', 'Malawi', 'Lesotho', 'Eswatini',
   'Madagascar', 'Mauritius', 'Somalia', 'Eritrea', 'Djibouti',
   'Liberia', 'Sierra Leone', 'Guinea', 'Togo', 'Benin',
+  'Burundi', 'Cabo Verde', 'Central African Republic', 'Comoros', 'Equatorial Guinea', 'Gambia', 'Guinea-Bissau', 'Libya', 'Mauritania', 'São Tomé and Príncipe', 'Seychelles', 'South Sudan',
   'Other'
 ]
 
@@ -26,11 +27,11 @@ export const COUNTRY_FLAGS: Record<string, string> = {
 }
 
 export const AFRICAN_REGIONS = [
-  { id: 'east', label: 'East Africa', emoji: '🦁', countries: ['Kenya','Tanzania','Uganda','Rwanda','Ethiopia','Somalia','Eritrea','Djibouti','Mozambique','Malawi','Zambia','Zimbabwe'] },
+  { id: 'east', label: 'East Africa', emoji: '🌍', countries: ['Kenya','Tanzania','Uganda','Rwanda','Ethiopia','Somalia','Eritrea','Djibouti','Mozambique','Malawi','Zambia','Zimbabwe'] },
   { id: 'west', label: 'West Africa', emoji: '🥁', countries: ['Nigeria','Ghana','Senegal','Côte d\'Ivoire','Cameroon','Mali','Burkina Faso','Niger','Togo','Benin','Liberia','Sierra Leone','Guinea'] },
-  { id: 'southern', label: 'Southern Africa', emoji: '🦏', countries: ['South Africa','Botswana','Namibia','Zimbabwe','Zambia','Malawi','Mozambique','Lesotho','Eswatini','Angola'] },
-  { id: 'north', label: 'North Africa', emoji: '🐪', countries: ['Egypt','Morocco','Tunisia','Algeria','Sudan','Chad'] },
-  { id: 'central', label: 'Central Africa', emoji: '🦍', countries: ['Democratic Republic of Congo','Republic of Congo','Gabon','Cameroon','Chad','Angola'] },
+  { id: 'southern', label: 'Southern Africa', emoji: '🌍', countries: ['South Africa','Botswana','Namibia','Zimbabwe','Zambia','Malawi','Mozambique','Lesotho','Eswatini','Angola'] },
+  { id: 'north', label: 'North Africa', emoji: '🌍', countries: ['Egypt','Morocco','Tunisia','Algeria','Sudan','Chad'] },
+  { id: 'central', label: 'Central Africa', emoji: '🌍', countries: ['Democratic Republic of Congo','Republic of Congo','Gabon','Cameroon','Chad','Angola'] },
 ]
 
 export function getFlag(country: string): string {

@@ -1,8 +1,9 @@
 import type { Metadata, Viewport } from 'next'
 import './globals.css'
+import { PreferencesProvider } from '@/components/PreferencesProvider'
+import DialogAccessibility from '@/components/DialogAccessibility'
 import Navbar from '@/components/Navbar'
 import { ThemeProvider } from '@/components/ThemeProvider'
-import SplashScreen from '@/components/SplashScreen'
 import { getAppUrl } from '@/lib/app-url'
 
 export const metadata: Metadata = {
@@ -12,7 +13,7 @@ export const metadata: Metadata = {
     default: 'Nia — Africa Connects Here',
     template: '%s | Nia',
   },
-  description: 'A mobile-first, pan-African social platform.',
+  description: 'Find your people on Nia. Join Circles, share stories and short videos, and connect with communities across Africa.',
   manifest: '/manifest.webmanifest',
   icons: {
     icon: '/icon.png',
@@ -22,13 +23,13 @@ export const metadata: Metadata = {
     type: 'website',
     siteName: 'Nia',
     title: 'Nia — Africa Connects Here',
-    description: 'A mobile-first, pan-African social platform.',
+    description: 'Find your people on Nia. Join Circles, share stories and short videos, and connect with communities across Africa.',
     images: [{ url: '/logo/og-image.png', width: 1200, height: 630, alt: 'Nia' }],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'Nia — Africa Connects Here',
-    description: 'A mobile-first, pan-African social platform.',
+    description: 'Find your people on Nia. Join Circles, share stories and short videos, and connect with communities across Africa.',
     images: ['/logo/og-image.png'],
   },
 }
@@ -44,14 +45,17 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" data-scroll-behavior="smooth" suppressHydrationWarning>
       <body className="bg-(--surface-0) text-(--text-primary) antialiased">
         <ThemeProvider>
-          <SplashScreen />
+          <PreferencesProvider>
+          <DialogAccessibility/>
+          <a href="#main-content" className="skip-link">Skip to content</a>
           <Navbar />
-          <div id="main-content" className="page-wrap">
+          <div id="main-content" tabIndex={-1} className="page-wrap">
             {children}
           </div>
+          </PreferencesProvider>
         </ThemeProvider>
       </body>
     </html>

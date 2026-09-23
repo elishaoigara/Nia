@@ -29,10 +29,11 @@ export default function SplashScreen() {
         background: 'var(--surface-0)',
         opacity: fading ? 0 : 1,
         transition: 'opacity 250ms ease',
-        pointerEvents: fading ? 'none' : 'auto',
+        // The splash is decorative only; it must never intercept taps or clicks.
+        pointerEvents: 'none',
       }}
     >
-      <img src="/logo/nia-icon.svg" alt="" width={64} height={64} style={{ borderRadius: 18 }} />
+      <img src="/logo/nia-icon.svg" alt="" width={64} height={64} aria-hidden="true" style={{ borderRadius: 18 }} />
     </div>
   )
 }

@@ -1,9 +1,13 @@
 'use client';
 
-import React, { useState } from 'react';
+import { safeNext } from '@/lib/auth-next'
+import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
+import { friendlyAuthError } from '@/lib/auth-errors';
+import ResendConfirmation from '@/components/ResendConfirmation';
+import { getAuthUrl } from '@/lib/app-url';
 import UnityLine from '@/components/UnityLine';
 
 export default function LoginPage() {
@@ -15,44 +19,55 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    const callbackError = new URLSearchParams(window.location.search).get('error');
+    if (!callbackError) return;
+
+    const messages: Record<string, string> = {
+      auth_link_expired: 'This email link has expired or was already used. Request a new confirmation email below, or reset your password.',
+      missing_auth_code: 'That sign-in link is incomplete. Please start again.',
+      auth_callback_failed: 'We could not finish signing you in. Please try again.',
+      profile_lookup_failed: 'You are signed in, but your profile could not be loaded. Please try again.',
+    };
+    const timer = window.setTimeout(() => {
+      setError(messages[callbackError] ?? 'We could not finish signing you in. Please try again.');
+      const params = new URLSearchParams(window.location.search);
+      params.delete('error');
+      window.history.replaceState({}, '', window.location.pathname + (params.size ? '?' + params.toString() : ''));
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
   async function handleEmailLogin(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError('');
 
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    if (signInError) {
-      setError(signInError.message);
-      setLoading(false);
-      return;
-    }
-
-    router.push('/');
+    try {
+      const { error: signInError } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+      if (signInError) throw signInError;
+      router.replace(safeNext(new URLSearchParams(window.location.search).get('next')));
+      router.refresh();
+    } catch (error) {
+      setError(friendlyAuthError(error instanceof Error ? error.message : ''));
+    } finally { setLoading(false); }
   }
 
   async function handleGoogleLogin() {
-    setLoading(true);
-    setError('');
-
-    const { error: oauthError } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
-      },
-    });
-
-    if (oauthError) {
-      setError(oauthError.message);
+    if (loading) return;
+    setLoading(true); setError('');
+    try {
+      const next = encodeURIComponent(safeNext(new URLSearchParams(window.location.search).get('next')));
+      const { error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: getAuthUrl(`/auth/callback?next=${next}`) } });
+      if (error) throw error;
+    } catch (error) {
+      setError(friendlyAuthError(error instanceof Error ? error.message : ''));
       setLoading(false);
     }
   }
 
   return (
-    <div
+    <div className="auth-page"
       style={{
         minHeight: '100dvh',
         display: 'flex',
@@ -131,12 +146,13 @@ export default function LoginPage() {
             Sign in
           </h2>
 
-          {/* OAuth — Google only */}
+          {process.env.NEXT_PUBLIC_GOOGLE_AUTH_ENABLED === 'true' && <>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
             <button
               onClick={handleGoogleLogin}
               disabled={loading}
-              className="tap-sm"
+                className="btn-ghost tap-sm"
+              aria-label="Continue with Google"
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -190,51 +206,41 @@ export default function LoginPage() {
             <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
           </div>
 
+          </>}
           {/* Email form */}
           <form onSubmit={handleEmailLogin}>
             <div style={{ marginBottom: 14 }}>
+              <label htmlFor="login-email" className="visually-hidden">Email address</label>
               <input
+                id="login-email"
                 type="email"
+                inputMode="email"
+                autoComplete="email"
                 placeholder="Email"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
                 required
-                style={{
-                  background: 'var(--surface-0)',
-                  border: '1px solid var(--border)',
-                  color: 'var(--text-primary)',
-                  width: '100%',
-                  padding: '12px 16px',
-                  borderRadius: 12,
-                  fontSize: 15,
-                  outline: 'none',
-                  fontFamily: 'inherit',
-                }}
+                className="input"
               />
             </div>
             <div style={{ marginBottom: 20 }}>
+              <label htmlFor="login-password" className="visually-hidden">Password</label>
               <input
+                id="login-password"
                 type="password"
+                autoComplete="current-password"
                 placeholder="Password"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 required
-                style={{
-                  background: 'var(--surface-0)',
-                  border: '1px solid var(--border)',
-                  color: 'var(--text-primary)',
-                  width: '100%',
-                  padding: '12px 16px',
-                  borderRadius: 12,
-                  fontSize: 15,
-                  outline: 'none',
-                  fontFamily: 'inherit',
-                }}
+                className="input"
               />
             </div>
 
             {error && (
               <p
+                role="alert"
+                aria-live="polite"
                 style={{
                   color: 'var(--nia-coral)',
                   fontSize: 13,
@@ -249,10 +255,9 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="tap-sm"
+              className="btn-primary tap-sm"
               style={{
                 width: '100%',
-                padding: '12px 0',
                 borderRadius: 12,
                 border: 'none',
                 background: 'var(--grad-brand)',
@@ -267,6 +272,8 @@ export default function LoginPage() {
               {loading ? 'Signing in…' : 'Sign in'}
             </button>
           </form>
+          <ResendConfirmation/>
+          <p className="text-center text-sm mt-4"><Link href="/help">Need help?</Link> · <Link href="/privacy">Privacy</Link> · <Link href="/terms">Terms</Link></p>
 
           {/* Links */}
           <div style={{ textAlign: 'center', marginTop: 20 }}>
@@ -294,16 +301,8 @@ export default function LoginPage() {
           </p>
           <Link
             href="/signup"
-            style={{
-              display: 'inline-block',
-              padding: '9px 20px',
-              borderRadius: 10,
-              background: 'var(--grad-brand)',
-              color: '#fff',
-              fontWeight: 700,
-              fontSize: 13.5,
-              textDecoration: 'none',
-            }}
+            className="btn-primary"
+            style={{ textDecoration: 'none', fontSize: 13.5 }}
           >
             Create your account →
           </Link>

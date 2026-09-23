@@ -1,5 +1,6 @@
 'use client'
 
+import { mediaUrl } from '@/lib/media-url'
 import { useState, useRef, useEffect } from 'react'
 import { Mic, Square, Trash2, Play, Pause } from 'lucide-react'
 
@@ -154,7 +155,7 @@ export default function VoiceRecorder({ onRecorded, onClear }: VoiceRecorderProp
       {/* Persistent Audio Tag inside identical branch space guarantees element tracking safely */}
       <audio 
         ref={audioRef} 
-        src={audioUrl ?? ''} 
+        src={mediaUrl(audioUrl ?? '')}
         onEnded={() => setIsPlaying(false)} 
         className="hidden" 
         preload="auto"

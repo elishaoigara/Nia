@@ -1,6 +1,7 @@
 // components/PostCard.tsx
 'use client';
 
+import { mediaUrl } from '@/lib/media-url'
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -17,12 +18,16 @@ import {
   Trash2,
   Link2,
   Check,
+  Flag,
+  VolumeX,
+  UserX,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { getStoryRingData } from '@/lib/activeStories';
 import type { Poll, Post } from '@/types/domain';
 import MediaLightbox from './MediaLightbox';
 import FollowButton from './FollowButton';
+import ReportSheet from './ReportSheet';
 import { getFlag } from '@/lib/african-data';
 
 /* ── Types ──────────────────────────────────── */
@@ -91,6 +96,14 @@ function mediaGridClass(count: number): string {
    ─────────────────────────────────────────────── */
 const TRENDING_THRESHOLD = 30; // likes to qualify as trending
 
+const CONTRIBUTION_MODE_LABELS: Record<NonNullable<Post['contribution_mode']>, string> = {
+  ask: 'Ask',
+  offer: 'Offer help',
+  update: 'Progress update',
+  opportunity: 'Opportunity',
+  reflection: 'Reflection',
+};
+
 type PostVariant = 'media' | 'trending' | 'text';
 
 function getPostVariant(
@@ -130,6 +143,9 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
   const [lightboxIndex,      setLightboxIndex]      = useState(0);
   const [isFollowingAuthor,  setIsFollowingAuthor]  = useState(!!post.viewer_is_following);
   const [copied,             setCopied]             = useState(false);
+  const [safetyBusy,         setSafetyBusy]         = useState(false);
+  const [safetyNotice,       setSafetyNotice]       = useState('');
+  const [showReport,         setShowReport]         = useState(false);
 
   // Edit state
   const [editing,     setEditing]     = useState(false);
@@ -165,7 +181,7 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
   }, [profile?.id, currentUserId]);
 
   const allMedia: PostMedia[] = [];
-  if (post.media_url && post.media_type) {
+  if (post.media_url && post.media_type && post.media_type !== 'audio') {
     const type = post.media_type === 'video' ? 'video' : 'image';
     allMedia.push({ url: post.media_url, type });
   }
@@ -207,68 +223,50 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
   }, [editing]);
 
   /* ── Actions ── */
+  const actionBusy = useRef(false);
   const handleLike = useCallback(async () => {
-    if (!currentUserId) return;
-    // Use functional updaters to avoid stale closure on rapid taps
-    let isNowLiked = false;
-    setLiked(prev => { isNowLiked = !prev; return !prev; });
-    setLikesCount((prev: number) => isNowLiked ? prev + 1 : prev - 1);
-    if (liked) {
-      await supabase.from('likes').delete().eq('post_id', post.id).eq('user_id', currentUserId);
-    } else {
-      await supabase.from('likes').insert({ post_id: post.id, user_id: currentUserId });
-      // Notify post owner — skip self-like
-      if (post.user_id && post.user_id !== currentUserId) {
-        await supabase.from('notifications').insert({
-          user_id: post.user_id,
-          actor_id: currentUserId,
-          type: 'like',
-          entity_id: post.id,
-          message: `${profile?.username ?? 'Someone'} liked your post`,
-          is_read: false,
-        });
-      }
-    }
-  }, [currentUserId, liked, post.id, post.user_id, profile?.username, supabase]);
-
+    if (!currentUserId || actionBusy.current) return;
+    actionBusy.current = true;
+    try {
+      const result = liked
+        ? await supabase.from('likes').delete().eq('post_id', post.id).eq('user_id', currentUserId)
+        : await supabase.from('likes').insert({ post_id: post.id, user_id: currentUserId });
+      if (result.error) throw result.error;
+      setLiked(!liked); setLikesCount(n => Math.max(0, n + (liked ? -1 : 1)));
+    } catch { setSafetyNotice('Like could not be saved. Please retry.'); }
+    finally { actionBusy.current = false; }
+  }, [currentUserId, liked, post.id, supabase]);
   const handleRepost = useCallback(async () => {
-    if (!currentUserId) return;
-    setShowRepostMenu(false);
-    setReposted(prev => !prev);
-    setRepostsCount((prev: number) => reposted ? prev - 1 : prev + 1);
-    if (reposted) {
-      await supabase.from('reposts').delete().eq('post_id', post.id).eq('user_id', currentUserId);
-    } else {
-      await supabase.from('reposts').insert({ post_id: post.id, user_id: currentUserId });
-      // Notify post owner — skip self-repost
-      if (post.user_id && post.user_id !== currentUserId) {
-        await supabase.from('notifications').insert({
-          user_id: post.user_id,
-          actor_id: currentUserId,
-          type: 'repost',
-          entity_id: post.id,
-          message: `${profile?.username ?? 'Someone'} reposted your post`,
-          is_read: false,
-        });
-      }
-    }
-  }, [currentUserId, reposted, post.id, post.user_id, profile?.username, supabase]);
-
+    if (!currentUserId || actionBusy.current) return;
+    actionBusy.current = true; setShowRepostMenu(false);
+    try {
+      const result = reposted
+        ? await supabase.from('reposts').delete().eq('post_id', post.id).eq('user_id', currentUserId)
+        : await supabase.from('reposts').insert({ post_id: post.id, user_id: currentUserId });
+      if (result.error) throw result.error;
+      setReposted(!reposted); setRepostsCount(n => Math.max(0, n + (reposted ? -1 : 1)));
+    } catch { setSafetyNotice('Repost could not be saved. Please retry.'); }
+    finally { actionBusy.current = false; }
+  }, [currentUserId, reposted, post.id, supabase]);
   const handleBookmark = useCallback(async () => {
-    if (!currentUserId) return;
-    setBookmarked(prev => !prev);
-    if (bookmarked) {
-      await supabase.from('bookmarks').delete().eq('post_id', post.id).eq('user_id', currentUserId);
-    } else {
-      await supabase.from('bookmarks').insert({ post_id: post.id, user_id: currentUserId });
-    }
+    if (!currentUserId || actionBusy.current) return;
+    actionBusy.current = true;
+    try {
+      const result = bookmarked
+        ? await supabase.from('bookmarks').delete().eq('post_id', post.id).eq('user_id', currentUserId)
+        : await supabase.from('bookmarks').insert({ post_id: post.id, user_id: currentUserId });
+      if (result.error) throw result.error;
+      setBookmarked(!bookmarked);
+    } catch { setSafetyNotice('Save failed. Please retry.'); }
+    finally { actionBusy.current = false; }
   }, [currentUserId, bookmarked, post.id, supabase]);
 
   const handleDelete = useCallback(async (e: React.MouseEvent) => {
     e.stopPropagation();
     setShowMenu(false);
     if (!window.confirm('Delete this post?')) return;
-    await supabase.from('posts').delete().eq('id', post.id);
+    const { error } = await supabase.from('posts').delete().eq('id', post.id);
+    if (error) { setSafetyNotice('Delete failed. Please retry.'); return; }
     onDelete?.(post.id);
     router.refresh();
   }, [post.id, onDelete, router, supabase]);
@@ -291,6 +289,60 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }, [post.id]);
+
+  const handleReport = useCallback(async (reason: string, details: string) => {
+    if (!currentUserId || !post.user_id || safetyBusy) return false;
+    setSafetyBusy(true);
+    const { error } = await supabase.from('reports').insert({
+      reporter_id: currentUserId,
+      reported_user_id: post.user_id,
+      entity_type: 'post',
+      entity_id: post.id,
+      reason: reason.slice(0, 120),
+      details: details ? details.slice(0, 1000) : null,
+    });
+    setSafetyBusy(false);
+    setSafetyNotice(error ? 'Report could not be sent. Please try again.' : 'Report sent to Nia moderators.');
+    return !error;
+  }, [currentUserId, post.id, post.user_id, safetyBusy, supabase]);
+
+  const handleMute = useCallback(async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!currentUserId || !post.user_id || safetyBusy) return;
+    setShowMenu(false);
+    if (!window.confirm(`Mute @${profile?.username ?? 'this account'}? Their posts will be hidden from your feed.`)) return;
+    setSafetyBusy(true);
+    const { error } = await supabase.from('mutes').upsert(
+      { muter_id: currentUserId, muted_id: post.user_id },
+      { onConflict: 'muter_id,muted_id', ignoreDuplicates: true },
+    );
+    setSafetyBusy(false);
+    if (error) {
+      setSafetyNotice('This account could not be muted. Please try again.');
+      return;
+    }
+    onDelete?.(post.id);
+    router.refresh();
+  }, [currentUserId, onDelete, post.id, post.user_id, profile?.username, router, safetyBusy, supabase]);
+
+  const handleBlock = useCallback(async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!currentUserId || !post.user_id || safetyBusy) return;
+    setShowMenu(false);
+    if (!window.confirm(`Block @${profile?.username ?? 'this account'}? They will not be able to message you.`)) return;
+    setSafetyBusy(true);
+    const { error } = await supabase.from('blocks').upsert(
+      { blocker_id: currentUserId, blocked_id: post.user_id },
+      { onConflict: 'blocker_id,blocked_id', ignoreDuplicates: true },
+    );
+    setSafetyBusy(false);
+    if (error) {
+      setSafetyNotice('This account could not be blocked. Please try again.');
+      return;
+    }
+    onDelete?.(post.id);
+    router.refresh();
+  }, [currentUserId, onDelete, post.id, post.user_id, profile?.username, router, safetyBusy, supabase]);
 
   const initials = profile?.username?.[0]?.toUpperCase() ?? '?';
 
@@ -323,7 +375,7 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
             className={`post-avatar${hasActiveStory ? (storyUnseen ? ' post-ring-unseen' : ' post-ring-seen') : ''}`}
           >
             {profile?.avatar_url
-              ? <img src={profile.avatar_url} alt={profile.username ?? ''} />
+              ? <img src={mediaUrl(profile.avatar_url)} alt={profile.username ?? ''} />
               : <div className="post-avatar-inner">{initials}</div>
             }
           </Link>
@@ -357,6 +409,11 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
                 <span className="post-time">{timeAgo(post.created_at)}</span>
                 {variant === 'trending' && (
                   <span className="post-badge post-badge--trending">🔥 trending</span>
+                )}
+                {post.contribution_mode && (
+                  <span className={`post-purpose-tag post-purpose-tag--${post.contribution_mode}`}>
+                    {CONTRIBUTION_MODE_LABELS[post.contribution_mode]}
+                  </span>
                 )}
                 {canEdit && (
                   <span style={{ fontSize: 11, color: 'var(--nia-violet)', fontWeight: 600, background: 'rgba(91,33,182,0.08)', borderRadius: 4, padding: '1px 5px' }}>
@@ -408,6 +465,23 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
                       {bookmarked ? 'Bookmarked' : 'Bookmark'}
                     </button>
 
+                    {!isOwner && currentUserId && (
+                      <>
+                        <button onClick={e => { e.stopPropagation(); setShowMenu(false); setShowReport(true); }} disabled={safetyBusy} style={menuItemStyle()}>
+                          <Flag size={14} />
+                          Report post
+                        </button>
+                        <button onClick={handleMute} disabled={safetyBusy} style={menuItemStyle()}>
+                          <VolumeX size={14} />
+                          Mute account
+                        </button>
+                        <button onClick={handleBlock} disabled={safetyBusy} style={menuItemStyle('#f43f5e')}>
+                          <UserX size={14} />
+                          Block account
+                        </button>
+                      </>
+                    )}
+
                     {/* Edit — only within 15min window */}
                     {canEdit && (
                       <button
@@ -431,6 +505,12 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
               </div>
             </div>
           </div>
+
+          {safetyNotice && (
+            <p role="status" style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
+              {safetyNotice}
+            </p>
+          )}
 
           {/* Content / Edit mode */}
           {editing ? (
@@ -490,7 +570,8 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
             post.content && <RichText text={post.content} />
           )}
 
-          {/* Media grid */}
+          {post.media_type === 'audio' && post.media_url && <audio controls preload="none" src={mediaUrl(post.media_url)} aria-label="Voice post" style={{ width: '100%' }} />}
+      {/* Media grid */}
           {allMedia.length > 0 && (
             <div className={`post-media ${mediaGridClass(allMedia.length)}`} onClick={e => e.stopPropagation()}>
               {allMedia.map((m, i) => (
@@ -498,7 +579,7 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
                   style={{ position: 'relative', cursor: 'pointer' }}>
                   {m.type === 'video' ? (
                     <>
-                      <video src={m.url} />
+                      <video src={mediaUrl(m.url)} />
                       <div style={{
                         position: 'absolute', inset: 0, display: 'flex',
                         alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.3)',
@@ -507,7 +588,7 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
                       </div>
                     </>
                   ) : (
-                    <img src={m.url} alt={`Post media ${i + 1}`} loading="lazy" />
+                    <img src={mediaUrl(m.url)} alt={`Post media ${i + 1}`} loading="lazy" />
                   )}
                 </div>
               ))}
@@ -608,6 +689,14 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
       {lightboxOpen && (
         <MediaLightbox items={allMedia} startIndex={lightboxIndex} onClose={() => setLightboxOpen(false)} />
       )}
+      {showReport && (
+        <ReportSheet
+          title="Report this post"
+          description="Tell Nia what is wrong with this post. The author will not be told who reported it."
+          onClose={() => setShowReport(false)}
+          onSubmit={handleReport}
+        />
+      )}
     </>
   );
 }
@@ -629,6 +718,10 @@ function PollCard({
   poll: Poll; postId: string; currentUserId?: string | null;
 }) {
   const supabase = createClient();
+  const [voteError, setVoteError] = useState('');
+  const [closed, setClosed] = useState(false);
+  const voting = useRef(false);
+  useEffect(() => { const update = () => setClosed(Date.now() >= new Date(poll.ends_at).getTime()); const timer = setInterval(update, 1000); const initial = setTimeout(update, 0); return () => { clearInterval(timer); clearTimeout(initial); }; }, [poll.ends_at]);
   const [voted,    setVoted]    = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [results,  setResults]  = useState<Record<string, number>>({});
@@ -651,10 +744,14 @@ function PollCard({
   }, [currentUserId, loadResults, poll.id, supabase]);
 
   async function handleVote(optionId: string) {
-    if (!currentUserId || voted) return;
-    setVoted(true); setSelected(optionId);
-    await supabase.from('poll_votes').insert({ poll_id: poll.id, post_id: postId, user_id: currentUserId, option_id: optionId });
-    loadResults();
+    if (!currentUserId || voted || closed || voting.current) return;
+    voting.current = true; setVoteError('');
+    try {
+      const { error } = await supabase.from('poll_votes').insert({ poll_id: poll.id, post_id: postId, user_id: currentUserId, option_id: optionId });
+      if (error) throw error;
+      setVoted(true); setSelected(optionId); await loadResults();
+    } catch { setVoteError('Vote failed. The poll may have closed. Please retry.'); }
+    finally { voting.current = false; }
   }
 
   const total = Object.values(results).reduce((a, b) => a + b, 0);
@@ -664,12 +761,14 @@ function PollCard({
       <p style={{ fontWeight: 700, fontSize: 14, margin: '0 0 10px', color: 'var(--text-primary)' }}>
         {poll.question}
       </p>
+      {voteError && <p role="alert">{voteError}</p>}
+      {closed && <p>Poll closed</p>}
       {poll.options.map(opt => {
         const count = results[opt.id] ?? 0;
         const pct   = total > 0 ? (count / total) * 100 : 0;
         const isSel = selected === opt.id;
         return (
-          <button key={opt.id} onClick={() => handleVote(opt.id)} disabled={voted && !isSel}
+          <button key={opt.id} onClick={() => handleVote(opt.id)} disabled={voted || closed}
             style={{
               display: 'block', width: '100%', marginBottom: 6, padding: '8px 12px',
               borderRadius: 10, border: `2px solid ${isSel ? 'var(--nia-violet)' : 'var(--border)'}`,
