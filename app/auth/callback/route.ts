@@ -1,20 +1,13 @@
 import { safeNext } from '@/lib/auth-next'
+import { getAuthRequestOrigin } from '@/lib/auth-origin'
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
-function getCanonicalOrigin(requestOrigin: string): string {
-  if (process.env.NEXT_PUBLIC_APP_URL) {
-    return process.env.NEXT_PUBLIC_APP_URL.replace(/\/$/, '')
-  }
-  if (process.env.NEXT_PUBLIC_VERCEL_URL) {
-    return `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`
-  }
-  return requestOrigin
-}
-
 export async function GET(request: Request) {
-  const { searchParams, origin } = new URL(request.url)
-  const canonicalOrigin = getCanonicalOrigin(origin)
+  const { searchParams } = new URL(request.url)
+  const origin = getAuthRequestOrigin(request)
+  // The exchanged session cookies belong to the host that received this request.
+  const canonicalOrigin = origin
   const code = searchParams.get('code')
 
   if (!code) {
@@ -31,6 +24,10 @@ export async function GET(request: Request) {
   const { data: { user }, error: userError } = await supabase.auth.getUser()
   if (!user || userError) {
     return NextResponse.redirect(`${canonicalOrigin}/login?error=auth_callback_failed`)
+  }
+
+  if (safeNext(searchParams.get('next')) === '/reset-password') {
+    return NextResponse.redirect(`${origin}/reset-password`)
   }
 
   const { data: profile, error: profileError } = await supabase

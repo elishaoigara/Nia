@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { friendlyAuthError } from '@/lib/auth-errors';
+import ResendConfirmation from '@/components/ResendConfirmation';
+import { getAuthUrl } from '@/lib/app-url';
 import UnityLine from '@/components/UnityLine';
 
 export default function LoginPage() {
@@ -22,13 +24,16 @@ export default function LoginPage() {
     if (!callbackError) return;
 
     const messages: Record<string, string> = {
+      auth_link_expired: 'This email link has expired or was already used. Request a new confirmation email below, or reset your password.',
       missing_auth_code: 'That sign-in link is incomplete. Please start again.',
       auth_callback_failed: 'We could not finish signing you in. Please try again.',
       profile_lookup_failed: 'You are signed in, but your profile could not be loaded. Please try again.',
     };
     const timer = window.setTimeout(() => {
       setError(messages[callbackError] ?? 'We could not finish signing you in. Please try again.');
-      window.history.replaceState({}, '', window.location.pathname);
+      const params = new URLSearchParams(window.location.search);
+      params.delete('error');
+      window.history.replaceState({}, '', window.location.pathname + (params.size ? '?' + params.toString() : ''));
     }, 0);
     return () => window.clearTimeout(timer);
   }, []);
@@ -38,39 +43,31 @@ export default function LoginPage() {
     setLoading(true);
     setError('');
 
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    if (signInError) {
-      setError(friendlyAuthError(signInError.message));
-      setLoading(false);
-      return;
-    }
-
-    router.push(safeNext(new URLSearchParams(window.location.search).get('next')));
+    try {
+      const { error: signInError } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+      if (signInError) throw signInError;
+      router.replace(safeNext(new URLSearchParams(window.location.search).get('next')));
+      router.refresh();
+    } catch (error) {
+      setError(friendlyAuthError(error instanceof Error ? error.message : ''));
+    } finally { setLoading(false); }
   }
 
   async function handleGoogleLogin() {
-    setLoading(true);
-    setError('');
-
-    const { error: oauthError } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(safeNext(new URLSearchParams(window.location.search).get('next')))}`,
-      },
-    });
-
-    if (oauthError) {
-      setError(friendlyAuthError(oauthError.message));
+    if (loading) return;
+    setLoading(true); setError('');
+    try {
+      const next = encodeURIComponent(safeNext(new URLSearchParams(window.location.search).get('next')));
+      const { error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: getAuthUrl(`/auth/callback?next=${next}`) } });
+      if (error) throw error;
+    } catch (error) {
+      setError(friendlyAuthError(error instanceof Error ? error.message : ''));
       setLoading(false);
     }
   }
 
   return (
-    <div
+    <div className="auth-page"
       style={{
         minHeight: '100dvh',
         display: 'flex',
@@ -149,7 +146,7 @@ export default function LoginPage() {
             Sign in
           </h2>
 
-          {/* OAuth — Google only */}
+          {process.env.NEXT_PUBLIC_GOOGLE_AUTH_ENABLED === 'true' && <>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
             <button
               onClick={handleGoogleLogin}
@@ -209,6 +206,7 @@ export default function LoginPage() {
             <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
           </div>
 
+          </>}
           {/* Email form */}
           <form onSubmit={handleEmailLogin}>
             <div style={{ marginBottom: 14 }}>
@@ -274,6 +272,8 @@ export default function LoginPage() {
               {loading ? 'Signing in…' : 'Sign in'}
             </button>
           </form>
+          <ResendConfirmation/>
+          <p className="text-center text-sm mt-4"><Link href="/help">Need help?</Link> · <Link href="/privacy">Privacy</Link> · <Link href="/terms">Terms</Link></p>
 
           {/* Links */}
           <div style={{ textAlign: 'center', marginTop: 20 }}>

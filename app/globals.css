@@ -2107,3 +2107,35 @@ main { overflow-wrap: anywhere; }
 .skip-link { position: fixed; top: -100px; left: 12px; z-index: 10000; padding: 12px 18px; background: var(--surface-0); color: var(--text-primary); }
 .skip-link:focus { top: 12px; }
 @media (max-width: 400px) { .comment-children { padding-left: 12px; margin-left: 12px; } .settings-row { flex-wrap: wrap; } }
+
+/* Public and authentication pages use the full canvas without member navigation. */
+.page-wrap:has(.public-page), .page-wrap:has(.auth-page) { padding: 0; }
+.public-page { min-height: 100dvh; }
+.public-shell { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+.public-header, .public-footer { display: flex; justify-content: space-between; align-items: center; gap: 20px; flex-wrap: wrap; padding-block: 24px; }
+.public-brand { display: inline-flex; align-items: center; gap: 10px; font-size: 24px; font-weight: 800; }
+.public-links { display: flex; align-items: center; flex-wrap: wrap; gap: 20px; font-size: 14px; }
+.public-hero { display: grid; grid-template-columns: 1.15fr 1fr; gap: 64px; align-items: center; padding-block: 80px; }
+.public-hero h1 { font-size: clamp(42px, 6vw, 72px); font-weight: 850; line-height: 1.06; letter-spacing: -0.05em; margin: 20px 0; }
+.public-hero p { max-width: 480px; font-size: 18px; line-height: 1.7; color: var(--text-secondary); }
+.public-kicker { font-size: 12px; font-weight: 800; letter-spacing: 0.13em; text-transform: uppercase; color: var(--nia-violet); }
+.public-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-block: 28px; }
+.public-preview { border: 1px solid var(--border); background: var(--surface-1); border-radius: 28px; padding: 28px; box-shadow: 0 24px 70px color-mix(in srgb, var(--nia-violet) 12%, transparent); }
+.public-preview-row { display: flex; gap: 16px; align-items: center; padding: 20px 0; border-bottom: 1px solid var(--border); }
+.public-preview-row:last-child { border-bottom: 0; }
+.public-preview-row p { font-size: 14px; }
+.public-feature-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; padding-block: 32px 64px; }
+.public-feature { border: 1px solid var(--border); border-radius: 20px; padding: 28px; }
+.public-feature h3 { font-size: 18px; font-weight: 800; margin-block: 18px 8px; }
+.public-feature p, .public-copy p, .public-copy li { color: var(--text-secondary); line-height: 1.8; }
+.public-copy { max-width: 760px; margin: 48px auto 80px; }
+.public-copy h1 { font-size: clamp(32px, 5vw, 46px); line-height: 1.15; font-weight: 800; margin-bottom: 20px; }
+.public-copy h2 { font-size: 21px; font-weight: 750; margin-block: 32px 10px; }
+.public-copy a { color: var(--nia-violet); text-decoration: underline; text-underline-offset: 3px; }
+.public-footer { border-top: 1px solid var(--border); color: var(--text-secondary); padding-block: 28px; }
+@media (max-width: 720px) {
+  .public-hero { grid-template-columns: 1fr; gap: 32px; padding-block: 40px; }
+  .public-feature-grid { grid-template-columns: 1fr; gap: 12px; }
+  .public-shell { padding-inline: 20px; }
+  .public-links { gap: 14px; }
+}

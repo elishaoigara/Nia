@@ -14,7 +14,8 @@
     "check": "npm run lint && npm run typecheck && npm run test && npm run db:check && npm run db:types:check && npm run build",
     "db:check": "node scripts/db/check.mjs && node scripts/db/check-creators.mjs",
     "db:types": "node scripts/db/generate-types.mjs",
-    "db:types:check": "node scripts/db/generate-types.mjs --check"
+    "db:types:check": "node scripts/db/generate-types.mjs --check",
+    "launch:check": "node scripts/launch-check.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "0.12.4",

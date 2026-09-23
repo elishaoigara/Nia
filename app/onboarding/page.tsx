@@ -20,9 +20,9 @@ export default function OnboardingPage(){
    const s=createClient(),{data:{user}}=await s.auth.getUser();if(!user)throw Error('Sign in again.')
    const {error}=await s.from('profiles').upsert({id:user.id,username,full_name:name.trim(),interests:interests.map(normalizeInterest),goals:[]},{onConflict:'id'});if(error)throw error
    const {data,error:recommendationError}=await s.rpc('get_recommended_circles',{p_user_id:user.id,p_limit:6})
-   if(recommendationError)throw recommendationError
-   setCircles(data??[]);setDone(true)
-  }catch(e){setError(e instanceof Error?e.message:'Could not finish setup. Please retry.')}finally{setBusy(false)}
+   // A discovery outage must not block a successfully saved profile.
+   setCircles(recommendationError ? [] : data??[]);setDone(true)
+  }catch(e){setError(e && typeof e === 'object' && 'code' in e && e.code === '23505' ? 'That handle is already taken. Try another one.' : e instanceof Error?e.message:'Could not finish setup. Please retry.')}finally{setBusy(false)}
  }
  return <main className="mx-auto max-w-xl p-5 space-y-6">
   <h1 className="text-3xl font-bold">Find your people</h1><p>Music, friendships, ideas, opportunities—make room for what you enjoy.</p>

@@ -1,5 +1,6 @@
 'use client'
 
+import { PUBLIC_INFO_PATHS, isAuthPage as isAuthRoute } from '@/lib/public-routes'
 import { usePreferences } from '@/components/PreferencesProvider'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
@@ -49,14 +50,18 @@ export default function Navbar() {
   useEffect(() => {
     let cancelled = false
     supabase.auth.getUser().then(({ data: { user } }) => {
-      if (!cancelled && user) setUserId(user.id)
+      if (!cancelled) setUserId(user?.id ?? null)
     })
-    return () => { cancelled = true }
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!cancelled) setUserId(session?.user.id ?? null)
+    })
+    return () => { cancelled = true; subscription.unsubscribe() }
   }, [supabase])
 
   const isFlicks   = pathname === '/flicks'
   const isSetup    = pathname === '/setup'
-  const isAuthPage = ['/login', '/signup', '/forgot-password', '/reset-password', '/auth/callback'].some(path => pathname === path || pathname.startsWith(path + '/'))
+  const isAuthPage = isAuthRoute(pathname)
+  const isInfoPage = pathname !== '/' && PUBLIC_INFO_PATHS.includes(pathname)
   const isDmThread = pathname.startsWith('/messages/') && pathname.split('/').length === 3
 
   function isActive(href: string) {
@@ -67,7 +72,7 @@ export default function Navbar() {
     return pathname.startsWith(href)
   }
 
-  if (isFlicks || isSetup || isAuthPage) return null
+  if (isFlicks || isSetup || isAuthPage || isInfoPage || !userId) return null
 
   /* ── Sidebar active style (desktop) ── */
   const activeStyle = {

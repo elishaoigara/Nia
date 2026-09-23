@@ -86,7 +86,7 @@ export default function ResetPasswordPage() {
   }
 
   return (
-    <div
+    <div className="auth-page"
       style={{
         minHeight: '100dvh',
         display: 'flex',

@@ -86,6 +86,10 @@ Supabase clients are separated by trust boundary:
 - `lib/supabase/server.ts`: request-scoped cookie-aware server client
 - `lib/supabase/middleware.ts`: session refresh and route authorization
 
+## Launch on niaapp.app
+
+See [the web launch runbook](docs/WEB_LAUNCH.md) for Vercel, Supabase, email templates, acceptance tests, and rollback. Run `npm run launch:check` with production environment variables before release.
+
 ## Deployment
 
 A multi-stage, non-root Docker image is included. Public Next.js variables must be supplied while building because they are compiled into the browser bundle.

@@ -7,9 +7,14 @@ import CreatePost from '@/components/CreatePost'
 import LoadMore from '@/components/LoadMore'
 import FeedTabs from '@/components/FeedTabs'
 import StoriesBar from '@/components/StoriesBar'
+import Welcome from '@/components/Welcome'
+import { publicSupabaseEnv } from '@/lib/env'
+import type { Metadata } from 'next'
+export const metadata: Metadata = { alternates: { canonical: '/' } }
 export default async function Home({searchParams}:{searchParams:Promise<{tab?:string}>}){
+ if(!publicSupabaseEnv.isConfigured)return <Welcome/>
  const {tab}=await searchParams,currentTab=tab==='following'||tab==='local'?tab:'africa'
- const s=await createClient(),{data:{user}}=await s.auth.getUser();if(!user)redirect('/login')
+ const s=await createClient(),{data:{user}}=await s.auth.getUser();if(!user)return <Welcome/>
  const {data:profile,error}=await s.from('profiles').select('id').eq('id',user.id).maybeSingle();if(error)throw error;if(!profile)redirect('/onboarding')
  const [feed,memberships]=await Promise.all([queryFeed(s,user.id,currentTab),s.from('circle_members').select('circles:circle_id(id,name,slug)').eq('user_id',user.id).limit(6)])
  const circles=(memberships.data??[]) as unknown as {circles:{id:string;name:string;slug:string}|null}[]
