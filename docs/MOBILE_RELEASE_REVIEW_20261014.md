@@ -1,5 +1,7 @@
 # Nia review — 2026-10-14
 
+Updated live backend findings and deployment blocker: [2026-10-15 review](LIVE_BACKEND_REVIEW_20261015.md).
+
 ## Baseline and integration
 
 Web `main`: `5b1b0f3e9c0c8e1e3f3e5cefc717ca0e0a97069b`.
