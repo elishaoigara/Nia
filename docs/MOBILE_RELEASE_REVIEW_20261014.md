@@ -40,3 +40,15 @@ Compatible dependency updates removed the critical shell-quote advisory and upda
 - Production signing and store review requirements.
 - Background push delivery, native Circles/polls/settings and full web/mobile parity.
 - Media processing, rate limiting/abuse response, observability, backup restore and load testing.
+
+## Web security follow-up — 2026-10-15
+
+Updated Next.js and its ESLint configuration from 16.3.0 to the compatible 16.3.8 security patch, Vitest to 4.1.11 and the lockfile with compatible transitive patches. [Next.js release notes](https://github.com/vercel/next.js/releases/tag/v16.3.8) document the framework fixes. Production dependency auditing now runs in CI and fails on high/critical advisories.
+
+The full dependency audit now reports 5 high findings, all stemming from the unresolved `braces` advisory through the development-only Next ESLint plugin; no critical or moderate findings remain. The registry proposes downgrading Next ESLint to 14 as its remediation, which is incompatible with this Next 16 project. Keep this exception visible until the upstream dependency is fixed.
+
+## APK delivery evidence
+
+[Actions run 38607965347](https://github.com/elishaoigara/Nia-app/actions/runs/38607965347) successfully compiled and signature-verified the mobile preview from commit `2906967273f94f55867c7d9822337744b95b5090`. The downloaded APK is 43,701,707 bytes, SHA-256 `63436c7c57bbca7c2c918824276ca17fb52f17785fd25f75233df3c56fb915b7`.
+
+The separate backend reachability step failed with `fetch failed`, and the artifact records that failure. Live sign-in and posting have not been verified. The APK uses a preview certificate and requires live backend and native-device acceptance before a production release.
