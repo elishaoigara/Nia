@@ -27,9 +27,16 @@ try {
       elsif tg_op = 'UPDATE' and auth.uid() is not null then new.account_status=old.account_status;
       end if; return new; end $$;
     create trigger legacy_settings_guard before insert or update on public.account_settings for each row execute function public.validate_account_settings();
+    create function public.apply_default_audience() returns trigger language plpgsql security definer as $$ begin
+      new.audience := case when tg_table_name='stories' then 'followers' else 'public' end;
+      return new;
+    end $$;
+    create trigger posts_default_audience before insert on public.posts for each row execute function public.apply_default_audience();
+    create trigger stories_default_audience before insert on public.stories for each row execute function public.apply_default_audience();
   `)
   await db.exec(await readFile('supabase/migrations/20261015070754_reconcile_live_social_contracts.sql', 'utf8'))
   await db.exec(await readFile('supabase/migrations/20260918080113_creator_mode.sql', 'utf8'))
+  await db.exec(await readFile('supabase/migrations/20261017065457_preserve_explicit_content_audience.sql', 'utf8'))
   const results = await db.exec(await readFile('scripts/db/check-live-contracts.sql', 'utf8'))
   const audit = results.flatMap(result => result.rows ?? []).find(row => row.audit_results)?.audit_results
   assert.ok(audit, 'Rollback audit must return results')

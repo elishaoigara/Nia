@@ -1,4 +1,6 @@
 -- Reviewed upgrade for Nia project mjdjqpieuzkwozbyuywd.
+-- ALREADY APPLIED on 2026-10-16. Do not rerun against this project.
+-- Follow-up: 20261017065457_preserve_explicit_content_audience.sql (also deployed).
 -- Run once in its SQL editor. Does not reset the database or delete user records.
 -- All changes are atomic. Existing Creator Mode tables must be absent, as verified on 2026-10-15.
 -- After running, execute scripts/db/check-live-contracts.sql (ROLLBACK included) to verify.
