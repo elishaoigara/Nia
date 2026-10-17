@@ -14,4 +14,26 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
       - run: npm run check
+  public-browser-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npx playwright test e2e/web-launch.spec.ts
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: public-browser-failure-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
