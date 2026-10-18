@@ -146,6 +146,7 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
   const [safetyBusy,         setSafetyBusy]         = useState(false);
   const [safetyNotice,       setSafetyNotice]       = useState('');
   const [showReport,         setShowReport]         = useState(false);
+  const [captionExpanded, setCaptionExpanded] = useState(false);
 
   // Edit state
   const [editing,     setEditing]     = useState(false);
@@ -387,14 +388,14 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
           {/* Header */}
           <div className="post-header">
             {/* Left: name + handle on one line, time + badges on second line */}
-            <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="post-header-identity">
               {/* Row 1: display name + @handle */}
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
                 <Link href={`/profile/${profile?.id ?? '#'}`} className="post-username" onClick={e => e.stopPropagation()}>
                   {profile?.full_name ?? profile?.username ?? 'unknown'}
                 </Link>
                 {profile?.username && (
-                  <span style={{ fontSize: 13, color: 'var(--text-tertiary)', fontWeight: 400 }}>
+                  <span className="post-handle" title={`@${profile.username}`}>
                     @{profile.username}
                   </span>
                 )}
@@ -405,7 +406,7 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
                 )}
               </div>
               {/* Row 2: time + optional badges */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginTop: 2 }}>
                 <span className="post-time">{timeAgo(post.created_at)}</span>
                 {variant === 'trending' && (
                   <span className="post-badge post-badge--trending">🔥 trending</span>
@@ -567,7 +568,10 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
               </div>
             </div>
           ) : (
-            post.content && <RichText text={post.content} />
+            post.content && <div>
+              <div className={!captionExpanded && post.content.length > 280 ? 'post-caption--collapsed' : undefined}><RichText text={post.content} /></div>
+              {post.content.length > 280 && <button type="button" className="post-caption-toggle" aria-expanded={captionExpanded} onClick={event => { event.stopPropagation(); setCaptionExpanded(value => !value); }}>{captionExpanded ? 'Show less' : 'Read more'}</button>}
+            </div>
           )}
 
           {post.media_type === 'audio' && post.media_url && <audio controls preload="none" src={mediaUrl(post.media_url)} aria-label="Voice post" style={{ width: '100%' }} />}

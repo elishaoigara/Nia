@@ -1,6 +1,6 @@
 import { PGlite } from '@electric-sql/pglite'
 import { readdir, readFile } from 'node:fs/promises'
-export async function migrationDatabase() {
+export async function migrationDatabase({ before } = {}) {
  const db = new PGlite()
  await db.exec(`create role anon; create role authenticated; create schema auth; create schema storage;
  create table auth.users(id uuid primary key);
@@ -24,6 +24,7 @@ export async function migrationDatabase() {
  alter default privileges in schema public grant usage,select on sequences to authenticated;
  `)
  for (const file of (await readdir('supabase/migrations')).filter(f=>f.endsWith('.sql')).sort()) {
+  if (before && file >= before) continue
   const sql=(await readFile(`supabase/migrations/${file}`,'utf8')).replace('create extension if not exists pgcrypto;','-- gen_random_uuid is built into PostgreSQL')
   try {await db.exec(sql)} catch(e) {throw new Error(`${file}: ${e.message}`,{cause:e})}
  }

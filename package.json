@@ -11,8 +11,9 @@
     "test": "vitest run",
     "e2e": "playwright test",
     "e2e:ui": "playwright test --ui",
+    "e2e:layout": "playwright test --config e2e/layout/playwright.config.ts",
     "check": "npm run lint && npm run typecheck && npm run test && npm run db:check && npm run db:types:check && npm run build",
-    "db:check": "node scripts/db/check.mjs && node scripts/db/check-creators.mjs",
+    "db:check": "node scripts/db/check.mjs && node scripts/db/check-creators.mjs && node scripts/db/check-live-contracts.mjs",
     "db:types": "node scripts/db/generate-types.mjs",
     "db:types:check": "node scripts/db/generate-types.mjs --check",
     "launch:check": "node scripts/launch-check.mjs"
@@ -24,7 +25,7 @@
     "fuse.js": "7.5.0",
     "lucide-react": "1.30.0",
     "mediabunny": "1.55.1",
-    "next": "16.3.0",
+    "next": "16.3.8",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "tailwind-merge": "3.6.0",
@@ -38,10 +39,10 @@
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.4",
     "eslint": "9.39.5",
-    "eslint-config-next": "16.3.0",
+    "eslint-config-next": "16.3.8",
     "tailwindcss": "4.3.3",
     "typescript": "5.9.2",
-    "vitest": "4.1.10"
+    "vitest": "4.1.11"
   },
   "description": "A mobile-first, pan-African social platform.",
   "engines": {

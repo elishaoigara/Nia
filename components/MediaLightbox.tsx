@@ -43,6 +43,7 @@ export default function MediaLightbox({ items, startIndex = 0, onClose }: MediaL
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') onClose()
+      if (e.target instanceof HTMLInputElement) return
       if (e.key === 'ArrowRight') navigate(1)
       if (e.key === 'ArrowLeft') navigate(-1)
     }
@@ -57,8 +58,7 @@ export default function MediaLightbox({ items, startIndex = 0, onClose }: MediaL
     const v = videoRef.current
     if (!v) return
     if (v.paused) {
-      v.play().catch(err => console.error('Playback interrupted:', err))
-      setPlaying(true)
+      void v.play().catch(() => setPlaying(false))
     } else {
       v.pause()
       setPlaying(false)
@@ -72,13 +72,6 @@ export default function MediaLightbox({ items, startIndex = 0, onClose }: MediaL
     setMuted(v.muted)
   }
 
-  function handleScrub(e: React.MouseEvent<HTMLDivElement>) {
-    const v = videoRef.current
-    if (!v || !v.duration) return
-    const rect = e.currentTarget.getBoundingClientRect()
-    v.currentTime = ((e.clientX - rect.left) / rect.width) * v.duration
-  }
-
   function fmt(s: number) {
     if (isNaN(s)) return '0:00'
     const m = Math.floor(s / 60)
@@ -87,6 +80,7 @@ export default function MediaLightbox({ items, startIndex = 0, onClose }: MediaL
 
   return (
     <div
+      role="dialog" aria-modal="true" aria-label="Media viewer"
       className="fixed inset-0 z-999 flex items-center justify-center select-none"
       style={{ background: 'rgba(0,0,0,0.95)', backdropFilter: 'blur(8px)' }}
       onClick={onClose}
@@ -94,7 +88,7 @@ export default function MediaLightbox({ items, startIndex = 0, onClose }: MediaL
       {/* ── Close Button ────────────────────────────────── */}
       <button
         onClick={onClose}
-        className="absolute top-4 right-4 z-50 w-10 h-10 flex items-center justify-center rounded-full text-white transition-all duration-150 tap-sm active:scale-90"
+        className="absolute top-4 right-4 z-50 w-11 h-11 flex items-center justify-center rounded-full text-white transition-all duration-150 tap-sm active:scale-90"
         style={{ background: 'rgba(255,255,255,0.12)' }}
         aria-label="Close lightbox"
       >
@@ -148,12 +142,12 @@ export default function MediaLightbox({ items, startIndex = 0, onClose }: MediaL
             draggable={false}
           />
         ) : (
-          <div className="relative w-full max-w-2xl flex items-center justify-center">
+          <div className="relative w-full max-w-2xl flex flex-col items-center justify-center">
             <video
               ref={videoRef}
               src={mediaUrl(current.url)}
               className="w-full rounded-2xl object-contain shadow-2xl cursor-pointer"
-              style={{ maxHeight: 'calc(100vh - 160px)', background: '#000' }}
+              style={{ maxHeight: 'calc(100dvh - 200px)', background: '#000' }}
               muted={muted}
               playsInline
               onTimeUpdate={() => {
@@ -171,12 +165,11 @@ export default function MediaLightbox({ items, startIndex = 0, onClose }: MediaL
 
             {/* ── Interactive Inline Media Controls Hud ───────── */}
             <div
-              className="absolute bottom-0 left-0 right-0 flex items-center gap-3 px-4 py-3.5 rounded-b-2xl"
-              style={{ background: 'linear-gradient(transparent, rgba(0,0,0,0.85))' }}
+              className="nia-lightbox-controls"
             >
               <button
                 onClick={togglePlay}
-                className="w-9 h-9 flex items-center justify-center rounded-full text-white shrink-0 transition-all duration-150 tap-sm active:scale-90"
+                className="w-11 h-11 flex items-center justify-center rounded-full text-white shrink-0 transition-all duration-150 tap-sm active:scale-90"
                 style={{ background: 'rgba(255,255,255,0.18)' }}
                 aria-label={playing ? 'Pause' : 'Play'}
               >
@@ -188,16 +181,11 @@ export default function MediaLightbox({ items, startIndex = 0, onClose }: MediaL
               </button>
 
               {/* Progress Slider Track */}
-              <div
-                className="flex-1 h-1.5 rounded-full cursor-pointer relative"
-                style={{ background: 'rgba(255,255,255,0.25)' }}
-                onClick={handleScrub}
-              >
-                <div
-                  className="h-full rounded-full transition-all duration-75"
-                  style={{ width: `${progress}%`, background: '#fff' }}
-                />
-              </div>
+              <input type="range" aria-label="Video position" min={0} max={100} step={0.1} value={progress} disabled={!duration} onChange={event => {
+                if (!videoRef.current || !duration) return
+                videoRef.current.currentTime = Number(event.target.value) / 100 * duration
+                setProgress(Number(event.target.value))
+              }} />
 
               {duration > 0 && (
                 <span 
@@ -209,7 +197,7 @@ export default function MediaLightbox({ items, startIndex = 0, onClose }: MediaL
 
               <button
                 onClick={toggleMute}
-                className="w-8 h-8 flex items-center justify-center rounded-full text-white shrink-0 transition-all duration-150 tap-sm active:scale-90"
+                className="w-11 h-11 flex items-center justify-center rounded-full text-white shrink-0 transition-all duration-150 tap-sm active:scale-90"
                 style={{ background: 'rgba(255,255,255,0.12)' }}
                 aria-label={muted ? 'Unmute' : 'Mute'}
               >

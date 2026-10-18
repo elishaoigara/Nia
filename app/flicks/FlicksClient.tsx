@@ -6,11 +6,12 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Heart, MessageCircle, Share2, Volume2, VolumeX, Play,
   X, Send, Loader2, ImagePlus, Check, AlertCircle, RotateCcw,
-  Search, ArrowLeft, Hash, Bookmark, SlidersHorizontal, Plus, Languages,
+  Search, ArrowLeft, ArrowUp, ArrowDown, Pause, Hash, Bookmark, SlidersHorizontal, Plus, Languages,
 } from 'lucide-react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import FollowButton from '@/components/FollowButton'
+import VideoPlayer from '@/components/VideoPlayer'
 import { getFlag } from '@/lib/african-data'
 import { trackEngagement } from '@/lib/analytics'
 import { VIDEO_CATEGORIES, getCategoryMeta } from '@/lib/video-categories'
@@ -196,7 +197,7 @@ function CommentSheet({
   }
 
   async function submit() {
-    if (!text.trim() && !mediaPreview) return
+    if (posting || uploading || (!text.trim() && !mediaPreview)) return
     setPosting(true)
     const payload: {
       post_id: string
@@ -245,9 +246,9 @@ function CommentSheet({
 
       {/* Sheet */}
       <div
-        className="absolute bottom-0 left-0 right-0 z-50 flex flex-col"
+        role="dialog" aria-modal="true" aria-label="Flick comments" className="flick-comment-sheet absolute bottom-0 left-0 right-0 z-50 flex flex-col"
         style={{
-          height: '72vh',
+          height: 'min(72dvh, 640px)',
           background: 'rgba(13,12,11,0.98)',
           backdropFilter: 'blur(28px)',
           WebkitBackdropFilter: 'blur(28px)',
@@ -271,6 +272,7 @@ function CommentSheet({
             </span>
             <button
               onClick={dismiss}
+              aria-label="Close comments"
               style={{
                 width: 30, height: 30, borderRadius: '50%', border: 'none',
                 background: 'rgba(255,255,255,0.08)', cursor: 'pointer',
@@ -419,7 +421,7 @@ function CommentSheet({
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit() }
               }}
-              placeholder="Add a comment…"
+              aria-label="Add a comment" placeholder="Add a comment…"
               rows={1}
               style={{
                 flex: 1, padding: '9px 14px', borderRadius: 20, outline: 'none',
@@ -436,6 +438,7 @@ function CommentSheet({
             {/* Send */}
             <button
               onClick={submit}
+              aria-label="Send comment"
               disabled={(!text.trim() && !mediaPreview) || posting}
               style={{
                 width: 36, height: 36, borderRadius: '50%', border: 'none',
@@ -468,8 +471,8 @@ export default function NiaFlicksClient({ shorts, longs, currentUserId, circleId
       ? videos.filter(video => video.user_id !== currentUserId && !!video.circle_id && circleIds.includes(video.circle_id))
       : videos
   const visibleShorts = viewVideos(purposeFilter === 'all'
-    ? shorts
-    : shorts.filter(video => (video.contribution_mode ?? 'reflection') === purposeFilter))
+    ? allVideos
+    : allVideos.filter(video => (video.contribution_mode ?? 'reflection') === purposeFilter))
   // Start muted: iOS/most mobile browsers silently reject unmuted autoplay, which
   // meant the very first video often never actually started playing. Muted-by-default
   // + a "tap for sound" hint is the standard short-video pattern for a reason.
@@ -568,16 +571,31 @@ export default function NiaFlicksClient({ shorts, longs, currentUserId, circleId
     const el = containerRef.current
     if (!el || tab !== 'short') return
     let raf = 0
+    let currentIndex = 0
     function onScroll() {
       cancelAnimationFrame(raf)
       raf = requestAnimationFrame(() => {
-        const idx = Math.round(el!.scrollTop / window.innerHeight)
+        const idx = Math.round(el!.scrollTop / Math.max(1, el!.clientHeight))
+        currentIndex = idx
         setActiveIdx(idx)
       })
     }
     el.addEventListener('scroll', onScroll, { passive: true })
-    return () => { el.removeEventListener('scroll', onScroll); cancelAnimationFrame(raf) }
-  }, [tab, purposeFilter])
+    const observer = new ResizeObserver(() => {
+      el.scrollTo({ top: currentIndex * el.clientHeight, behavior: 'instant' })
+      onScroll()
+    })
+    observer.observe(el)
+    onScroll()
+    return () => { el.removeEventListener('scroll', onScroll); observer.disconnect(); cancelAnimationFrame(raf) }
+  }, [tab, purposeFilter, discoveryView, visibleShorts.length])
+
+  function moveFlick(direction: number) {
+    const el = containerRef.current
+    if (!el) return
+    const index = Math.max(0, Math.min(visibleShorts.length - 1, activeIdx + direction))
+    el.scrollTo({ top: index * el.clientHeight, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' })
+  }
 
   // Lock body scroll when sheet open
   useEffect(() => {
@@ -595,44 +613,18 @@ export default function NiaFlicksClient({ shorts, longs, currentUserId, circleId
 
   // ── Tab toggle (shared header) ──────────────────────────────────
   const TabToggle = (
-    <div
-      style={{
-        position: 'absolute', top: 'calc(10px + env(safe-area-inset-top, 0px))', left: 0, right: 0, zIndex: 60,
-        display: 'flex', justifyContent: 'center', pointerEvents: 'none',
-      }}
-    >
-      <div style={{
-        pointerEvents: 'auto',
-        display: 'flex', gap: 4,
-        background: 'rgba(20,18,17,0.55)',
-        backdropFilter: 'blur(10px)',
-        border: '1px solid rgba(255,255,255,0.1)',
-        borderRadius: 20, padding: 3,
-      }}>
-        {(['short', 'long'] as const).map(t => (
-          <button
-            key={t}
-            onClick={() => { setTab(t); setActiveIdx(0) }}
-            style={{
-              border: 'none', cursor: 'pointer',
-              padding: '8px 16px', borderRadius: 16, // 8px vertical = comfortably >=44px tap target with line-height
-              fontSize: 13, fontWeight: 700,
-              background: tab === t ? 'var(--grad-brand)' : 'transparent',
-              color: tab === t ? 'white' : 'rgba(255,255,255,0.6)',
-              transition: 'background 0.15s, color 0.15s',
-              touchAction: 'manipulation',
-            }}
-          >
-            {t === 'short' ? 'Flicks' : 'Full videos'}
-          </button>
-        ))}
-      </div>
+    <div className="flick-tabs" role="group" aria-label="Video format">
+      {(['short', 'long'] as const).map(t => (
+        <button key={t} type="button" aria-pressed={tab === t} onClick={() => { setTab(t); setActiveIdx(0) }}>
+          {t === 'short' ? 'Flicks' : 'Watch'}
+        </button>
+      ))}
     </div>
   )
 
   // ── Shared top actions ───────────────────────────────────────────
   const HomeButton = (
-    <Link href="/" className="flick-home-link" aria-label="Back to Nia home">N</Link>
+    <Link href="/" className="flick-home-link" aria-label="Back to Nia home"><ArrowLeft size={20} /></Link>
   )
 
   const HeaderActions = (
@@ -707,25 +699,19 @@ export default function NiaFlicksClient({ shorts, longs, currentUserId, circleId
   // ── Long Flicks tab ───────────────────────────────────────────────
   if (tab === 'long') {
     return (
-      <div style={{
-        position: 'fixed', inset: 0, background: '#0D0C0B',
-        overflowY: 'auto', overscrollBehaviorY: 'contain',
-        WebkitOverflowScrolling: 'touch',
-      } as React.CSSProperties}>
-        {HomeButton}
-        {TabToggle}
-        {HeaderActions}
-        {DiscoveryViewBar}
-        <LongFlicksGrid
+      <div className="flick-shell flick-library">
+        <header className="flick-header"><div className="flick-topbar">{HomeButton}{TabToggle}{HeaderActions}</div>{DiscoveryViewBar}</header>
+        <div className="flick-library-scroll"><LongFlicksGrid
           videos={visibleLongs}
           onOpen={setOpenDetail}
           savedIds={savedIds}
           onToggleSave={toggleSaved}
           watchProgress={watchProgress}
-        />
+        /></div>
         {openDetail && (
           <LongFlickPlayer
             video={openDetail}
+            paused={Boolean(commentSheet)}
             currentUserId={currentUserId}
             commentCount={commentCounts[openDetail.id] ?? 0}
             onOpenComments={(postId, count) => handleOpenComments(postId, count, -1)}
@@ -757,27 +743,10 @@ export default function NiaFlicksClient({ shorts, longs, currentUserId, circleId
 
   // ── Flicks (shorts) tab ───────────────────────────────────────────
   return (
-    <div style={{ position: 'fixed', inset: 0, background: '#000' }}>
+    <div className="flick-shell">
       <style>{HEART_BURST_KEYFRAMES}</style>
 
-      {/* Header overlay */}
-      <div
-        style={{
-          position: 'absolute', top: 0, left: 0, right: 0, zIndex: 50,
-          height: 'calc(60px + env(safe-area-inset-top, 0px))',
-          paddingTop: 'env(safe-area-inset-top, 0px)',
-          background: 'linear-gradient(to bottom, rgba(0,0,0,0.72) 0%, transparent 100%)',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '0 16px',
-          pointerEvents: 'none',
-        }}
-      >
-        {HomeButton}
-      </div>
-
-      {TabToggle}
-      {HeaderActions}
-      {DiscoveryViewBar}
+      <header className="flick-header"><div className="flick-topbar">{HomeButton}{TabToggle}{HeaderActions}</div>{DiscoveryViewBar}</header>
       {PurposeFilterSheet}
 
       {searchOpen && (
@@ -793,6 +762,7 @@ export default function NiaFlicksClient({ shorts, longs, currentUserId, circleId
       {openDetail && (
         <LongFlickPlayer
           video={openDetail}
+          paused={Boolean(commentSheet)}
           currentUserId={currentUserId}
           commentCount={commentCounts[openDetail.id] ?? 0}
           onOpenComments={(postId, count) => handleOpenComments(postId, count, -1)}
@@ -802,27 +772,29 @@ export default function NiaFlicksClient({ shorts, longs, currentUserId, circleId
       )}
 
       {visibleShorts.length === 0 ? (
-        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div className="flick-empty">
           <p style={{ color: 'rgba(255,255,255,0.45)', fontSize: 14 }}>No Flicks here yet — check Full videos!</p>
         </div>
       ) : (
         <div
           ref={containerRef}
-          style={{
-            position: 'absolute', inset: 0,
-            overflowY: 'scroll',
-            scrollSnapType: 'y mandatory',
-            WebkitOverflowScrolling: 'touch',
-            overscrollBehaviorY: 'contain', // stops iOS rubber-band from bleeding into pull-to-refresh
-            scrollbarWidth: 'none',
-            msOverflowStyle: 'none',
-          } as React.CSSProperties}
+          className="flick-scroller"
+          tabIndex={0}
+          role="region"
+          aria-label="Flicks video feed"
+          onKeyDown={event => {
+            if (event.target !== event.currentTarget) return
+            if (['ArrowDown', 'PageDown', 'ArrowUp', 'PageUp'].includes(event.key)) {
+              event.preventDefault()
+              moveFlick(['ArrowDown', 'PageDown'].includes(event.key) ? 1 : -1)
+            }
+          }}
         >
           {visibleShorts.map((video, i) => (
             <FlickItem
               key={video.id}
               video={video}
-              isActive={i === activeIdx}
+              isActive={i === activeIdx && !openDetail && !commentSheet && !searchOpen && !filterOpen}
               shouldMount={Math.abs(i - activeIdx) <= RENDER_WINDOW}
               slowConnection={slowConnection}
               muted={muted}
@@ -839,8 +811,17 @@ export default function NiaFlicksClient({ shorts, longs, currentUserId, circleId
         </div>
       )}
 
+      <footer className="flick-footer">
+        <span><strong>Find your next favourite.</strong><small>Swipe up to explore</small></span>
+        <div className="flick-step-controls">
+          <span aria-live="polite">{visibleShorts.length ? activeIdx + 1 : 0} / {visibleShorts.length}</span>
+          <button type="button" aria-label="Previous flick" disabled={activeIdx === 0} onClick={() => moveFlick(-1)}><ArrowUp size={18} /></button>
+          <button type="button" aria-label="Next flick" disabled={activeIdx >= visibleShorts.length - 1} onClick={() => moveFlick(1)}><ArrowDown size={18} /></button>
+        </div>
+      </footer>
       {/* Comment sheet */}
       {commentSheet && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 200 }}>
         <CommentSheet
           postId={commentSheet.postId}
           currentUserId={currentUserId}
@@ -848,6 +829,7 @@ export default function NiaFlicksClient({ shorts, longs, currentUserId, circleId
           onClose={() => setCommentSheet(null)}
           onCountChange={(n) => handleCommentCountChange(commentSheet.postId, n)}
         />
+        </div>
       )}
     </div>
   )
@@ -1362,7 +1344,7 @@ function SearchOverlay({ onClose, onSelect }: { onClose: () => void; onSelect: (
 
 // ── Long Flicks: dedicated player screen ─────────────────────────────────────
 function LongFlickPlayer({
-  video, currentUserId, commentCount, onOpenComments, onClose, onProgress,
+  video, currentUserId, commentCount, onOpenComments, onClose, onProgress, paused,
 }: {
   video: FlickPost
   currentUserId: string
@@ -1370,6 +1352,7 @@ function LongFlickPlayer({
   onOpenComments: (postId: string, count: number) => void
   onClose: () => void
   onProgress: (postId: string, progress: number) => void
+  paused: boolean
 }) {
   const supabase = createClient()
   const [liked, setLiked] = useState(video.likes?.some(l => l.user_id === currentUserId) ?? false)
@@ -1400,13 +1383,14 @@ function LongFlickPlayer({
   }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 100, background: '#0D0C0B', overflowY: 'auto' }}>
+    <div role="dialog" aria-modal="true" aria-label="Watch video" className="flick-watch-dialog">
       {/* Close */}
       <button
         onClick={onClose}
+        aria-label="Close video"
         style={{
           position: 'absolute', top: 'calc(14px + env(safe-area-inset-top, 0px))', left: 14, zIndex: 10,
-          width: 34, height: 34, borderRadius: '50%', border: 'none',
+          width: 44, height: 44, borderRadius: '50%', border: 'none',
           background: 'rgba(0,0,0,0.55)', cursor: 'pointer',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           touchAction: 'manipulation',
@@ -1416,24 +1400,21 @@ function LongFlickPlayer({
       </button>
 
       {/* Player */}
-      <video
-        src={mediaUrl(video.media_url)}
-        poster={mediaUrl(video.thumbnail_url ?? undefined)}
-        controls autoPlay playsInline
-        onTimeUpdate={event => {
-          const player = event.currentTarget
-          if (!player.duration || player.currentTime - lastProgressSave.current < 5) return
-          lastProgressSave.current = player.currentTime
-          onProgress(video.id, player.currentTime / player.duration)
+      <VideoPlayer
+        src={video.media_url}
+        paused={paused}
+        poster={video.thumbnail_url ?? undefined}
+        onProgress={(currentTime, duration) => {
+          if (!duration || (currentTime < duration && Math.abs(currentTime - lastProgressSave.current) < 5)) return
+          lastProgressSave.current = currentTime
+          onProgress(video.id, currentTime / duration)
         }}
-        onEnded={() => onProgress(video.id, 1)}
-        style={{ width: '100%', maxHeight: '50vh', background: '#000', display: 'block' }}
       />
 
       {/* Info */}
       <div style={{ padding: '14px 16px calc(14px + env(safe-area-inset-bottom, 0px))' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-          <Link href={`/profile/${profile?.id}`} style={{ display: 'flex' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, overflowWrap: 'anywhere' }}>
+          <Link href={`/profile/${profile?.id}`} style={{ display: 'flex', flexShrink: 0 }}>
             <div style={{
               width: 40, height: 40, borderRadius: '50%', overflow: 'hidden',
               background: 'var(--grad-brand)',
@@ -1456,13 +1437,13 @@ function LongFlickPlayer({
         </div>
 
         {video.content && (
-          <p style={{ color: 'rgba(255,255,255,0.85)', fontSize: 14, lineHeight: 1.55, marginBottom: 14 }}>
+          <p style={{ color: 'rgba(255,255,255,0.85)', fontSize: 14, lineHeight: 1.55, marginBottom: 14, overflowWrap: 'anywhere' }}>
             {video.content}
           </p>
         )}
 
         {/* Actions */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 18, paddingTop: 6, borderTop: '1px solid rgba(255,255,255,0.06)', marginTop: 4 }}>
+        <div className="flick-watch-actions">
           <button onClick={toggleLike} style={{ display: 'flex', alignItems: 'center', gap: 6, border: 'none', background: 'none', cursor: 'pointer', padding: '10px 0', touchAction: 'manipulation' }}>
             <Heart size={20} fill={liked ? '#ff4d6d' : 'none'} color={liked ? '#ff4d6d' : 'rgba(255,255,255,0.8)'} strokeWidth={1.8} />
             <span style={{ color: 'rgba(255,255,255,0.8)', fontSize: 13, fontWeight: 700 }}>{likeCount}</span>
@@ -1583,6 +1564,12 @@ function FlickItem({
 
   // Sync mute
   useEffect(() => {
+    const pauseWhenHidden = () => { if (document.hidden) videoRef.current?.pause() }
+    document.addEventListener('visibilitychange', pauseWhenHidden)
+    return () => document.removeEventListener('visibilitychange', pauseWhenHidden)
+  }, [])
+
+  useEffect(() => {
     if (videoRef.current) videoRef.current.muted = muted
   }, [muted])
 
@@ -1696,16 +1683,7 @@ function FlickItem({
   const preload = preferences.data_saver || !preferences.autoplay ? 'none' : isActive ? 'auto' : slowConnection ? 'none' : 'metadata'
 
   return (
-    <div
-      style={{
-        position: 'relative', width: '100%',
-        height: '100dvh',
-        scrollSnapAlign: 'start', scrollSnapStop: 'always',
-        background: '#000',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        overflow: 'hidden',
-      }}
-    >
+    <div className="flick-slide" data-active={isActive}>
       {shouldMount ? (
         <video
           ref={videoRef}
@@ -1714,8 +1692,8 @@ function FlickItem({
           muted={muted}
           aria-label={`Flick by @${profile?.username ?? 'unknown'}`}
           style={{
-            position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover',
-            touchAction: 'manipulation', WebkitUserSelect: 'none', userSelect: 'none',
+            position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain',
+            touchAction: 'pan-y', WebkitUserSelect: 'none', userSelect: 'none',
           } as React.CSSProperties}
           loop playsInline preload={preload}
           onTimeUpdate={() => {
@@ -1826,7 +1804,7 @@ function FlickItem({
       {/* "Tap for sound" hint — only on the very first flick, only while muted */}
       {showSoundHint && isActive && (
         <div style={{
-          position: 'absolute', top: 'calc(72px + env(safe-area-inset-top, 0px))', left: 0, right: 0,
+          position: 'absolute', top: 16, left: 0, right: 0,
           display: 'flex', justifyContent: 'center', pointerEvents: 'none', zIndex: 9,
           animation: 'niaSoundHintFade 3.5s ease-out forwards',
         }}>
@@ -1842,16 +1820,13 @@ function FlickItem({
         </div>
       )}
 
+      <button type="button" className="flick-play-button" aria-label={playing ? 'Pause flick' : 'Play flick'} onClick={togglePlay}>{playing ? <Pause size={18} /> : <Play size={18} />}</button>
       <button onClick={onToggleMute} aria-label={muted ? 'Turn sound on' : 'Mute flick'} className="flick-sound-button">
         {muted ? <VolumeX size={18} /> : <Volume2 size={18} />}
       </button>
 
       {/* ── Right action rail ───────────────────────────── */}
-      <div style={{
-        position: 'absolute', right: 12, bottom: 'calc(100px + env(safe-area-inset-bottom, 0px))',
-        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20,
-        zIndex: 10,
-      }}>
+      <div className="flick-action-rail">
         {/* Avatar */}
         <Link href={`/profile/${profile?.id}`} style={{ display: 'block' }}>
           <div style={{
@@ -1905,10 +1880,7 @@ function FlickItem({
       </div>
 
       {/* ── Bottom info ─────────────────────────────────── */}
-      <div style={{
-        position: 'absolute', bottom: 'calc(56px + env(safe-area-inset-bottom, 0px))', left: 0, right: 84,
-        maxWidth: 700, padding: '0 16px',
-      }}>
+      <div className="flick-info">
         <div className="flick-creator-row">
           <Link href={`/profile/${profile?.id}`} className="flick-creator-link">
             <span>@{profile?.username ?? 'unknown'}</span>
@@ -1924,11 +1896,11 @@ function FlickItem({
           <span className="flick-purpose-badge">{PURPOSE_LABELS[video.contribution_mode ?? 'reflection']}</span>
         </div>
         {video.content && (
-          <button type="button" onClick={() => setCaptionExpanded(value => !value)} className="flick-caption-button" style={{
+          <button type="button" onClick={() => setCaptionExpanded(value => !value)} aria-expanded={captionExpanded} className="flick-caption-button" style={{
             color: 'rgba(255,255,255,0.9)', fontSize: 13, lineHeight: 1.55,
             display: '-webkit-box', WebkitLineClamp: captionExpanded ? 'unset' : 2, WebkitBoxOrient: 'vertical',
             overflow: 'hidden', textShadow: '0 1px 4px rgba(0,0,0,0.6)',
-            margin: 0,
+            margin: 0, maxHeight: captionExpanded ? '20vh' : undefined, overflowY: captionExpanded ? 'auto' : undefined,
           } as React.CSSProperties}>
             {translation ?? video.content}{!captionExpanded && !translation ? '  more' : ''}
           </button>
@@ -1947,7 +1919,7 @@ function FlickItem({
 
       {/* Progress bar — top of screen, white */}
       <div style={{
-        position: 'absolute', top: 0, left: 0, right: 0,
+        position: 'absolute', bottom: 0, left: 0, right: 0,
         height: 3, background: 'rgba(255,255,255,0.2)', zIndex: 10,
       }}>
         <div style={{
