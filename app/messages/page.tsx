@@ -29,8 +29,15 @@ export default function Messages(){
   const s=createClient(),{data:{user}}=await s.auth.getUser();if(!user)return
   const {error}=await s.from('message_requests').update({status:accept?'accepted':'declined'}).match({user_id:user.id,other_id:other});if(error)setError('Request could not be updated. Please retry.');else void load(true)
  }
- return <main className="mx-auto max-w-xl p-4 space-y-4"><h1 className="text-2xl font-bold">{t('Messages')}</h1><p>Continue a conversation or review a message request.</p><nav className="flex gap-3" aria-label="Message filters"><button className="btn-ghost" aria-pressed={tab==='all'} onClick={()=>setTab('all')}>All conversations</button><button className="btn-ghost" aria-pressed={tab==='requests'} onClick={()=>setTab('requests')}>Requests</button><Link className="btn-ghost" href="/settings">Privacy</Link></nav>
- {rows.filter(r=>tab==='all'||r.request).map(r=><article key={r.other_id} className="card p-4 space-y-3"><Link className="block" href={`/messages/${r.other_id}`}><strong>@{r.username}</strong><p className="truncate">{r.content??'Attachment'}</p><time className="text-sm">{new Date(r.created_at).toLocaleString()}</time></Link>{r.request&&<div className="flex gap-2"><button className="btn-primary" onClick={()=>respond(r.other_id,true)}>Accept request</button><button className="btn-ghost" onClick={()=>respond(r.other_id,false)}>Decline</button></div>}</article>)}
- {!busy&&!rows.length&&!error&&<p>No conversations yet. Open a member’s profile to send a message.</p>}{error&&<p role="alert">{error}</p>}{(more||error)&&<button className="btn-ghost" disabled={busy} onClick={()=>load(!!error)}>{error?'Retry':t('Load more')}</button>}{busy&&<p role="status">Loading conversations…</p>}
+ const visibleRows=rows.filter(r=>tab==='all'||r.request)
+ return <main className="inbox-page">
+ <header className="inbox-heading"><div><span className="inbox-eyebrow">Your people, closer</span><h1>{t('Messages')}</h1><p>Pick up where you left off.</p></div></header>
+ <nav className="inbox-filters" aria-label="Message filters"><button aria-pressed={tab==='all'} onClick={()=>setTab('all')}>All conversations</button><button aria-pressed={tab==='requests'} onClick={()=>setTab('requests')}>Requests</button><Link href="/settings">Privacy</Link></nav>
+ {visibleRows.map(r=><article key={r.other_id} className="inbox-conversation"><Link href={`/messages/${r.other_id}`}>
+ <span className="inbox-avatar" aria-hidden="true">{r.username.slice(0,1).toUpperCase()}</span>
+ <div className="inbox-copy"><strong>@{r.username}</strong><p>{r.content??'Attachment'}</p></div>
+ <time dateTime={r.created_at} title={new Date(r.created_at).toLocaleString()}>{new Date(r.created_at).toLocaleDateString(undefined,{month:'short',day:'numeric'})}</time>
+ </Link>{r.request&&<div className="inbox-request-actions"><button className="btn-primary" onClick={()=>respond(r.other_id,true)}>Accept request</button><button className="btn-ghost" onClick={()=>respond(r.other_id,false)}>Decline</button></div>}</article>)}
+ {!busy&&!visibleRows.length&&!error&&<p>{tab==='requests'?'No message requests. You’re all caught up.':'No conversations yet. Open a member’s profile to say hello.'}</p>}{error&&<p role="alert">{error}</p>}{(more||error)&&<button className="btn-ghost" disabled={busy} onClick={()=>load(!!error)}>{error?'Retry':t('Load more')}</button>}{busy&&<p role="status">Loading conversations…</p>}
  </main>
 }

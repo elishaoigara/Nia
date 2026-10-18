@@ -29,6 +29,10 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: npx playwright test e2e/web-launch.spec.ts
+      - name: Prepare layout video fixture
+        run: command -v ffmpeg || (sudo apt-get update && sudo apt-get install -y ffmpeg)
+      - name: Check responsive layouts and Flicks navigation
+        run: npm run e2e:layout
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
