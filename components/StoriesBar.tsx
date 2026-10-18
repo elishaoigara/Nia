@@ -1,10 +1,17 @@
 'use client';
 
+import { createTextStory, STORY_BACKGROUNDS } from '@/lib/text-story'
+import { invalidateStoryRingCache } from '@/lib/activeStories'
+import { uploadMedia } from '@/lib/upload-media'
+import { mediaUrl } from '@/lib/media-url'
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import dynamic from 'next/dynamic';
 import { createClient } from '@/lib/supabase/client';
-import { X, ChevronLeft, ChevronRight, Plus, Loader2, ImagePlus, Video, Trash2, Eye, Send, MessageCircle } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, Plus, Loader2, ImagePlus, Video, Trash2, Eye, Send, MessageCircle, SlidersHorizontal, Pause, Play, Type } from 'lucide-react';
 import type { ProfileSummary, StoryViewRow } from '@/types/domain';
 import { relativeTime } from '@/lib/date';
+
+const MediaEditor = dynamic(() => import('@/components/MediaEditor'), { ssr: false });
 
 type StoryViewerRow = Required<Pick<StoryViewRow, 'viewer_id' | 'viewed_at'>>;
 type StoryProfile = Pick<ProfileSummary, 'id' | 'username' | 'avatar_url'>;
@@ -16,6 +23,7 @@ interface Story {
   media_type: 'image' | 'video';
   created_at: string;
   expires_at: string;
+  viewed?: boolean;
 }
 
 interface StoryGroup {
@@ -51,7 +59,7 @@ function Avatar({ url, name, size = 40 }: { url: string | null; name: string; si
         color: '#fff', fontWeight: 700, fontSize: size * 0.38,
       }}>
         {url
-          ? <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          ? <img src={mediaUrl(url)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           : name[0]?.toUpperCase()
         }
       </div>
@@ -75,62 +83,69 @@ function StoryUploadModal({
   const [type,    setType]    = useState<'image' | 'video'>('image');
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState('');
+  const [editing, setEditing] = useState(false);
+  const [textMode, setTextMode] = useState(false);
+  const [text, setText] = useState('');
+  const [background, setBackground] = useState<string>(STORY_BACKGROUNDS[0]);
+  const uploadLock = useRef(false);
+  useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
   const imageRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLInputElement>(null);
 
   function pickFile(files: FileList | null, mediaType: 'image' | 'video') {
     if (!files || !files[0]) return;
     const f = files[0];
-    if (mediaType === 'video' && f.size > 50 * 1024 * 1024) {
-      setError('Video must be under 50 MB'); return;
-    }
+    if (!f.type.startsWith(`${mediaType}/`)) { setError('Choose a photo or video of the selected type.'); return; }
+    if (f.size > 30 * 1024 * 1024) { setError('Choose a file under 30 MB.'); return; }
     setError('');
     setFile(f);
     setType(mediaType);
     if (preview) URL.revokeObjectURL(preview);
     setPreview(URL.createObjectURL(f));
+    setEditing(true);
     if (imageRef.current) imageRef.current.value = '';
     if (videoRef.current) videoRef.current.value = '';
   }
 
   async function upload() {
-    if (!file || loading) return;
+    if (uploadLock.current || (textMode ? !text.trim() : !file)) return;
+    uploadLock.current = true;
     setLoading(true); setError('');
     try {
-      const ext  = file.name.split('.').pop() ?? (type === 'video' ? 'mp4' : 'jpg');
-      const path = `${currentUserId}/story_${Date.now()}.${ext}`;
-      const { error: upErr } = await supabase.storage
-        .from('post-media').upload(path, file, { contentType: file.type });
-      if (upErr) { setError(upErr.message); setLoading(false); return; }
-      const media_url  = supabase.storage.from('post-media').getPublicUrl(path).data.publicUrl;
+      const prepared = textMode ? await createTextStory(text, background) : file!;
+      const { url: media_url } = await uploadMedia('post-media', prepared);
       const expires_at = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
       const { error: dbErr } = await supabase.from('stories').insert({
-        user_id: currentUserId, media_url, media_type: type, expires_at,
+        user_id: currentUserId, media_url, media_type: textMode ? 'image' : type, expires_at, audience: 'followers',
       });
-      if (dbErr) { setError(dbErr.message); setLoading(false); return; }
+      if (dbErr) throw dbErr;
+      invalidateStoryRingCache();
       if (preview) URL.revokeObjectURL(preview);
       onUploaded();
     } catch (e) {
-      console.error(e); setError('Something went wrong');
+      console.error(e); setError(e instanceof Error ? e.message : 'Could not share your story. Please try again.');
     } finally {
+      uploadLock.current = false;
       setLoading(false);
     }
   }
 
   return (
+    <>
     <div
       style={{
         position: 'fixed', inset: 0, zIndex: 1000,
         background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(12px)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}
-      onClick={onClose}
+      onClick={() => { if (!loading) onClose(); }}
     >
       <div
+        role="dialog" aria-modal="true" aria-label="Add to your story"
         onClick={e => e.stopPropagation()}
         style={{
           background: 'var(--surface-1)',
-          borderRadius: 24, padding: 24, width: '90%', maxWidth: 400,
+          borderRadius: 24, padding: 24, width: '90%', maxWidth: 400, maxHeight: '90dvh', overflowY: 'auto',
           display: 'flex', flexDirection: 'column', gap: 16,
           border: '0.5px solid var(--border)',
           boxShadow: '0 32px 80px rgba(91,33,182,0.18)',
@@ -138,7 +153,7 @@ function StoryUploadModal({
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <h2 style={{ fontWeight: 800, fontSize: 18, margin: 0, color: 'var(--text-primary)' }}>Add to your story</h2>
-          <button onClick={onClose} style={{
+          <button aria-label="Close story composer" disabled={loading} onClick={onClose} style={{
             background: 'var(--surface-2)', border: 'none', cursor: 'pointer',
             color: 'var(--text-tertiary)', borderRadius: '50%', width: 32, height: 32,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -151,11 +166,22 @@ function StoryUploadModal({
           Visible to your followers for 24 hours.
         </p>
 
-        {preview ? (
+        <div className="flex gap-2" role="group" aria-label="Story format">
+          <button className="btn-ghost" disabled={loading} aria-pressed={!textMode} onClick={() => setTextMode(false)}><ImagePlus size={16} /> Photo / video</button>
+          <button className="btn-ghost" disabled={loading} aria-pressed={textMode} onClick={() => setTextMode(true)}><Type size={16} /> Text</button>
+        </div>
+        {textMode ? <>
+          <label htmlFor="story-text" className="text-sm">What’s on your mind?</label>
+          <textarea id="story-text" disabled={loading} value={text} maxLength={280} onChange={e => setText(e.target.value)} placeholder="A thought, a joke, a little update…" dir="auto" style={{ background, color: '#fff', borderRadius: 16, minHeight: 220, padding: 24, fontSize: 22, lineHeight: 1.4, textAlign: 'center', resize: 'vertical', width: '100%' }} />
+          <div className="flex items-center gap-2" role="group" aria-label="Background colour">
+            {STORY_BACKGROUNDS.map((colour, i) => <button key={colour} disabled={loading} aria-label={`Background ${i + 1}`} aria-pressed={background === colour} onClick={() => setBackground(colour)} style={{ background: colour, width: 32, height: 32, borderRadius: '50%', border: background === colour ? '3px solid var(--text-primary)' : '2px solid var(--border)' }} />)}
+            <span className="ml-auto text-xs">{text.length}/280</span>
+          </div>
+        </> : preview ? (
           <div style={{ position: 'relative', borderRadius: 16, overflow: 'hidden', background: '#000', aspectRatio: '9/16', maxHeight: 320 }}>
             {type === 'video'
-              ? <video src={preview} style={{ width: '100%', height: '100%', objectFit: 'cover' }} controls />
-              : <img src={preview} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ? <video src={mediaUrl(preview)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} controls />
+              : <img src={mediaUrl(preview)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             }
             <button
               onClick={() => { if (preview) URL.revokeObjectURL(preview); setFile(null); setPreview(null); }}
@@ -167,6 +193,13 @@ function StoryUploadModal({
               }}
             >
               <X size={14} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              style={{ position: 'absolute', left: 8, bottom: 8, display: 'inline-flex', alignItems: 'center', gap: 5, border: '1px solid rgba(255,255,255,0.2)', borderRadius: 999, padding: '7px 10px', background: 'rgba(0,0,0,0.65)', color: '#fff', fontSize: 11, fontWeight: 750, cursor: 'pointer', backdropFilter: 'blur(8px)' }}
+            >
+              <SlidersHorizontal size={12} /> Edit
             </button>
           </div>
         ) : (
@@ -206,12 +239,12 @@ function StoryUploadModal({
 
         <button
           onClick={upload}
-          disabled={!file || loading}
+          disabled={(textMode ? !text.trim() : !file) || loading}
           style={{
             padding: '13px', borderRadius: 14, border: 'none',
-            background: file ? 'var(--grad-brand)' : 'var(--surface-3)',
-            color: file ? '#fff' : 'var(--text-tertiary)',
-            fontWeight: 700, fontSize: 15, cursor: file ? 'pointer' : 'default',
+            background: (textMode ? text.trim() : file) ? 'var(--grad-brand)' : 'var(--surface-3)',
+            color: (textMode ? text.trim() : file) ? '#fff' : 'var(--text-tertiary)',
+            fontWeight: 700, fontSize: 15, cursor: (textMode ? text.trim() : file) ? 'pointer' : 'default',
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
             transition: 'opacity 0.15s',
           }}
@@ -220,6 +253,21 @@ function StoryUploadModal({
         </button>
       </div>
     </div>
+    {editing && file && (
+      <MediaEditor
+        file={file}
+        type={type}
+        maxOutputBytes={type === 'video' ? 30 * 1024 * 1024 : 20 * 1024 * 1024}
+        onCancel={() => setEditing(false)}
+        onSave={editedFile => {
+          if (preview) URL.revokeObjectURL(preview);
+          setFile(editedFile);
+          setPreview(URL.createObjectURL(editedFile));
+          setEditing(false);
+        }}
+      />
+    )}
+    </>
   );
 }
 
@@ -330,7 +378,7 @@ function ViewersPanel({
         }}>
           <Loader2 size={14} style={{ color: '#7C3AED' }} />
         </button>
-        <button onClick={onClose} style={{
+        <button aria-label="Close" onClick={onClose} style={{
           background: 'rgba(255,255,255,0.07)', border: 'none',
           borderRadius: '50%', width: 34, height: 34, cursor: 'pointer',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -398,12 +446,29 @@ function StoryViewer({
 }) {
   const supabase = createClient();
   const [groupIdx,    setGroupIdx]    = useState(startGroupIdx);
-  const [storyIdx,    setStoryIdx]    = useState(0);
+  const [storyIdx,    setStoryIdx]    = useState(() => Math.max(0, groups[startGroupIdx]?.stories.findIndex(story => !story.viewed) ?? 0));
   const [progress,    setProgress]    = useState(0);
   const [showViewers, setShowViewers] = useState(false);
   const [deleting,    setDeleting]    = useState(false);
   const [reply,       setReply]       = useState('');
   const [sending,     setSending]     = useState(false);
+  const [notice, setNotice] = useState('');
+  const [actionError, setActionError] = useState('');
+  const [paused, setPaused] = useState(false);
+  const [replyFocused, setReplyFocused] = useState(false);
+  const [hidden, setHidden] = useState(false);
+  const [readyId, setReadyId] = useState<string | null>(null);
+  const [mediaErrorId, setMediaErrorId] = useState<string | null>(null);
+  const elapsed = useRef(0);
+  const sendLock = useRef(false);
+  const viewed = useRef(new Set<string>());
+  const resumeVideo = useRef(false);
+  const suspended = paused || replyFocused || Boolean(reply.trim()) || showViewers || sending || deleting || hidden || Boolean(actionError);
+  useEffect(() => {
+    const update = () => setHidden(document.hidden);
+    document.addEventListener('visibilitychange', update);
+    return () => document.removeEventListener('visibilitychange', update);
+  }, []);
 
   const intervalRef  = useRef<ReturnType<typeof setInterval> | null>(null);
   const videoRef     = useRef<HTMLVideoElement>(null);
@@ -424,26 +489,19 @@ function StoryViewer({
   const storyUserId = story?.user_id;
   const isOwner = group?.userId === currentUserId;
 
-  // Mark viewed instantly
+  // Count only media that loaded and was actually displayed, not an unopened group.
   useEffect(() => {
-    if (!storyId || storyUserId === currentUserId) return;
-    async function recordView() {
-      const { error } = await supabase
-        .from('story_views')
-        .upsert(
-          { story_id: storyId, viewer_id: currentUserId, viewed_at: new Date().toISOString() },
-          { onConflict: 'story_id,viewer_id' }
-        );
-      if (error) {
-        console.error('[Nia] story_views upsert failed:', error.code, error.message);
-        const { error: insertErr } = await supabase
-          .from('story_views')
-          .insert({ story_id: storyId, viewer_id: currentUserId, viewed_at: new Date().toISOString() });
-        if (insertErr) console.error('[Nia] story_views insert fallback failed:', insertErr.message);
-      }
-    }
-    void recordView();
-  }, [currentUserId, storyId, storyUserId, supabase]);
+    if (!storyId || readyId !== storyId || hidden || storyUserId === currentUserId || viewed.current.has(storyId)) return;
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      const { error } = await supabase.from('story_views').upsert(
+        { story_id: storyId, viewer_id: currentUserId, viewed_at: new Date().toISOString() },
+        { onConflict: 'story_id,viewer_id', ignoreDuplicates: true },
+      );
+      if (!error && !cancelled) { viewed.current.add(storyId); invalidateStoryRingCache(); }
+    }, 800);
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [currentUserId, storyId, storyUserId, readyId, hidden, supabase]);
 
   const advance = useCallback(() => {
     if (intervalRef.current) clearInterval(intervalRef.current);
@@ -462,63 +520,68 @@ function StoryViewer({
     else if (cg > 0) { setGroupIdx(cg - 1); setStoryIdx(0); }
   }, []);
 
-  // Progress timer
+  // Reset only on story changes; pausing preserves elapsed time and the reply draft.
   useEffect(() => {
-    if (!story) return;
+    elapsed.current = 0;
     const frame = requestAnimationFrame(() => {
-      setProgress(0);
-      setShowViewers(false);
-      setReply('');
-      if (story.media_type === 'video') return;
-      if (intervalRef.current) clearInterval(intervalRef.current);
-      intervalRef.current = setInterval(() => {
-        setProgress(p => {
-          const next = p + (100 / (DURATION / 100));
-          if (next >= 100) { advance(); return 100; }
-          return next;
-        });
-      }, 100);
+      setProgress(0); setShowViewers(false); setReply(''); setReplyFocused(false);
+      setNotice(''); setActionError(''); setPaused(false);
     });
-    return () => {
-      cancelAnimationFrame(frame);
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
-  }, [story, advance]);
+    return () => cancelAnimationFrame(frame);
+  }, [storyId]);
+
+  useEffect(() => {
+    if (!story || story.media_type === 'video' || readyId !== story.id || suspended) return;
+    let previous = performance.now();
+    intervalRef.current = setInterval(() => {
+      const now = performance.now();
+      elapsed.current += now - previous; previous = now;
+      setProgress(Math.min(100, elapsed.current / DURATION * 100));
+      if (elapsed.current >= DURATION) advance();
+    }, 100);
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+  }, [story, readyId, suspended, advance]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (suspended) { resumeVideo.current = !video.paused; video.pause(); }
+    else if (resumeVideo.current) { resumeVideo.current = false; void video.play().catch(() => {}); }
+  }, [suspended]);
 
   // Keyboard nav
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape')     onClose();
+      if (e.key === 'Escape' && !sendLock.current) onClose();
+      if (e.target instanceof HTMLElement && (e.target.matches('input, textarea') || e.target.isContentEditable)) return;
+      if (sending || deleting) return;
       if (e.key === 'ArrowRight') advance();
       if (e.key === 'ArrowLeft')  goBack();
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onClose, advance, goBack]);
+  }, [onClose, advance, goBack, sending, deleting]);
 
   async function handleDelete() {
-    if (!story) return;
-    setDeleting(true);
-    await onDeleteStory(story.id);
-    setDeleting(false);
-    const grp = groups[groupIdx];
-    if (grp && grp.stories.length > 1) {
-      if (storyIdx >= grp.stories.length - 1) setStoryIdx(Math.max(0, storyIdx - 1));
-    } else { onClose(); }
+    if (!story || deleting || !window.confirm('Delete this story?')) return;
+    setDeleting(true); setActionError('');
+    try { await onDeleteStory(story.id); onClose(); }
+    catch { setActionError('Could not delete this story. Please try again.'); }
+    finally { setDeleting(false); }
   }
 
   async function sendReply(text: string) {
-    if (!text.trim() || sending) return;
-    setSending(true);
-    // Send as a DM to the story owner — adjust to your messages table shape
-    await supabase.from('messages').insert({
-      sender_id:   currentUserId,
-      recipient_id: group.userId,
-      content:     text,
-      story_id:    story?.id ?? null,
-    });
-    setSending(false);
-    setReply('');
+    if (!text.trim() || sendLock.current || !story) return;
+    sendLock.current = true; setSending(true); setActionError(''); setNotice('');
+    try {
+      const { error } = await supabase.from('messages').insert({
+        sender_id: currentUserId, recipient_id: group.userId,
+        content: text.trim(), story_id: story.id,
+      });
+      if (error) throw error;
+      setReply(''); setNotice('Reply sent');
+    } catch { setActionError('Reply not sent. Your draft is still here—please retry.'); }
+    finally { sendLock.current = false; setSending(false); }
   }
 
   if (!story) return null;
@@ -527,25 +590,28 @@ function StoryViewer({
   const VIOLET = '#7C3AED';
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    <div role="dialog" aria-modal="true" aria-label="Story viewer" style={{ position: 'fixed', inset: 0, zIndex: 1000, background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div style={{ position: 'relative', width: '100%', maxWidth: 420, height: '100dvh', overflow: 'hidden' }}>
 
         {/* ── Media ── */}
         {story.media_type === 'video' ? (
           <video
-            key={story.id} ref={videoRef} src={story.media_url}
-            autoPlay playsInline muted={false}
+            key={story.id} ref={videoRef} src={mediaUrl(story.media_url)}
+            controls preload="metadata" playsInline muted={false}
+            onLoadedData={() => setReadyId(story.id)}
+            onError={() => setMediaErrorId(story.id)}
             style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-            onEnded={advance}
+            onEnded={() => { if (!suspended) advance(); }}
             onTimeUpdate={() => {
               const v = videoRef.current;
               if (v && v.duration) setProgress((v.currentTime / v.duration) * 100);
             }}
           />
         ) : (
-          <img key={story.id} src={story.media_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          <img key={story.id} onLoad={() => setReadyId(story.id)} onError={() => setMediaErrorId(story.id)} src={mediaUrl(story.media_url)} alt={`Story from ${group.username}`}  style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         )}
 
+        {mediaErrorId === story.id && <p role="alert" style={{ position: 'absolute', top: '45%', padding: 24, color: '#fff' }}>This story could not load. Use the arrows to continue.</p>}
         {/* ── Gradient overlays ── */}
         <div style={{
           position: 'absolute', inset: 0, pointerEvents: 'none',
@@ -576,6 +642,9 @@ function StoryViewer({
             </div>
           </div>
 
+          <button aria-label={paused ? 'Resume story' : 'Pause story'} onClick={() => setPaused(p => !p)} style={{ color: '#fff', background: 'rgba(0,0,0,.4)', borderRadius: 20, padding: 8 }}>
+            {paused ? <Play size={16} /> : <Pause size={16} />}
+          </button>
           {/* Owner controls */}
           {isOwner && (
             <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
@@ -601,7 +670,7 @@ function StoryViewer({
               >
                 {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
               </button>
-              <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '50%', width: 34, height: 34, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
+              <button aria-label="Close" onClick={onClose} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '50%', width: 34, height: 34, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
                 <X size={16} />
               </button>
             </div>
@@ -609,32 +678,32 @@ function StoryViewer({
 
           {/* Viewer close */}
           {!isOwner && (
-            <button onClick={onClose} style={{ marginLeft: 'auto', background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '50%', width: 34, height: 34, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
+            <button aria-label="Close" onClick={onClose} style={{ marginLeft: 'auto', background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '50%', width: 34, height: 34, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
               <X size={16} />
             </button>
           )}
         </div>
 
         {/* ── Tap zones ── */}
-        {!showViewers && (
+        {!showViewers && story.media_type !== 'video' && !sending && !deleting && (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', top: 80, bottom: isOwner ? 0 : 80 }}>
-            <div style={{ flex: 1 }} onClick={goBack} />
-            <div style={{ flex: 1 }} onClick={advance} />
+            <button aria-label="Previous story" style={{ flex: 1, background: 'transparent', border: 0 }} onClick={goBack} />
+            <button aria-label="Next story" style={{ flex: 1, background: 'transparent', border: 0 }} onClick={advance} />
           </div>
         )}
 
         {/* ── Group navigation arrows ── */}
-        {groupIdx > 0 && !showViewers && (
+        {!showViewers && (
           <button
-            onClick={e => { e.stopPropagation(); setGroupIdx(g => g - 1); setStoryIdx(0); }}
+            aria-label="Previous story" disabled={sending || deleting} onClick={goBack}
             style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', background: 'rgba(255,255,255,0.12)', border: 'none', borderRadius: '50%', width: 36, height: 36, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}
           >
             <ChevronLeft size={20} />
           </button>
         )}
-        {groupIdx < groups.length - 1 && !showViewers && (
+        {!showViewers && (
           <button
-            onClick={e => { e.stopPropagation(); setGroupIdx(g => g + 1); setStoryIdx(0); }}
+            aria-label="Next story" disabled={sending || deleting} onClick={advance}
             style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'rgba(255,255,255,0.12)', border: 'none', borderRadius: '50%', width: 36, height: 36, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}
           >
             <ChevronRight size={20} />
@@ -653,6 +722,8 @@ function StoryViewer({
               {QUICK_REACTIONS.map(emoji => (
                 <button
                   key={emoji}
+                  disabled={sending}
+                  aria-label={`React ${emoji}`}
                   onClick={() => sendReply(emoji)}
                   style={{
                     fontSize: 22, background: 'rgba(255,255,255,0.10)',
@@ -669,6 +740,9 @@ function StoryViewer({
             {/* Reply input */}
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <input
+                aria-label={`Reply to ${group.username}`}
+                onFocus={() => setReplyFocused(true)} onBlur={() => setReplyFocused(false)}
+                maxLength={2000}
                 value={reply}
                 onChange={e => setReply(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') sendReply(reply); }}
@@ -682,6 +756,7 @@ function StoryViewer({
                 }}
               />
               <button
+                aria-label="Send reply"
                 onClick={() => sendReply(reply)}
                 disabled={!reply.trim() || sending}
                 style={{
@@ -701,6 +776,10 @@ function StoryViewer({
           </div>
         )}
 
+        {(notice || actionError) && <div style={{ position: 'absolute', top: 92, left: 16, right: 16, background: '#181614', padding: 12, borderRadius: 12, color: '#fff', zIndex: 20 }}>
+          <p role={actionError ? 'alert' : 'status'}>{actionError || notice}</p>
+          {actionError && <button onClick={() => setActionError('')}>Dismiss</button>}
+        </div>}
         {/* ── Viewers panel ── */}
         {showViewers && isOwner && (
           <ViewersPanel storyId={story.id} onClose={() => setShowViewers(false)} />
@@ -727,7 +806,7 @@ function StoryBubble({
   onUpload: () => void;
 }) {
   const unread = isMine ? hasOwnStories : group.hasUnread;
-  const outerSize = 72;
+  const outerSize = 52;
 
   const handleOpen = () => {
     if (isMine && !hasOwnStories) onUpload();
@@ -737,6 +816,8 @@ function StoryBubble({
   return (
     <div
       style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: 'pointer' }}
+      role="button" tabIndex={0} aria-label={`${isMine ? 'Your' : group.username + '’s'} stories${group.hasUnread ? ', unseen updates' : ''}`}
+      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleOpen(); } }}
       onClick={handleOpen}
     >
       <div style={{ position: 'relative', width: outerSize, height: outerSize }}>
@@ -758,7 +839,7 @@ function StoryBubble({
             overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
             {group.avatar_url
-              ? <img src={group.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ? <img src={mediaUrl(group.avatar_url)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               : isMine && !hasOwnStories
                 ? <Plus size={24} color="var(--text-secondary)" />
                 : <span style={{ color: unread ? '#fff' : 'var(--text-secondary)', fontWeight: 700, fontSize: 20 }}>
@@ -818,6 +899,8 @@ const StoriesBar: React.FC<StoriesBarProps> = ({ currentUserId }) => {
   const [showUpload,     setShowUpload]      = useState(false);
   const [viewerOpen,     setViewerOpen]      = useState(false);
   const [viewerGroupIdx, setViewerGroupIdx]  = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
 
   const loadStories = useCallback(async () => {
     const { data: stories, error: storiesErr } = await supabase
@@ -825,19 +908,23 @@ const StoriesBar: React.FC<StoriesBarProps> = ({ currentUserId }) => {
       .gte('expires_at', new Date().toISOString())
       .order('created_at', { ascending: false });
 
-    if (storiesErr) { console.error('[Nia] loadStories error:', storiesErr); return; }
+    setLoading(false);
+    if (storiesErr) { setLoadError('Could not load stories. Please retry.'); return; }
+    setLoadError('');
     if (!stories || stories.length === 0) { setGroups([]); return; }
     const typedStories = stories as Story[];
 
     const authorIds = [...new Set(typedStories.map(story => story.user_id))];
-    const { data: profileRows } = await supabase
+    const { data: profileRows, error: profileError } = await supabase
       .from('profiles').select('id, username, avatar_url').in('id', authorIds);
+    if (profileError) { setLoadError('Could not load story authors. Please retry.'); return; }
     const profileMap = new Map(
       ((profileRows ?? []) as StoryProfile[]).map(profile => [profile.id, profile]),
     );
 
-    const { data: views } = await supabase
-      .from('story_views').select('story_id').eq('viewer_id', currentUserId);
+    const { data: views, error: viewsError } = await supabase
+      .from('story_views').select('story_id').eq('viewer_id', currentUserId).in('story_id', typedStories.map(story => story.id));
+    if (viewsError) { setLoadError('Could not load story views. Please retry.'); return; }
     const viewedSet = new Set(((views ?? []) as StoryViewRow[]).map(view => view.story_id));
 
     const map = new Map<string, StoryGroup>();
@@ -848,7 +935,7 @@ const StoriesBar: React.FC<StoriesBarProps> = ({ currentUserId }) => {
         map.set(uid, { userId: uid, username: profile?.username ?? 'unknown', avatar_url: profile?.avatar_url ?? null, stories: [], hasUnread: false });
       }
       const grp = map.get(uid)!;
-      grp.stories.push(s);
+      grp.stories.unshift({ ...s, viewed: viewedSet.has(s.id) });
       if (uid !== currentUserId && !viewedSet.has(s.id)) grp.hasUnread = true;
     }
 
@@ -866,7 +953,9 @@ const StoriesBar: React.FC<StoriesBarProps> = ({ currentUserId }) => {
   }, [loadStories]);
 
   async function deleteStory(storyId: string) {
-    await supabase.from('stories').delete().eq('id', storyId);
+    const { data, error } = await supabase.from('stories').delete().eq('id', storyId).eq('user_id', currentUserId).select('id');
+    if (error || !data?.length) throw new Error('Story was not deleted.');
+    invalidateStoryRingCache();
     setGroups(prev =>
       prev.map(g => ({ ...g, stories: g.stories.filter(s => s.id !== storyId) }))
           .filter(g => g.stories.length > 0)
@@ -876,10 +965,7 @@ const StoriesBar: React.FC<StoriesBarProps> = ({ currentUserId }) => {
   function openViewer(idx: number) {
     setViewerGroupIdx(idx);
     setViewerOpen(true);
-    const grp = groups[idx];
-    if (grp && grp.userId !== currentUserId) {
-      setGroups(prev => prev.map((g, i) => i === idx ? { ...g, hasUnread: false } : g));
-    }
+
   }
 
   const myGroup = groups.find(g => g.userId === currentUserId);
@@ -889,7 +975,14 @@ const StoriesBar: React.FC<StoriesBarProps> = ({ currentUserId }) => {
 
   return (
     <>
-      <div style={{ width: '100%', overflowX: 'auto', paddingBottom: 4, scrollbarWidth: 'none' }}>
+      <section aria-label="Stories" className="border-b border-(--divider) px-4 py-2">
+        <div className="flex items-center justify-between gap-3">
+          <div><h2 className="text-sm font-semibold">Stories</h2>{groups.length > 0 && <p className="text-xs text-(--text-tertiary)">Little moments from your community</p>}</div>
+          <button className="btn-ghost text-sm" onClick={() => setShowUpload(true)}><Plus size={16} /> Add story</button>
+        </div>
+        {loading && <p role="status" className="py-2 text-xs">Loading stories…</p>}
+        {loadError && <p role="alert" className="py-2 text-sm">{loadError} <button onClick={() => void loadStories()}>Retry</button></p>}
+        {groups.length > 0 && <div style={{ width: '100%', overflowX: 'auto', paddingBottom: 4, scrollbarWidth: 'none' }}>
         <div style={{ display: 'flex', gap: 14, padding: '14px 16px 10px', minWidth: 'max-content' }}>
           <StoryBubble
             group={myGroup ?? placeholderGroup}
@@ -910,8 +1003,9 @@ const StoriesBar: React.FC<StoriesBarProps> = ({ currentUserId }) => {
             />
           ))}
         </div>
-      </div>
+      </div>}
 
+      </section>
       {showUpload && (
         <StoryUploadModal
           currentUserId={currentUserId}

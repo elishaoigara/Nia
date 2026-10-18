@@ -1,17 +1,13 @@
 'use client'
 
+import { INTERESTS, normalizeInterest } from '@/lib/interests'
+import { AFRICAN_COUNTRIES } from '@/lib/african-data'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Plus, X, Lock, Globe, Loader2 } from 'lucide-react'
 
-const CATEGORIES = [
-  { key: 'tech',    label: 'Tech',    emoji: '💻', color: 'var(--nia-sky)' },
-  { key: 'art',     label: 'Art',     emoji: '🎨', color: 'var(--nia-pink)' },
-  { key: 'sports',  label: 'Sports',  emoji: '⚽', color: 'var(--nia-mint)' },
-  { key: 'music',   label: 'Music',   emoji: '🎵', color: 'var(--nia-amber)' },
-  { key: 'science', label: 'Science', emoji: '🔬', color: 'var(--nia-violet)' },
-]
+const CATEGORIES = INTERESTS.map(label => ({ key: normalizeInterest(label), label, emoji: '', color: 'var(--nia-violet)' }))
 
 const MAX_NAME = 40
 const MAX_DESC = 160
@@ -32,6 +28,7 @@ export default function CreateCircle({ userId, compact = false }: { userId: stri
   const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
+  const [country, setCountry] = useState('')
   const [university, setUniversity] = useState('')
   const [category, setCategory] = useState<string | null>(null)
   const [isPrivate, setIsPrivate] = useState(false)
@@ -63,6 +60,7 @@ export default function CreateCircle({ userId, compact = false }: { userId: stri
         slug,
         description: description.trim() || null,
         university: university.trim() || null,
+        country: country || null,
         category,
         is_private: isPrivate,
       })
@@ -184,6 +182,7 @@ export default function CreateCircle({ userId, compact = false }: { userId: stri
                 </p>
               </div>
 
+              <label className="block">Country (optional)<select className="input" value={country} onChange={e=>setCountry(e.target.value)}><option value="">Across Africa</option>{AFRICAN_COUNTRIES.map(c=><option key={c}>{c}</option>)}</select></label>
               <div>
                 <label style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-tertiary)', display: 'block', marginBottom: 6 }}>
                   Category <span style={{ fontWeight: 400 }}>(optional)</span>

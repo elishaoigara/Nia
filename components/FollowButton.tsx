@@ -1,112 +1,39 @@
 'use client'
-
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { UserPlus, UserMinus, Loader2 } from 'lucide-react'
 
-interface FollowButtonProps {
-  currentUserId: string
-  targetUserId: string
-  initialIsFollowing: boolean
-  onFollowChange?: (isFollowing: boolean) => void
-}
-
-export default function FollowButton({
-  currentUserId,
-  targetUserId,
-  initialIsFollowing,
-  onFollowChange,
-}: FollowButtonProps) {
-  const supabase = createClient()
-  const [isFollowing, setIsFollowing] = useState(initialIsFollowing)
-  const [loading, setLoading] = useState(false)
-
-  async function toggleFollow() {
-    // Self-following prevention check
-    if (currentUserId === targetUserId) return
-
-    setLoading(true)
-
-    // Save the previous state for error rollbacks
-    const previousState = isFollowing
-
-    // 1. Optimistic Update: Instantly flip UI state for a super fast native feel
-    setIsFollowing(!previousState)
-    onFollowChange?.(!previousState)
-
+interface Props { currentUserId: string; targetUserId: string; initialIsFollowing: boolean; onFollowChange?: (following: boolean) => void }
+export default function FollowButton({ currentUserId, targetUserId, initialIsFollowing, onFollowChange }: Props) {
+  const [status, setStatus] = useState(initialIsFollowing ? 'following' : 'none')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  useEffect(() => {
+    let active = true
+    createClient().from('follow_requests').select('status').eq('requester_id', currentUserId).eq('target_id', targetUserId).eq('status', 'pending').maybeSingle().then(({ data }) => {
+      if (active && data) setStatus('pending')
+    })
+    return () => { active = false }
+  }, [currentUserId, targetUserId])
+  async function toggle() {
+    if (busy || currentUserId === targetUserId) return
+    setBusy(true); setError('')
+    const supabase = createClient()
     try {
-      if (previousState) {
-        const { error } = await supabase
-          .from('follows')
-          .delete()
-          .match({ follower_id: currentUserId, following_id: targetUserId })
-
+      if (status === 'following') {
+        const { error } = await supabase.from('follows').delete().match({ follower_id: currentUserId, following_id: targetUserId })
         if (error) throw error
+        setStatus('none'); onFollowChange?.(false)
+      } else if (status === 'pending') {
+        const { error } = await supabase.from('follow_requests').delete().match({ requester_id: currentUserId, target_id: targetUserId })
+        if (error) throw error
+        setStatus('none')
       } else {
-        const { error } = await supabase
-          .from('follows')
-          .insert({
-            follower_id: currentUserId,
-            following_id: targetUserId,
-          })
-
+        const { data, error } = await supabase.rpc('request_follow', { target_user: targetUserId })
         if (error) throw error
-
-        // Notify the followed user
-        const { data: actorProfile } = await supabase
-          .from('profiles')
-          .select('username')
-          .eq('id', currentUserId)
-          .single()
-        await supabase.from('notifications').insert({
-          user_id: targetUserId,
-          actor_id: currentUserId,
-          type: 'follow',
-          entity_id: null,
-          message: `${actorProfile?.username ?? 'Someone'} started following you`,
-          is_read: false,
-        })
+        setStatus(data); onFollowChange?.(data === 'following')
       }
-    } catch (err) {
-      console.error('Follow operation failed:', err)
-      // 2. Rollback UI immediately if database operation dropped or network failed
-      setIsFollowing(previousState)
-      onFollowChange?.(previousState)
-    } finally {
-      setLoading(false)
-    }
+    } catch { setError('Could not update follow. Please retry.') }
+    finally { setBusy(false) }
   }
-
-  return (
-    <button
-      onClick={e => { e.stopPropagation(); toggleFollow() }}
-      disabled={loading || currentUserId === targetUserId}
-      className="btn-follow tap-sm flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-xl text-sm font-bold select-none transition-all duration-150 active:scale-95 disabled:opacity-40 min-h-8.5"
-      style={
-        isFollowing
-          ? {
-              background: 'var(--surface-2)',
-              color: 'var(--text-secondary)',
-              border: '1px solid var(--border)',
-            }
-          : {
-              background: 'var(--grad-brand)',
-              color: '#fff',
-              border: '1px solid transparent',
-            }
-      }
-    >
-      {loading ? (
-        <Loader2 size={14} className="animate-spin" />
-      ) : isFollowing ? (
-        <UserMinus size={14} />
-      ) : (
-        <UserPlus size={14} />
-      )}
-
-      <span>
-        {loading ? (isFollowing ? 'Leaving…' : 'Joining…') : isFollowing ? 'Following' : 'Follow'}
-      </span>
-    </button>
-  )
+  return <span><button className="btn-follow" disabled={busy || currentUserId === targetUserId} onClick={e => { e.stopPropagation(); void toggle() }} aria-label={status === 'pending' ? 'Cancel follow request' : status === 'following' ? 'Unfollow account' : 'Follow account'}>{busy ? 'Saving…' : status === 'pending' ? 'Requested · Cancel' : status === 'following' ? 'Following' : 'Follow'}</button>{error && <span role="alert" className="text-xs">{error}</span>}</span>
 }

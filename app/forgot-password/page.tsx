@@ -3,7 +3,8 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
-import { getAppUrl } from '@/lib/app-url';
+import { getAuthUrl } from '@/lib/app-url';
+import { friendlyAuthError } from '@/lib/auth-errors';
 import UnityLine from '@/components/UnityLine';
 
 export default function ForgotPasswordPage() {
@@ -18,25 +19,19 @@ export default function ForgotPasswordPage() {
     setLoading(true);
     setError('');
 
-    const { error: resetError } = await supabase.auth.resetPasswordForEmail(
-      email,
-      {
-        redirectTo: `${getAppUrl()}/reset-password`,
-      }
-    );
-
-    if (resetError) {
-      setError(resetError.message);
-      setLoading(false);
-      return;
-    }
-
-    setSent(true);
-    setLoading(false);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: getAuthUrl('/auth/callback?next=/reset-password'),
+      });
+      if (error) throw error;
+      setSent(true);
+    } catch (error) {
+      setError(friendlyAuthError(error instanceof Error ? error.message : ''));
+    } finally { setLoading(false); }
   }
 
   return (
-    <div
+    <div className="auth-page"
       style={{
         minHeight: '100dvh',
         display: 'flex',

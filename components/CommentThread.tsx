@@ -1,11 +1,13 @@
 'use client'
 
+import { mediaUrl } from '@/lib/media-url'
 import { useState, useRef, useEffect, useCallback } from 'react'
 import Link from 'next/link'
-import { Heart, MoreHorizontal, Play, Trash2, MessageCircle, ImagePlus, X, Loader2 } from 'lucide-react'
+import { Heart, MoreHorizontal, Play, Trash2, MessageCircle, ImagePlus, X, Loader2, Flag } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import type { Comment, CommentNode, GifApiResult, UserReference } from '@/types/domain'
+import ReportSheet from '@/components/ReportSheet'
 
 interface CommentMedia {
   url:  string
@@ -67,21 +69,21 @@ function CommentMediaGrid({ media }: { media: CommentMedia[] }) {
     <div className="comment-media">
       {media.length === 1 ? (
         m.type === 'video'
-          ? <video src={m.url} controls style={{ width: '100%', display: 'block', maxHeight: 240, objectFit: 'cover' }} />
-          : <img src={m.url} alt={m.type === 'gif' ? 'GIF' : ''} loading="lazy" />
+          ? <video src={mediaUrl(m.url)} controls style={{ width: '100%', display: 'block', maxHeight: 240, objectFit: 'cover' }} />
+          : <img src={mediaUrl(m.url)} alt={m.type === 'gif' ? 'GIF' : ''} loading="lazy" />
       ) : (
         <div className="comment-media-grid">
           {media.slice(0, 4).map((item, i) => (
             <div key={i} style={{ position: 'relative' }}>
               {item.type === 'video' ? (
                 <>
-                  <video src={item.url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  <video src={mediaUrl(item.url)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.3)' }}>
                     <Play size={20} fill="#fff" color="#fff" />
                   </div>
                 </>
               ) : (
-                <img src={item.url} alt="" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                <img src={mediaUrl(item.url)} alt="" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
               )}
             </div>
           ))}
@@ -281,7 +283,7 @@ function InlineReplyBox({
         {/* Avatar */}
         <div className="inline-reply-avatar">
           {currentUserProfile?.avatar_url
-            ? <img src={currentUserProfile.avatar_url} alt="" />
+            ? <img src={mediaUrl(currentUserProfile.avatar_url)} alt="" />
             : initials
           }
         </div>
@@ -305,7 +307,7 @@ function InlineReplyBox({
             <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
               {media.map((m, i) => (
                 <div key={i} style={{ position: 'relative' }}>
-                  <img src={m.preview} alt="" style={{ width: 64, height: 64, borderRadius: 10, objectFit: 'cover', border: '1px solid var(--border)', display: 'block' }} />
+                  <img src={mediaUrl(m.preview)} alt="" style={{ width: 64, height: 64, borderRadius: 10, objectFit: 'cover', border: '1px solid var(--border)', display: 'block' }} />
                   {m.type === 'gif' && (
                     <span style={{ position: 'absolute', bottom: 3, left: 3, background: 'rgba(0,0,0,0.6)', color: '#fff', fontSize: 9, fontWeight: 800, borderRadius: 4, padding: '1px 4px', letterSpacing: 0.5 }}>GIF</span>
                   )}
@@ -347,7 +349,7 @@ function InlineReplyBox({
                       border: 'none', padding: 0, cursor: 'pointer', borderRadius: 8,
                       overflow: 'hidden', aspectRatio: '1', background: 'var(--surface-2)',
                     }}>
-                      <img src={g.preview} alt="GIF" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                      <img src={mediaUrl(g.preview)} alt="GIF" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
                     </button>
                   ))}
                 </div>
@@ -431,6 +433,7 @@ function CommentRow({
   const [softDeleted, setSoftDeleted] = useState(false)
   const [replying,    setReplying]    = useState(false)
   const [showReplies, setShowReplies] = useState(true)
+  const [showReport,  setShowReport]  = useState(false)
 
   const menuRef = useRef<HTMLDivElement>(null)
   const isOwner = currentUserId === comment.user_id
@@ -476,6 +479,18 @@ function CommentRow({
     router.refresh()
   }
 
+  async function reportComment(reason: string, details: string) {
+    const { error } = await supabase.from('reports').insert({
+      reporter_id: currentUserId,
+      reported_user_id: comment.user_id,
+      entity_type: 'comment',
+      entity_id: comment.id,
+      reason: reason.slice(0, 120),
+      details: details ? details.slice(0, 1000) : null,
+    })
+    return !error
+  }
+
   // max indent depth = 2 (keeps layout clean on mobile)
   const canNestDeeper = depth < 2
 
@@ -485,7 +500,7 @@ function CommentRow({
         {/* Left: avatar + connecting line */}
         <div className="comment-left">
           <Link href={`/profile/${profile?.id}`} className="comment-avatar">
-            {profile?.avatar_url ? <img src={profile.avatar_url} alt={profile.username} /> : initials}
+            {profile?.avatar_url ? <img src={mediaUrl(profile.avatar_url)} alt={profile.username} /> : initials}
           </Link>
           {/* show line if has children/replies or has inline reply box open */}
           {(hasChildren || replying || (children.length > 0 && showReplies)) && (
@@ -512,25 +527,32 @@ function CommentRow({
                 <span className="comment-dot">·</span>
                 <span className="comment-time">{timeAgo(comment.created_at)}</span>
 
-                {isOwner && (
-                  <div ref={menuRef} style={{ marginLeft: 'auto', position: 'relative' }}>
-                    <button
-                      onClick={() => setShowMenu(p => !p)}
-                      className="comment-more-btn"
-                      aria-label="More"
-                    >
-                      <MoreHorizontal size={14} />
-                    </button>
-                    {showMenu && (
-                      <div className="comment-menu">
+                <div ref={menuRef} style={{ marginLeft: 'auto', position: 'relative' }}>
+                  <button
+                    onClick={() => setShowMenu(p => !p)}
+                    className="comment-more-btn"
+                    aria-label="Comment actions"
+                    aria-expanded={showMenu}
+                    aria-haspopup="menu"
+                  >
+                    <MoreHorizontal size={14} />
+                  </button>
+                  {showMenu && (
+                    <div className="comment-menu" role="menu">
+                      {isOwner ? (
                         <button onClick={deleteComment} className="comment-menu-item comment-menu-danger">
                           <Trash2 size={13} />
-                          Delete reply
+                          Delete comment
                         </button>
-                      </div>
-                    )}
-                  </div>
-                )}
+                      ) : (
+                        <button onClick={() => { setShowMenu(false); setShowReport(true) }} className="comment-menu-item comment-menu-danger">
+                          <Flag size={13} />
+                          Report comment
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
 
               {comment.content && (
@@ -612,6 +634,14 @@ function CommentRow({
             />
           ))}
         </div>
+      )}
+      {showReport && (
+        <ReportSheet
+          title="Report this comment"
+          description="Tell Nia what is wrong with this comment. The author will not be told who reported it."
+          onClose={() => setShowReport(false)}
+          onSubmit={reportComment}
+        />
       )}
     </div>
   )
