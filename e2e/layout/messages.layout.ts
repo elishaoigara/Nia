@@ -50,3 +50,16 @@ test('post body and photo open the post, author links retain profile navigation'
   expect(await page.evaluate(() => (window as unknown as { __navigation: string }).__navigation)).toBe('/posts/1')
   await expect(page.locator('article[aria-label^="Open post by"] video').first()).toHaveAttribute('preload', 'none')
 })
+
+test('inside a post, video opens a playable viewer instead of navigating again', async ({ page }) => {
+  await page.goto('/?screen=post-detail')
+  await page.getByRole('link', { name: 'View media 1', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'Media viewer' })
+  await expect(page.getByRole('button', { name: 'Close lightbox', exact: true })).toBeVisible()
+  const player = page.locator('video').last()
+  await dialog.getByRole('button', { name: 'Play', exact: true }).click()
+  await expect.poll(() => player.evaluate((element: HTMLVideoElement) => !element.paused && element.currentTime > 0)).toBe(true)
+  expect(await page.evaluate(() => (window as unknown as { __navigation?: string }).__navigation)).toBeUndefined()
+  await page.getByRole('button', { name: 'Close lightbox', exact: true }).click()
+  await expect(dialog).toHaveCount(0)
+})
