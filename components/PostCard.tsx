@@ -25,7 +25,6 @@ import {
 import { createClient } from '@/lib/supabase/client';
 import { getStoryRingData } from '@/lib/activeStories';
 import type { Poll, Post } from '@/types/domain';
-import MediaLightbox from './MediaLightbox';
 import FollowButton from './FollowButton';
 import ReportSheet from './ReportSheet';
 import { getFlag } from '@/lib/african-data';
@@ -139,8 +138,6 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
     !!currentUserId && Array.isArray(post.bookmarks) && post.bookmarks.some(b => b.user_id === currentUserId)
   );
   const [showMenu,           setShowMenu]           = useState(false);
-  const [lightboxOpen,       setLightboxOpen]       = useState(false);
-  const [lightboxIndex,      setLightboxIndex]      = useState(0);
   const [isFollowingAuthor,  setIsFollowingAuthor]  = useState(!!post.viewer_is_following);
   const [copied,             setCopied]             = useState(false);
   const [safetyBusy,         setSafetyBusy]         = useState(false);
@@ -353,10 +350,8 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
   const handlePostClick = (e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
     if (
-      target.closest('.post-action-btn') ||
-      target.closest('.btn-follow') ||
-      target.closest('.post-edit-area') ||
-      target.closest('a')
+      target.closest('a,button,input,textarea,select,audio,video,[role="button"],.post-edit-area') ||
+      window.getSelection()?.toString()
     ) return;
     router.push(`/posts/${post.id}`);
   };
@@ -366,6 +361,9 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
       <article
         className={`post-row post-row--${variant}`}
         onClick={handlePostClick}
+        tabIndex={0}
+        aria-label={`Open post by ${profile?.username ?? 'Nia member'}`}
+        onKeyDown={event => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); router.push(`/posts/${post.id}`); } }}
         style={{ cursor: 'pointer' }}
       >
         {/* ── Left column ── */}
@@ -579,11 +577,11 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
           {allMedia.length > 0 && (
             <div className={`post-media ${mediaGridClass(allMedia.length)}`} onClick={e => e.stopPropagation()}>
               {allMedia.map((m, i) => (
-                <div key={i} onClick={() => { setLightboxIndex(i); setLightboxOpen(true); }}
+                <div key={i} role="link" tabIndex={0} aria-label={`Open post media ${i + 1}`} onClick={() => router.push(`/posts/${post.id}`)} onKeyDown={event => { if (event.key === 'Enter') router.push(`/posts/${post.id}`); }}
                   style={{ position: 'relative', cursor: 'pointer' }}>
                   {m.type === 'video' ? (
                     <>
-                      <video src={mediaUrl(m.url)} />
+                      <video src={mediaUrl(m.url)} preload="none" playsInline poster={mediaUrl(post.thumbnail_url)} />
                       <div style={{
                         position: 'absolute', inset: 0, display: 'flex',
                         alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.3)',
@@ -592,7 +590,7 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
                       </div>
                     </>
                   ) : (
-                    <img src={mediaUrl(m.url)} alt={`Post media ${i + 1}`} loading="lazy" />
+                    <img src={mediaUrl(m.url)} alt={`Post media ${i + 1}`} loading="lazy" decoding="async" />
                   )}
                 </div>
               ))}
@@ -689,10 +687,6 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
         </div>
       </article>
 
-      {/* Lightbox */}
-      {lightboxOpen && (
-        <MediaLightbox items={allMedia} startIndex={lightboxIndex} onClose={() => setLightboxOpen(false)} />
-      )}
       {showReport && (
         <ReportSheet
           title="Report this post"

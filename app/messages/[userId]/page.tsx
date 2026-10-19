@@ -1,5 +1,6 @@
 'use client'
 import type { Database } from '@/types/database'
+import '../messages.css'
 
 
 import { usePreferences } from '@/components/PreferencesProvider'
@@ -125,6 +126,8 @@ export default function DirectMessagePage() {
   const [sharedCircle, setSharedCircle] = useState<SharedCircle | null>(null)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
+  const [loadAttempt, setLoadAttempt] = useState(0)
   const [hasMore, setHasMore] = useState(true)
   const [loadingOlder, setLoadingOlder] = useState(false)
 
@@ -167,7 +170,8 @@ export default function DirectMessagePage() {
   const fileRef = useRef<HTMLInputElement>(null)
   const videoRef = useRef<HTMLInputElement>(null)
   const fileDocRef = useRef<HTMLInputElement>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
+  const screenRef = useRef<HTMLDivElement>(null)
   const mrRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
   const timerRef = useRef<NodeJS.Timeout | null>(null)
@@ -177,6 +181,21 @@ export default function DirectMessagePage() {
   const messageRequests = useRef(new Map<string,string>())
   const presenceChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
   const stickToBottom = useRef(true)
+
+  useEffect(() => {
+    const viewport = window.visualViewport
+    const resize = () => {
+      screenRef.current?.style.setProperty('--chat-height', `${viewport?.height ?? window.innerHeight}px`)
+      screenRef.current?.style.setProperty('--chat-top', `${viewport?.offsetTop ?? 0}px`)
+    }
+    resize(); viewport?.addEventListener('resize', resize); viewport?.addEventListener('scroll', resize)
+    return () => { viewport?.removeEventListener('resize', resize); viewport?.removeEventListener('scroll', resize) }
+  }, [])
+
+  useEffect(() => {
+    const input = inputRef.current
+    if (input) { input.style.height = '22px'; input.style.height = `${Math.min(120, input.scrollHeight)}px` }
+  }, [newMessage])
 
   function showToast(msg: string) {
     setToast(msg)
@@ -194,12 +213,13 @@ export default function DirectMessagePage() {
 
     async function init() {
       if (!recipientId) return
+      setLoading(true); setLoadError(false)
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/login'); return }
       if (cancelled) return
       setCurrentUserId(user.id)
 
-      const [{ data: profile }, { data: msgs }, { data: blockRow }, { data: reqRow }] = await Promise.all([
+      const [{ data: profile }, { data: msgs, error: messagesError }, { data: blockRow, error: blockError }, { data: reqRow, error: requestError }] = await Promise.all([
         supabase.from('profiles').select('id, username, avatar_url, full_name, last_seen_at').eq('id', recipientId).single(),
         supabase.from('messages').select('*')
           .or(`and(sender_id.eq.${user.id},recipient_id.eq.${recipientId}),and(sender_id.eq.${recipientId},recipient_id.eq.${user.id})`)
@@ -209,6 +229,8 @@ export default function DirectMessagePage() {
         supabase.from('message_requests').select('*').eq('user_id', user.id).eq('other_id', recipientId).maybeSingle(),
       ])
       if (cancelled) return
+
+      if (messagesError || blockError || requestError) throw messagesError || blockError || requestError
 
       const ordered = (msgs ?? []).map(normalizeMsg).reverse()
       const firstUnread = ordered.find(m => !m.is_read && m.sender_id === recipientId)
@@ -237,10 +259,10 @@ export default function DirectMessagePage() {
       await supabase.rpc('mark_conversation_read', { other_user: recipientId })
       await supabase.from('profiles').update({ last_seen_at: new Date().toISOString() }).eq('id', user.id)
     }
-    init()
+    void init().catch(() => { if (!cancelled) { setLoadError(true); setLoading(false) } })
 
     return () => { cancelled = true }
-  }, [recipientId, router, supabase])
+  }, [recipientId, router, supabase, loadAttempt])
 
   // ---------------------------------------------------------------------
   // Realtime message subscription. Created directly in this effect (not
@@ -683,10 +705,10 @@ export default function DirectMessagePage() {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100dvh - var(--nav-top))', maxWidth: '42rem', width: '100%', margin: '0 auto', position: 'relative' }}>
+    <div ref={screenRef} className="chat-screen">
       {/* HEADER */}
-      <header style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: 'var(--surface-0)', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
-        <button onClick={() => router.back()} className="tap-sm" style={{ width: 36, height: 36, borderRadius: 10, border: 'none', background: 'var(--surface-2)', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+      <header className="chat-header">
+        <button onClick={() => router.push('/messages')} aria-label="Back to messages" className="tap-sm" style={{ width: 44, height: 44, borderRadius: 14, border: 'none', background: 'var(--surface-2)', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
           <ArrowLeft size={17} />
         </button>
 
@@ -706,7 +728,7 @@ export default function DirectMessagePage() {
               <p style={{ fontWeight: 700, fontSize: 14, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-primary)' }}>
                 {recipient.full_name || recipient.username}
               </p>
-              <p style={{ fontSize: 12, margin: 0, color: typingOther ? 'var(--nia-violet)' : 'var(--text-tertiary)', fontWeight: typingOther ? 700 : 400 }}>
+              <p style={{ fontSize: 12, margin: 0, color: typingOther ? 'var(--nia-violet)' : 'var(--text-tertiary)', fontWeight: typingOther ? 700 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {typingOther ? 'Typing…' : presence ?? `@${recipient.username}`}
               </p>
               {sharedCircle && <span className="conversation-circle-badge">From {sharedCircle.name}</span>}
@@ -715,7 +737,7 @@ export default function DirectMessagePage() {
         )}
 
         <div style={{ position: 'relative', flexShrink: 0 }}>
-          <button onClick={() => setShowMenu(v => !v)} className="tap-sm" style={{ width: 36, height: 36, borderRadius: 10, border: 'none', background: 'var(--surface-2)', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <button onClick={() => setShowMenu(v => !v)} aria-label="Conversation options" aria-expanded={showMenu} className="tap-sm" style={{ width: 44, height: 44, borderRadius: 14, border: 'none', background: 'var(--surface-2)', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <MoreVertical size={17} />
           </button>
           {showMenu && (
@@ -749,7 +771,8 @@ export default function DirectMessagePage() {
       )}
 
       {/* MESSAGES */}
-      <div ref={scrollRef} onScroll={handleScroll} style={{ flex: 1, overflowY: 'auto', padding: '16px 14px' }}>
+      <div ref={scrollRef} onScroll={handleScroll} className="chat-timeline" role="region" aria-label="Conversation messages">
+        {loadError && <div className="messenger-empty" role="alert"><p>Couldn’t load this conversation.</p><button className="messenger-load" onClick={() => setLoadAttempt(value => value + 1)}>Try again</button></div>}
         {loadingOlder && (
           <div style={{ display: 'flex', justifyContent: 'center', padding: 10 }}>
             <Loader2 size={16} className="animate-spin" style={{ color: 'var(--text-tertiary)' }} />
@@ -765,13 +788,14 @@ export default function DirectMessagePage() {
             <Loader2 size={22} className="animate-spin" style={{ color: 'var(--text-tertiary)' }} />
           </div>
         )}
-        {!loading && messages.length === 0 && (
-          <div style={{ textAlign: 'center', paddingTop: 64 }}>
-            <p style={{ fontWeight: 700, fontSize: 17 }}>A quiet little corner for two</p>
-            <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 4 }}>Accept request, continue a Circle thought, or send a little encouragement.</p>
+        {!loading && !loadError && messages.length === 0 && (
+          <div className="chat-empty">
+            <div className="chat-empty-avatar">{recipient?.avatar_url ? <img src={mediaUrl(recipient.avatar_url)} alt="" /> : recipient?.username?.[0]?.toUpperCase() ?? 'N'}</div>
+            <h2>Say hello to {recipient?.full_name || recipient?.username || 'your new connection'}</h2>
+            <p>Share a thought, a photo, or a voice note. Make it your conversation.</p>
           </div>
         )}
-        {!pendingRequest && !editingId && messages.length < 2 && (
+        {!loading && !loadError && !pendingRequest && !editingId && messages.length < 2 && (
           <div className="quick-reply-rail" aria-label="Quick replies">
             <p>Make the first move</p>
             <div>
@@ -902,8 +926,8 @@ export default function DirectMessagePage() {
           You blocked this account. Unblock them from the conversation menu to send a message.
         </div>
       )}
-      {!pendingRequest && !amIBlocking && (
-      <div style={{ padding: '8px 10px', borderTop: '1px solid var(--border)', flexShrink: 0, paddingBottom: 'calc(8px + env(safe-area-inset-bottom, 0px))', position: 'relative' }}>
+      {!pendingRequest && !amIBlocking && !loadError && (
+      <div className="chat-composer">
         {showGifPicker && <ChatGifPicker onPick={sendGif} onClose={() => setShowGifPicker(false)} />}
 
         {isRecording ? (
@@ -943,9 +967,10 @@ export default function DirectMessagePage() {
               </div>
             )}
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div className="chat-compose-row">
               <button
                 onClick={() => setShowAttachTray(v => !v)}
+                aria-label="Add attachment" aria-expanded={showAttachTray}
                 className="tap-sm"
                 style={{
                   width: 38, height: 38, borderRadius: '50%', border: 'none', flexShrink: 0,
@@ -957,21 +982,22 @@ export default function DirectMessagePage() {
                 <Plus size={18} />
               </button>
 
-              <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, background: 'var(--surface-2)', borderRadius: 20, padding: '0 14px', minHeight: 38 }}>
-                <input
+              <div className="chat-compose-field">
+                <textarea
                   ref={inputRef}
+                  rows={1} aria-label="Message" maxLength={5000}
                   value={newMessage}
                   onChange={e => handleTypingInput(e.target.value)}
                   onFocus={() => setShowAttachTray(false)}
-                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendText() } }}
-                  placeholder={editingId ? 'Edit message…' : messages.length === 0 ? 'Say something kind…' : 'Continue the thought…'}
-                  style={{ flex: 1, minWidth: 0, background: 'none', border: 'none', outline: 'none', fontSize: 14.5, color: 'var(--text-primary)', fontFamily: 'inherit' }}
+                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); handleSendText() } }}
+                  placeholder={editingId ? 'Edit message…' : 'Message…'}
                 />
               </div>
 
               {newMessage.trim() ? (
                 <button
                   onClick={() => void handleSendText()}
+                  aria-label={editingId ? 'Save message' : 'Send message'}
                   disabled={sending}
                   className="tap-sm"
                   style={{ width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'var(--grad-brand)', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, opacity: sending ? 0.6 : 1 }}
@@ -981,6 +1007,7 @@ export default function DirectMessagePage() {
               ) : (
                 <button
                   onClick={startRecording}
+                  aria-label="Record voice message"
                   className="tap-sm"
                   style={{ width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'var(--grad-brand)', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
                 >

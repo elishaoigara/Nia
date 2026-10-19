@@ -19,7 +19,16 @@ export async function GET(request: Request) {
   if (range && /^bytes=\d*-\d*$/.test(range)) headers.Range = range
   const upstream = await fetch(`${url}/storage/v1/object/authenticated/${bucket}/${path.split('/').map(encodeURIComponent).join('/')}`, { headers, cache: 'no-store', signal: request.signal })
   if (!upstream.ok) return new Response('Media unavailable', { status: upstream.status === 416 ? 416 : 404 })
-  const responseHeaders = new Headers({ 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox", 'Vary': 'Cookie' })
+  // Reuse browser bytes only AFTER Storage has authorized this request with RLS.
+  // Never cache DM media (including view-once attachments), or use a shared CDN cache.
+  const canRevalidate = bucket !== 'message-media'
+  const responseHeaders = new Headers({ 'Cache-Control': canRevalidate ? 'private, no-cache, must-revalidate' : 'private, no-store', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox", 'Vary': 'Cookie' })
+  const etag = upstream.headers.get('etag')
+  if (canRevalidate && etag) responseHeaders.set('ETag', etag)
+  if (canRevalidate && !range && upstream.status === 200 && etag && request.headers.get('if-none-match') === etag) {
+    await upstream.body?.cancel()
+    return new Response(null, { status: 304, headers: responseHeaders })
+  }
   for (const name of ['content-type', 'content-length', 'content-range', 'accept-ranges']) {
     const value = upstream.headers.get(name)
     if (value) responseHeaders.set(name, value)

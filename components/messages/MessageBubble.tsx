@@ -4,7 +4,7 @@ import { mediaUrl } from '@/lib/media-url'
 import { useRef, useState } from 'react'
 import Link from 'next/link'
 import {
-  File as FileIcon, Play, Pause, Eye, Reply, Check, CheckCheck, Loader2,
+  File as FileIcon, Play, Pause, Eye, Reply, Check, CheckCheck, Loader2, MoreHorizontal,
 } from 'lucide-react'
 
 export type ChatMessage = {
@@ -27,12 +27,9 @@ export type ChatMessage = {
 
 type Profile = { id: string; username: string; avatar_url: string | null; full_name: string | null }
 
-function timeAgo(date: string) {
-  const s = Math.floor((Date.now() - new Date(date).getTime()) / 1000)
-  if (s < 60) return `${s}s`
-  if (s < 3600) return `${Math.floor(s / 60)}m`
-  if (s < 86400) return `${Math.floor(s / 3600)}h`
-  return new Date(date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+function messageTime(value: string) {
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? '' : date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 
 // Deterministic pseudo-random bar heights per message, so the same voice
@@ -209,18 +206,19 @@ export default function MessageBubble({
       )}
 
       <div
+        className={`message-stack ${isOwn ? 'message-stack--own' : ''}`}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
         style={{
-          maxWidth: '78%', display: 'flex', flexDirection: 'column', gap: 3,
+          maxWidth: 'min(76%, 520px)', display: 'flex', flexDirection: 'column', gap: 3,
           alignItems: isOwn ? 'flex-end' : 'flex-start',
           transform: `translateX(${dragX}px)`,
           transition: dragging ? 'none' : 'transform 0.2s ease',
           touchAction: 'pan-y',
         }}
       >
-        <button type="button" className="btn-ghost" aria-label="Message actions: reply, react or report" onClick={()=>onLongPress(msg)}>Message actions</button>
+        <button type="button" className="message-actions-trigger" aria-label="Message actions: reply, react or report" onClick={()=>onLongPress(msg)}><MoreHorizontal size={18} /></button>
         {msg.reply_to && replyMsg && (
           <div style={{ fontSize: 12, padding: '6px 10px', borderRadius: 10, background: 'var(--surface-3)', borderLeft: '3px solid var(--nia-violet)', maxWidth: '100%', opacity: 0.75 }}>
             <p style={{ fontWeight: 700, color: 'var(--nia-violet)', margin: '0 0 2px' }}>
@@ -232,19 +230,10 @@ export default function MessageBubble({
           </div>
         )}
 
-        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6 }}>
-          {!isOwn && (
-            <button
-              onClick={() => onSwipeReply(msg)}
-              className="opacity-0 group-hover:opacity-100 tap-sm"
-              style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: 'var(--surface-2)', color: 'var(--text-tertiary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'opacity 0.15s', flexShrink: 0 }}
-            >
-              <Reply size={13} />
-            </button>
-          )}
+        <div style={{ display: 'flex', alignItems: 'flex-end', minWidth: 0, maxWidth: '100%' }}>
 
-          <div style={{ position: 'relative' }}>
-            <div
+          <div style={{ position: 'relative', minWidth: 0, maxWidth: '100%' }}>
+            <div className={`chat-bubble ${isOwn ? 'chat-bubble--own' : ''}`}
               style={{
                 borderRadius: 18, overflow: 'hidden', position: 'relative',
                 ...(isOwn
@@ -282,12 +271,12 @@ export default function MessageBubble({
                     </button>
                   )
                 ) : (
-                  <img src={mediaUrl(msg.media_url)} alt="" style={{ display: 'block', width: '100%', maxHeight: 300, objectFit: 'cover', maxWidth: 260 }} />
+                  <img src={mediaUrl(msg.media_url)} alt="Shared photo" loading="lazy" decoding="async" style={{ display: 'block', width: '100%', maxHeight: 300, objectFit: 'cover', maxWidth: 260 }} />
                 )
               )}
 
               {msg.media_url && msg.media_type === 'video' && (
-                <video src={mediaUrl(msg.media_url)} controls style={{ display: 'block', width: '100%', maxHeight: 300, maxWidth: 260 }} />
+                <video src={mediaUrl(msg.media_url)} controls preload="none" playsInline style={{ display: 'block', width: '100%', maxHeight: 300, maxWidth: 260 }} />
               )}
 
               {msg.media_url && msg.media_type === 'audio' && (
@@ -320,7 +309,7 @@ export default function MessageBubble({
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '0 10px 6px', justifyContent: isOwn ? 'flex-end' : 'flex-start' }}>
                   {msg.view_once && <Eye size={10} style={{ opacity: 0.5 }} />}
                   {msg.edited_at && <span style={{ fontSize: 10, opacity: 0.55 }}>edited</span>}
-                  {!isGroupedWithNext && <span style={{ fontSize: 10, opacity: 0.55 }}>{timeAgo(msg.created_at)}</span>}
+                  {!isGroupedWithNext && <span style={{ fontSize: 10, opacity: 0.55 }}>{messageTime(msg.created_at)}</span>}
                   {isOwn && !isGroupedWithNext && (
                     isTemp
                       ? <Check size={11} style={{ opacity: 0.4 }} />
@@ -350,15 +339,6 @@ export default function MessageBubble({
             )}
           </div>
 
-          {isOwn && (
-            <button
-              onClick={() => onSwipeReply(msg)}
-              className="opacity-0 group-hover:opacity-100 tap-sm"
-              style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: 'var(--surface-2)', color: 'var(--text-tertiary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'opacity 0.15s', flexShrink: 0 }}
-            >
-              <Reply size={13} />
-            </button>
-          )}
         </div>
       </div>
     </div>
