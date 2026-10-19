@@ -39,6 +39,7 @@ export interface PostCardProps {
   currentUserId?: string | null;
   onDelete?: (postId: string) => void;
   showLine?: boolean;
+  detail?: boolean;
 }
 
 const EDIT_WINDOW_MINS = 15;
@@ -116,7 +117,7 @@ function getPostVariant(
 }
 
 /* ── Component ───────────────────────────────── */
-export default function PostCard({ post, currentUserId, onDelete, showLine }: PostCardProps) {
+export default function PostCard({ post, currentUserId, onDelete, showLine, detail = false }: PostCardProps) {
   const supabase = createClient();
   const router   = useRouter();
 
@@ -138,9 +139,9 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
   const [bookmarked,         setBookmarked]         = useState(
     !!currentUserId && Array.isArray(post.bookmarks) && post.bookmarks.some(b => b.user_id === currentUserId)
   );
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const openMedia = (index: number) => { if (detail) setLightboxIndex(index); else router.push(`/posts/${post.id}`); };
   const [showMenu,           setShowMenu]           = useState(false);
-  const [lightboxOpen,       setLightboxOpen]       = useState(false);
-  const [lightboxIndex,      setLightboxIndex]      = useState(0);
   const [isFollowingAuthor,  setIsFollowingAuthor]  = useState(!!post.viewer_is_following);
   const [copied,             setCopied]             = useState(false);
   const [safetyBusy,         setSafetyBusy]         = useState(false);
@@ -351,12 +352,11 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
   const variant = getPostVariant(allMedia.length > 0, likesCount);
 
   const handlePostClick = (e: React.MouseEvent) => {
+    if (detail) return;
     const target = e.target as HTMLElement;
     if (
-      target.closest('.post-action-btn') ||
-      target.closest('.btn-follow') ||
-      target.closest('.post-edit-area') ||
-      target.closest('a')
+      target.closest('a,button,input,textarea,select,audio,video,[role="button"],.post-edit-area') ||
+      window.getSelection()?.toString()
     ) return;
     router.push(`/posts/${post.id}`);
   };
@@ -366,7 +366,10 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
       <article
         className={`post-row post-row--${variant}`}
         onClick={handlePostClick}
-        style={{ cursor: 'pointer' }}
+        tabIndex={detail ? undefined : 0}
+        aria-label={`Open post by ${profile?.username ?? 'Nia member'}`}
+        onKeyDown={event => { if (!detail && event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); router.push(`/posts/${post.id}`); } }}
+        style={{ cursor: detail ? 'default' : 'pointer' }}
       >
         {/* ── Left column ── */}
         <div className="post-left">
@@ -579,11 +582,11 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
           {allMedia.length > 0 && (
             <div className={`post-media ${mediaGridClass(allMedia.length)}`} onClick={e => e.stopPropagation()}>
               {allMedia.map((m, i) => (
-                <div key={i} onClick={() => { setLightboxIndex(i); setLightboxOpen(true); }}
+                <div key={i} role="link" tabIndex={0} aria-label={`${detail ? 'View' : 'Open post'} media ${i + 1}`} onClick={() => openMedia(i)} onKeyDown={event => { if (event.key === 'Enter') openMedia(i); }}
                   style={{ position: 'relative', cursor: 'pointer' }}>
                   {m.type === 'video' ? (
                     <>
-                      <video src={mediaUrl(m.url)} />
+                      <video src={mediaUrl(m.url)} preload="none" playsInline poster={mediaUrl(post.thumbnail_url)} />
                       <div style={{
                         position: 'absolute', inset: 0, display: 'flex',
                         alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.3)',
@@ -592,7 +595,7 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
                       </div>
                     </>
                   ) : (
-                    <img src={mediaUrl(m.url)} alt={`Post media ${i + 1}`} loading="lazy" />
+                    <img src={mediaUrl(m.url)} alt={`Post media ${i + 1}`} loading="lazy" decoding="async" />
                   )}
                 </div>
               ))}
@@ -689,10 +692,7 @@ export default function PostCard({ post, currentUserId, onDelete, showLine }: Po
         </div>
       </article>
 
-      {/* Lightbox */}
-      {lightboxOpen && (
-        <MediaLightbox items={allMedia} startIndex={lightboxIndex} onClose={() => setLightboxOpen(false)} />
-      )}
+      {lightboxIndex !== null && <MediaLightbox items={allMedia} startIndex={lightboxIndex} onClose={() => setLightboxIndex(null)} />}
       {showReport && (
         <ReportSheet
           title="Report this post"

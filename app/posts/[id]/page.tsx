@@ -144,6 +144,7 @@ export default async function PostDetailPage({ params }: Props) {
 
       {/* Original post */}
       <PostCard
+        detail
         post={{ ...post, viewer_is_following: viewerIsFollowing }}
         currentUserId={user.id}
         showLine={comments.length > 0}
