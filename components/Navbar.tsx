@@ -73,8 +73,9 @@ export default function Navbar() {
     const el = document.getElementById('compose')
     if (el) {
       el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      const textarea = el.querySelector('textarea')
-      textarea?.focus()
+      const trigger = el.querySelector<HTMLButtonElement>('.compose-trigger-pill')
+      if (trigger) trigger.click()
+      else el.querySelector('textarea')?.focus()
     }
   }
 
@@ -108,7 +109,7 @@ export default function Navbar() {
   /* ── Sidebar active style (desktop) ── */
   const activeStyle = {
     background: 'rgba(91, 33, 182, 0.10)',
-    color: 'var(--nia-violet)',
+    color: 'var(--sidebar-active)',
   } as const
 
   return (
@@ -302,8 +303,8 @@ export default function Navbar() {
                     size={20}
                     strokeWidth={active ? 0 : 1.8}
                     style={{
-                      fill: active ? 'var(--nia-violet)' : 'none',
-                      color: active ? 'var(--nia-violet)' : 'var(--text-secondary)',
+                      fill: active ? 'var(--sidebar-active)' : 'none',
+                      color: active ? 'var(--sidebar-active)' : 'var(--text-secondary)',
                     }}
                   />
                   {showBadge && (
@@ -324,7 +325,7 @@ export default function Navbar() {
                   <div style={{
                     marginLeft: 'auto',
                     width: 6, height: 6, borderRadius: '50%',
-                    background: 'var(--nia-violet)',
+                    background: 'var(--sidebar-active)',
                   }} />
                 )}
               </Link>
