@@ -1,0 +1,14 @@
+alter policy "managers publish events" on public.circle_events with check (created_by = (select auth.uid()) and private.can_manage_circle(circle_id) and starts_at > now() and private.is_account_active((select auth.uid())));
+alter policy "members read events" on public.circle_events using (private.is_circle_member(circle_id, (select auth.uid())) or private.can_manage_circle(circle_id));
+alter policy "manager request read boundary" on public.circle_join_requests using (user_id = (select auth.uid()) or private.can_manage_circle(circle_id));
+alter policy "managers publish opportunities" on public.circle_opportunities with check (created_by = (select auth.uid()) and private.can_manage_circle(circle_id) and deadline > now() and private.is_account_active((select auth.uid())));
+alter policy "members read opportunities" on public.circle_opportunities using (removed_at is null and (private.is_circle_member(circle_id, (select auth.uid())) or private.can_manage_circle(circle_id)));
+alter policy "own event rsvp" on public.event_rsvps using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()) and exists (select 1 from public.circle_events where circle_events.id = event_rsvps.event_id and circle_events.starts_at > now()));
+alter policy "own read state" on public.message_read_states using (user_id = (select auth.uid()));
+alter policy "users create own mutes" on public.mutes with check (muter_id = (select auth.uid()));
+alter policy "users delete own mutes" on public.mutes using (muter_id = (select auth.uid()));
+alter policy "users read own mutes" on public.mutes using (muter_id = (select auth.uid()));
+alter policy "own or staff opportunity reports" on public.opportunity_reports using (reporter_id = (select auth.uid()) or private.is_moderator());
+alter policy "report visible opportunity" on public.opportunity_reports with check (reporter_id = (select auth.uid()) and exists (select 1 from public.circle_opportunities where circle_opportunities.id = opportunity_reports.opportunity_id));
+alter policy "own opportunity saves" on public.opportunity_saves using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()) and exists (select 1 from public.circle_opportunities where circle_opportunities.id = opportunity_saves.opportunity_id));
+alter policy "legacy response membership" on public.posts using (not legacy_members_only or private.is_circle_member(circle_id, (select auth.uid())) or private.can_manage_circle(circle_id));
