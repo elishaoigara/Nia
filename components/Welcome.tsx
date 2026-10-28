@@ -1,0 +1,13 @@
+import Link from 'next/link'
+import { ArrowUpRight, MessageCircle, Play, Users, Sparkles, ShieldCheck } from 'lucide-react'
+import PublicPage from '@/components/PublicPage'
+
+export default function Welcome() {
+  return <PublicPage><main>
+    <section className="public-hero">
+      <div><span className="public-kicker">Made for connection. Rooted in Africa.</span><h1>Your people.<br/>Your stories.<br/><span style={{ color: 'var(--nia-violet)' }}>Your Nia.</span></h1><p>A space for the things you love and the people who get them. Find your Circle, share a little of your world, and make a connection that matters.</p><div className="public-actions"><Link href="/signup" className="btn-primary">Join Nia <ArrowUpRight size={18}/></Link><Link href="/login" className="btn-ghost">I have an account</Link></div><p style={{ fontSize: 13 }}>Start in your browser. No download needed.</p></div>
+      <div className="public-preview" aria-label="Things to discover on Nia"><span className="public-kicker">There’s a place for you here</span><div className="public-preview-row"><Users size={28} aria-hidden="true"/><div><h2 className="font-bold">Find your Circle</h2><p>Music, tech, campus life, creativity — follow your interests.</p></div></div><div className="public-preview-row"><Play size={28} aria-hidden="true"/><div><h2 className="font-bold">Show your side of the story</h2><p>Short videos, everyday moments, and ideas worth sharing.</p></div></div><div className="public-preview-row"><MessageCircle size={28} aria-hidden="true"/><div><h2 className="font-bold">Keep the conversation going</h2><p>From a shared interest to a new friendship.</p></div></div></div>
+    </section>
+    <section aria-labelledby="welcome-features"><h2 id="welcome-features" className="text-2xl font-bold">Make yourself at home.</h2><div className="public-feature-grid"><article className="public-feature"><Users aria-hidden="true"/><h3>Community, your way</h3><p>Explore Circles around what you enjoy. Join conversations or start one of your own.</p></article><article className="public-feature"><Sparkles aria-hidden="true"/><h3>Room to express yourself</h3><p>Share posts, Flicks, and stories. Bring your ideas, your humour, and your everyday moments.</p></article><article className="public-feature"><ShieldCheck aria-hidden="true"/><h3>Set your boundaries</h3><p>Choose your privacy settings, mute or block accounts, and report content that crosses a line.</p><Link href="/community-guidelines" className="inline-block mt-4 font-bold">Our community guidelines →</Link></article></div></section>
+  </main></PublicPage>
+}

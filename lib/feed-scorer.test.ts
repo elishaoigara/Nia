@@ -60,4 +60,24 @@ describe('scorePosts', () => {
 
     expect(result.map(item => item.id)).toEqual(['followed', 'other'])
   })
+
+  it('boosts authors who share an interest with the viewer', () => {
+    const shared = post({
+      id: 'shared',
+      user_id: 'shared-user',
+      profiles: { id: 'shared-user', username: 'shared', avatar_url: null, country: 'Ghana', interests: ['Music'] },
+    })
+    const unrelated = post({
+      id: 'unrelated',
+      user_id: 'unrelated-user',
+      profiles: { id: 'unrelated-user', username: 'unrelated', avatar_url: null, country: 'Ghana', interests: ['Agriculture'] },
+    })
+
+    const result = scorePosts(
+      [unrelated, shared],
+      context({ country: 'Ghana', interests: new Set(['music']) }),
+    )
+
+    expect(result.map(item => item.id)).toEqual(['shared', 'unrelated'])
+  })
 })

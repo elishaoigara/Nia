@@ -2,7 +2,7 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import { getServerSupabaseEnv } from '@/lib/env'
 
-export async function updateSession(request: NextRequest) {
+export async function updateSession(request: NextRequest, allowAnonymous = false) {
   let response = NextResponse.next({ request })
   const { url, anonKey } = getServerSupabaseEnv()
 
@@ -20,10 +20,17 @@ export async function updateSession(request: NextRequest) {
   })
 
   const { data: { user }, error } = await supabase.auth.getUser()
-  if (user && !error) return response
+  response.headers.set('Cache-Control', 'private, no-store')
+  if (allowAnonymous || (user && !error)) return response
+
+  function withSessionCookies(next: NextResponse) {
+    response.cookies.getAll().forEach(cookie => next.cookies.set(cookie))
+    next.headers.set('Cache-Control', 'private, no-store')
+    return next
+  }
 
   if (request.nextUrl.pathname.startsWith('/api/')) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    return withSessionCookies(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }))
   }
 
   const loginUrl = request.nextUrl.clone()
@@ -33,5 +40,5 @@ export async function updateSession(request: NextRequest) {
     loginUrl.searchParams.set('next', `${request.nextUrl.pathname}${request.nextUrl.search}`)
   }
 
-  return NextResponse.redirect(loginUrl)
+  return withSessionCookies(NextResponse.redirect(loginUrl))
 }

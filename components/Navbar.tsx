@@ -1,16 +1,19 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { PUBLIC_INFO_PATHS, isAuthPage as isAuthRoute } from '@/lib/public-routes'
+import { usePreferences } from '@/components/PreferencesProvider'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
-  Home, Compass, Clapperboard,
-  MessageSquare, User, Plus,
+  Home, Compass, Users,
+  MessageSquare, User, Plus, Settings as SettingsIcon, PanelLeftClose, PanelLeftOpen,
 } from 'lucide-react'
 import NotificationBell from '@/components/NotificationBell'
 import ThemeToggle      from '@/components/ThemeToggle'
 import LogoutButton     from '@/components/LogoutButton'
 import { createClient } from '@/lib/supabase/client'
+import { useUnreadCounts } from '@/lib/hooks/useUnreadCounts'
 
 /* ── 5 nav items only ─────────────────────────────────────
    Discover absorbed Search → /explore
@@ -19,61 +22,78 @@ import { createClient } from '@/lib/supabase/client'
 */
 const LINKS = [
   { href: '/',         icon: Home,          label: 'Home'     },
-  { href: '/explore',  icon: Compass,       label: 'Explore'  },
-  { href: '/flicks',   icon: Clapperboard,  label: 'Flicks'   },
+  { href: '/circles',  icon: Users,   label: 'Circles'  },
+  { href: '/explore',  icon: Compass,       label: 'Discover' },
   { href: '/messages', icon: MessageSquare, label: 'Messages' },
   { href: '/profile',  icon: User,          label: 'Me'       },
 ]
 
+const SIDEBAR_STORAGE_KEY = 'nia-sidebar-collapsed'
+const SIDEBAR_CHANGE_EVENT = 'nia-sidebar-change'
+
+function subscribeSidebar(callback: () => void) {
+  window.addEventListener('storage', callback)
+  window.addEventListener(SIDEBAR_CHANGE_EVENT, callback)
+  return () => {
+    window.removeEventListener('storage', callback)
+    window.removeEventListener(SIDEBAR_CHANGE_EVENT, callback)
+  }
+}
+function readSidebarCollapsed() {
+  try { return localStorage.getItem(SIDEBAR_STORAGE_KEY) === 'true' } catch { return false }
+}
+
 export default function Navbar() {
+  const { t } = usePreferences()
   const pathname = usePathname() ?? ''
   const router   = useRouter()
   const supabase = createClient()
 
-  const [userId,         setUserId]         = useState<string | null>(null)
-  const [unreadMessages, setUnreadMessages] = useState(0)
+  const [fallbackCollapsed, setFallbackCollapsed] = useState(false)
+  const storedCollapsed = useSyncExternalStore(subscribeSidebar, readSidebarCollapsed, () => false)
+  const [storageAvailable, setStorageAvailable] = useState(true)
+  const collapsed = storageAvailable ? storedCollapsed : fallbackCollapsed
+
+  function toggleSidebar() {
+    const next = !collapsed
+    try {
+      localStorage.setItem(SIDEBAR_STORAGE_KEY, String(next))
+      window.dispatchEvent(new Event(SIDEBAR_CHANGE_EVENT))
+    } catch {
+      setStorageAvailable(false)
+      setFallbackCollapsed(next)
+    }
+  }
+
+  const [userId, setUserId] = useState<string | null>(null)
+  const { unreadMessages, unreadNotifications } = useUnreadCounts(userId)
 
   function scrollToCompose() {
     if (pathname !== '/') { router.push('/#compose'); return }
     const el = document.getElementById('compose')
     if (el) {
       el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      const textarea = el.querySelector('textarea')
-      textarea?.focus()
+      const trigger = el.querySelector<HTMLButtonElement>('.compose-trigger-pill')
+      if (trigger) trigger.click()
+      else el.querySelector('textarea')?.focus()
     }
   }
 
   useEffect(() => {
+    let cancelled = false
     supabase.auth.getUser().then(({ data: { user } }) => {
-      if (!user) return
-      setUserId(user.id)
-
-      const fetchUnread = async () => {
-        const { count } = await supabase
-          .from('messages')
-          .select('*', { count: 'exact', head: true })
-          .eq('recipient_id', user.id)
-          .eq('is_read', false)
-        setUnreadMessages(count ?? 0)
-      }
-      fetchUnread()
-
-      const ch = supabase.channel('nav-msgs')
-        .on('postgres_changes', {
-          event: 'INSERT', schema: 'public', table: 'messages',
-          filter: `recipient_id=eq.${user.id}`,
-        }, () => setUnreadMessages(p => p + 1))
-        .on('postgres_changes', {
-          event: 'UPDATE', schema: 'public', table: 'messages',
-          filter: `recipient_id=eq.${user.id}`,
-        }, fetchUnread)
-        .subscribe()
-
-      return () => { supabase.removeChannel(ch) }
+      if (!cancelled) setUserId(user?.id ?? null)
     })
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!cancelled) setUserId(session?.user.id ?? null)
+    })
+    return () => { cancelled = true; subscription.unsubscribe() }
   }, [supabase])
 
   const isFlicks   = pathname === '/flicks'
+  const isSetup    = pathname === '/setup'
+  const isAuthPage = isAuthRoute(pathname)
+  const isInfoPage = pathname !== '/' && PUBLIC_INFO_PATHS.includes(pathname)
   const isDmThread = pathname.startsWith('/messages/') && pathname.split('/').length === 3
 
   function isActive(href: string) {
@@ -84,12 +104,12 @@ export default function Navbar() {
     return pathname.startsWith(href)
   }
 
-  if (isFlicks) return null
+  if (isFlicks || isSetup || isAuthPage || isInfoPage || !userId) return null
 
   /* ── Sidebar active style (desktop) ── */
   const activeStyle = {
     background: 'rgba(91, 33, 182, 0.10)',
-    color: 'var(--nia-violet)',
+    color: 'var(--sidebar-active)',
   } as const
 
   return (
@@ -120,17 +140,12 @@ export default function Navbar() {
           {/* Right cluster — notification + post only (ThemeToggle → sidebar, Logout → sidebar) */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 'auto' }}>
             <ThemeToggle />
-            {userId && <NotificationBell userId={userId} />}
+            {userId && <NotificationBell unreadCount={unreadNotifications} />}
             <button
+              type="button"
               onClick={scrollToCompose}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 6,
-                background: 'var(--grad-brand)', color: '#fff',
-                fontSize: 13, fontWeight: 700,
-                padding: '7px 14px', borderRadius: 10,
-                border: 'none', cursor: 'pointer', minHeight: 34,
-              }}
-              className="tap-sm"
+              className="btn-primary navbar-post-button tap-sm"
+              aria-label="Create a new post"
             >
               <Plus size={15} strokeWidth={2.5} />
               <span className="hidden xs:inline">Post</span>
@@ -145,7 +160,7 @@ export default function Navbar() {
           style={{
             position: 'fixed', bottom: 0, left: 0, right: 0,
             height: 'var(--nav-bottom)', zIndex: 50,
-            display: 'flex', alignItems: 'center', justifyContent: 'space-around',
+            alignItems: 'center', justifyContent: 'space-around',
             background: 'var(--surface-0)',
             borderTop: '1px solid var(--border)',
             paddingBottom: 'env(safe-area-inset-bottom, 0px)',
@@ -162,7 +177,7 @@ export default function Navbar() {
               <Link
                 key={href}
                 href={href}
-                aria-label={label}
+                aria-label={t(label)}
                 style={{
                   display: 'flex', flexDirection: 'column',
                   alignItems: 'center', justifyContent: 'center',
@@ -223,7 +238,7 @@ export default function Navbar() {
                     letterSpacing: active ? '0.01em' : '0',
                     transition: 'color 0.15s, font-weight 0.15s',
                   }}>
-                    {label}
+                    {t(label)}
                   </span>
                 </div>
               </Link>
@@ -235,8 +250,9 @@ export default function Navbar() {
       {/* ── DESKTOP SIDEBAR ──────────────────────────────── */}
       <aside
         className="desktop-sidebar"
+        data-collapsed={collapsed}
         style={{
-          position: 'fixed', top: 0, left: 0, bottom: 0,
+          position: 'fixed', top: 'var(--nav-top)', left: 0, bottom: 0,
           width: 'var(--sidebar-w)', zIndex: 40,
           flexDirection: 'column',
           padding: '16px 12px 24px',
@@ -245,12 +261,20 @@ export default function Navbar() {
           overflowY: 'auto',
         }}
       >
-        <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', marginBottom: 20, textDecoration: 'none' }}>
-          <img src="/logo/nia-icon.svg" alt="" width={34} height={34} style={{ borderRadius: 10 }} />
-          <span style={{ fontWeight: 800, fontSize: 18, color: 'var(--text-primary)' }}>Nia</span>
-        </Link>
+        <div className="sidebar-heading">
+          {!collapsed && <Link href="/" className="sidebar-brand" aria-label="Nia home">
+            <img src="/logo/nia-icon.svg" alt="" width={34} height={34} style={{ borderRadius: 10 }} />
+            <span>Nia</span>
+          </Link>}
+          <button type="button" className="sidebar-toggle" onClick={toggleSidebar}
+            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            aria-expanded={!collapsed} aria-controls="desktop-navigation"
+            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
+            {collapsed ? <PanelLeftOpen size={20} /> : <PanelLeftClose size={20} />}
+          </button>
+        </div>
 
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <nav id="desktop-navigation" aria-label="Main navigation" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
           {LINKS.map(({ href, icon: Icon, label }) => {
             const active    = isActive(href)
             const showBadge = href === '/messages' && unreadMessages > 0
@@ -260,7 +284,11 @@ export default function Navbar() {
                 key={href}
                 href={href}
                 className="tap-sm"
+                aria-label={t(label)}
+                aria-current={active ? 'page' : undefined}
+                title={collapsed ? t(label) : undefined}
                 style={{
+                  justifyContent: collapsed ? 'center' : undefined,
                   display: 'flex', alignItems: 'center', gap: 12,
                   padding: '10px 12px', borderRadius: 14,
                   textDecoration: 'none',
@@ -275,8 +303,8 @@ export default function Navbar() {
                     size={20}
                     strokeWidth={active ? 0 : 1.8}
                     style={{
-                      fill: active ? 'var(--nia-violet)' : 'none',
-                      color: active ? 'var(--nia-violet)' : 'var(--text-secondary)',
+                      fill: active ? 'var(--sidebar-active)' : 'none',
+                      color: active ? 'var(--sidebar-active)' : 'var(--text-secondary)',
                     }}
                   />
                   {showBadge && (
@@ -292,36 +320,35 @@ export default function Navbar() {
                     </span>
                   )}
                 </div>
-                <span>{label}</span>
-                {active && (
+                {!collapsed && <span>{t(label)}</span>}
+                {active && !collapsed && (
                   <div style={{
                     marginLeft: 'auto',
                     width: 6, height: 6, borderRadius: '50%',
-                    background: 'var(--nia-violet)',
+                    background: 'var(--sidebar-active)',
                   }} />
                 )}
               </Link>
             )
           })}
-        </div>
+        </nav>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 16 }}>
+          <Link href="/settings" className="settings-nav-link tap-sm" aria-label="Open settings" title={collapsed ? 'Settings' : undefined}>
+            <SettingsIcon size={17} />
+            {!collapsed && <span>Settings</span>}
+          </Link>
           <button
+            type="button"
             onClick={scrollToCompose}
-            style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-              background: 'var(--grad-brand)', color: '#fff',
-              fontWeight: 700, fontSize: 14,
-              padding: '12px', borderRadius: 14,
-              border: 'none', cursor: 'pointer',
-              boxShadow: '0 4px 16px rgba(91, 33, 182, 0.2)',
-            }}
-            className="tap-sm"
+            className="btn-primary sidebar-post-button tap-sm"
+            aria-label="Create a new post"
+            title={collapsed ? 'New post' : undefined}
           >
             <Plus size={17} strokeWidth={2.5} />
-            New Post
+            {!collapsed && 'New Post'}
           </button>
-          {userId && <LogoutButton />}
+          {userId && <LogoutButton variant={collapsed ? 'icon' : 'full'} />}
         </div>
       </aside>
     </>

@@ -1,13 +1,17 @@
 'use client'
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { getAppUrl } from '@/lib/app-url'
+import { friendlyAuthError } from '@/lib/auth-errors'
+import { getAuthUrl } from '@/lib/app-url'
 import Link from 'next/link'
 import { Loader2, ArrowRight, CheckCircle2 } from 'lucide-react'
+import ResendConfirmation from '@/components/ResendConfirmation'
+import { useRouter } from 'next/navigation'
 import UnityLine from '@/components/UnityLine'
 
 export default function SignupPage() {
   const supabase = createClient()
+  const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -16,6 +20,7 @@ export default function SignupPage() {
   const [sent, setSent] = useState(false)
 
   async function handleSignup() {
+    if (loading) return
     if (password.length < 8) {
       setError('Password must be at least 8 characters')
       return
@@ -28,40 +33,38 @@ export default function SignupPage() {
     setLoading(true)
     setError('')
 
-    const { error } = await supabase.auth.signUp({
-      email: email.trim(),
-      password,
-      options: {
-        emailRedirectTo: `${getAppUrl()}/auth/callback`,
-      },
-    })
-
-    if (error) {
-      setError(error.message)
-      setLoading(false)
-    } else {
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email: email.trim(), password,
+        options: { emailRedirectTo: getAuthUrl('/auth/callback') },
+      })
+      if (error) throw error
+      if (data.session) { router.replace('/onboarding'); router.refresh(); return }
       setSent(true)
-    }
+    } catch (error) {
+      setError(friendlyAuthError(error instanceof Error ? error.message : ''))
+    } finally { setLoading(false) }
   }
 
   if (sent) return (
-    <div className="min-h-screen flex items-center justify-center px-4" style={{ background: 'var(--surface-0)' }}>
+    <div className="auth-page min-h-screen flex items-center justify-center px-4" style={{ background: 'var(--surface-0)' }}>
       <div className="card p-8 text-center space-y-4 max-w-sm w-full anim-pop">
         <div className="w-16 h-16 rounded-3xl mx-auto flex items-center justify-center" style={{ background: 'color-mix(in srgb, var(--nia-mint) 15%, transparent)' }}>
           <CheckCircle2 size={32} style={{ color: 'var(--nia-mint)' }} />
         </div>
-        <h2 className="font-extrabold text-2xl">Check your inbox! 📬</h2>
+        <h2 className="font-extrabold text-2xl">Check your inbox</h2>
         <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-          We sent a confirmation link to <strong>{email}</strong>. 
-          Click it to activate your Nia account.
+          If this email can be registered, a confirmation link is on its way to <strong>{email}</strong>.
+          Open the latest link to activate your account. Already registered? Sign in instead.
         </p>
+        <ResendConfirmation initialEmail={email}/>
         <Link href="/login" className="btn-ghost block text-center text-sm">Back to login</Link>
       </div>
     </div>
   )
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 relative overflow-hidden" style={{ background: 'var(--surface-0)' }}>
+    <div className="auth-page min-h-screen flex items-center justify-center px-4 relative overflow-hidden" style={{ background: 'var(--surface-0)' }}>
       <div
         style={{
           position: 'absolute', inset: 0, pointerEvents: 'none', opacity: 0.06,
@@ -85,64 +88,76 @@ export default function SignupPage() {
             style={{ margin: '0 auto', display: 'block', boxShadow: '0 8px 30px rgba(91,33,182,0.4)', borderRadius: 20 }}
           />
           <div>
-            <h1 className="font-extrabold text-3xl tracking-tight">Join Nia 🌍</h1>
+            <h1 className="font-extrabold text-3xl tracking-tight">Find your people on Nia</h1>
             <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>
-              Africa connects here
+              A place to connect, grow, and build together across Africa.
             </p>
             <UnityLine />
           </div>
         </div>
 
-        <div className="card p-6 space-y-4">
+        <form className="card p-6 space-y-4" onSubmit={e => { e.preventDefault(); void handleSignup() }}>
           <div className="space-y-1.5">
-            <label className="text-sm font-bold">Email</label>
-            <input 
-              type="email" 
-              value={email} 
-              onChange={e => setEmail(e.target.value)} 
-              placeholder="you@email.com" 
-              className="input" 
-              autoFocus 
+            <label htmlFor="signup-email" className="text-sm font-bold">Email</label>
+            <input
+              required
+              id="signup-email"
+              type="email"
+              inputMode="email"
+              autoComplete="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder="you@email.com"
+              className="input"
+              autoFocus
             />
           </div>
           <div className="space-y-1.5">
-            <label className="text-sm font-bold">Password</label>
-            <input 
-              type="password" 
-              value={password} 
-              onChange={e => setPassword(e.target.value)} 
-              placeholder="at least 8 characters" 
-              className="input" 
+            <label htmlFor="signup-password" className="text-sm font-bold">Password</label>
+            <input
+              required
+              id="signup-password"
+              type="password"
+              autoComplete="new-password"
+              minLength={8}
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              placeholder="at least 8 characters"
+              className="input"
             />
           </div>
           <div className="space-y-1.5">
-            <label className="text-sm font-bold">Confirm password</label>
-            <input 
-              type="password" 
-              value={confirmPassword} 
-              onChange={e => setConfirmPassword(e.target.value)} 
-              placeholder="repeat password" 
-              className="input" 
-              onKeyDown={e => e.key === 'Enter' && handleSignup()} 
+            <label htmlFor="signup-confirm-password" className="text-sm font-bold">Confirm password</label>
+            <input
+              required
+              id="signup-confirm-password"
+              type="password"
+              autoComplete="new-password"
+              minLength={8}
+              value={confirmPassword}
+              onChange={e => setConfirmPassword(e.target.value)}
+              placeholder="repeat password"
+              className="input"
             />
           </div>
 
           {error && (
-            <div className="px-3 py-2 rounded-xl text-sm font-semibold" style={{ background: 'color-mix(in srgb, var(--nia-coral) 10%, transparent)', color: 'var(--nia-coral)' }}>
+            <div role="alert" aria-live="polite" className="px-3 py-2 rounded-xl text-sm font-semibold" style={{ background: 'color-mix(in srgb, var(--nia-coral) 10%, transparent)', color: 'var(--nia-coral)' }}>
               {error}
             </div>
           )}
 
-          <button 
-            onClick={handleSignup} 
-            disabled={loading || !email || !password || !confirmPassword} 
+          <button
+            type="submit"
+            disabled={loading || !email || !password || !confirmPassword}
             className="btn-primary w-full flex items-center justify-center gap-2"
           >
             {loading ? <Loader2 size={18} className="animate-spin" /> : <ArrowRight size={18} />}
             {loading ? 'Creating account…' : 'Create account'}
           </button>
-        </div>
+        </form>
 
+        <p className="text-center text-xs" style={{ color: 'var(--text-secondary)' }}>By creating an account, you agree to our <Link href="/terms" className="underline">Terms</Link> and <Link href="/community-guidelines" className="underline">Community Guidelines</Link>. Read our <Link href="/privacy" className="underline">Privacy Notice</Link>.</p>
         <p className="text-center text-sm" style={{ color: 'var(--text-secondary)' }}>
           Already on Nia?{' '}
           <Link href="/login" className="font-bold" style={{ color: 'var(--nia-violet)' }}>Sign in →</Link>

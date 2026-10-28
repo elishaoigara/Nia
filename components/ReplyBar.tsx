@@ -1,5 +1,6 @@
 'use client'
 
+import { mediaUrl } from '@/lib/media-url'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Send, Loader2, ImagePlus, Video, X, Play } from 'lucide-react'
@@ -46,6 +47,7 @@ export default function ReplyBar({ postId, currentUserId, postOwnerId, currentUs
   const [loading,   setLoading]   = useState(false)
   const [media,     setMedia]     = useState<MediaItem[]>([])
   const [error,     setError]     = useState('')
+  const [posted,    setPosted]    = useState(false)
   const [showGifs,  setShowGifs]  = useState(false)
   const [gifQuery,  setGifQuery]  = useState('')
   const [gifResults,setGifResults]= useState<GifResult[]>([])
@@ -145,7 +147,7 @@ export default function ReplyBar({ postId, currentUserId, postOwnerId, currentUs
 
   async function submit() {
     if (!canSend) return
-    setLoading(true); setError('')
+    setLoading(true); setError(''); setPosted(false)
     try {
       let media_url:   string | null = null
       let media_type:  string | null = null
@@ -185,7 +187,7 @@ export default function ReplyBar({ postId, currentUserId, postOwnerId, currentUs
       })
       if (insertErr) { setError(insertErr.message); setLoading(false); return }
 
-      // Notify post owner — skip self-comment
+      // A notification failure must not make a saved comment look unsent.
       if (postOwnerId && postOwnerId !== currentUserId) {
         await supabase.from('notifications').insert({
           user_id:  postOwnerId,
@@ -194,12 +196,13 @@ export default function ReplyBar({ postId, currentUserId, postOwnerId, currentUs
           entity_id: postId,
           message:  `${currentUserProfile?.username ?? 'Someone'} commented on your post`,
           is_read:  false,
-        })
+        }).then(() => {}, () => {})
       }
 
       media.forEach(m => { if (m.file && m.preview) URL.revokeObjectURL(m.preview) })
       setText('')
       setMedia([])
+      setPosted(true)
       if (textRef.current) textRef.current.style.height = 'auto'
       router.refresh()
     } catch (e) {
@@ -217,12 +220,7 @@ export default function ReplyBar({ postId, currentUserId, postOwnerId, currentUs
 
   return (
     <div
-      className="reply-bar reply-bar-fixed"
-      style={{
-        position: 'fixed',
-        bottom: 'var(--nav-bottom)',
-        zIndex: 40,
-      }}
+      className="reply-bar post-reply-composer"
     >
       {/* GIF picker panel */}
       {showGifs && (
@@ -243,6 +241,7 @@ export default function ReplyBar({ postId, currentUserId, postOwnerId, currentUs
         >
           <input
             type="text"
+            aria-label="Search GIFs"
             placeholder="Search GIFs…"
             value={gifQuery}
             onChange={e => setGifQuery(e.target.value)}
@@ -272,7 +271,7 @@ export default function ReplyBar({ postId, currentUserId, postOwnerId, currentUs
                     aspectRatio: '1', background: 'var(--surface-2)',
                   }}
                 >
-                  <img src={g.preview} alt="GIF"
+                  <img src={mediaUrl(g.preview)} alt="GIF"
                     style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
                 </button>
               ))}
@@ -281,9 +280,11 @@ export default function ReplyBar({ postId, currentUserId, postOwnerId, currentUs
         </div>
       )}
 
+      <p role="status" className="post-reply-status">{posted ? 'Comment posted.' : ''}</p>
+
       {/* Error */}
       {error && (
-        <div style={{ fontSize: 12, color: '#f43f5e', paddingLeft: 44, paddingBottom: 4 }}>{error}</div>
+        <div role="alert" style={{ fontSize: 12, color: '#f43f5e', paddingLeft: 44, paddingBottom: 4 }}>{error}</div>
       )}
 
       {/* Media previews */}
@@ -300,12 +301,13 @@ export default function ReplyBar({ postId, currentUserId, postOwnerId, currentUs
                   <Play size={20} fill="#fff" color="#fff" />
                 </div>
               ) : (
-                <img src={m.preview} alt="" style={{
+                <img src={mediaUrl(m.preview)} alt="" style={{
                   width: 64, height: 64, borderRadius: 10,
                   objectFit: 'cover', border: '1px solid var(--border)',
                 }} />
               )}
               <button
+                aria-label={`Remove attachment ${i + 1}`}
                 onClick={() => removeMedia(i)}
                 style={{
                   position: 'absolute', top: -4, right: -4,
@@ -323,17 +325,17 @@ export default function ReplyBar({ postId, currentUserId, postOwnerId, currentUs
       )}
 
       {/* Input row */}
-      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
+      <div className="post-reply-grid">
 
         {/* Avatar */}
-        <div style={{
+        <div className="post-reply-avatar" style={{
           width: 34, height: 34, borderRadius: '50%',
           background: 'var(--grad-brand)', flexShrink: 0,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           color: '#fff', fontWeight: 700, fontSize: 12, overflow: 'hidden',
         }}>
           {currentUserProfile?.avatar_url
-            ? <img src={currentUserProfile.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            ? <img src={mediaUrl(currentUserProfile.avatar_url)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             : initials
           }
         </div>
@@ -342,11 +344,12 @@ export default function ReplyBar({ postId, currentUserId, postOwnerId, currentUs
         <textarea
           ref={textRef}
           className="reply-input"
-          placeholder="Reply…"
+          aria-label="Write a comment"
+          placeholder="Write a comment…"
           value={text}
           rows={1}
-          onChange={e => { setText(e.target.value); autoGrow() }}
-          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit() } }}
+          onChange={e => { setText(e.target.value); setPosted(false); autoGrow() }}
+          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit() } }}
           disabled={loading}
         />
 
@@ -357,7 +360,7 @@ export default function ReplyBar({ postId, currentUserId, postOwnerId, currentUs
           onChange={e => addVideo(e.target.files)} />
 
         {/* Image */}
-        <button onClick={() => imageRef.current?.click()}
+        <button className="post-reply-image" onClick={() => imageRef.current?.click()}
           disabled={loading || imageCount >= MAX_IMAGES || hasVideo || hasGif}
           style={{
             background: 'none', border: 'none', cursor: 'pointer', padding: 4, flexShrink: 0,
@@ -370,7 +373,7 @@ export default function ReplyBar({ postId, currentUserId, postOwnerId, currentUs
         </button>
 
         {/* Video */}
-        <button onClick={() => videoRef.current?.click()}
+        <button className="post-reply-video" onClick={() => videoRef.current?.click()}
           disabled={loading || hasVideo || imageCount > 0 || hasGif}
           style={{
             background: 'none', border: 'none', cursor: 'pointer', padding: 4, flexShrink: 0,
@@ -383,7 +386,7 @@ export default function ReplyBar({ postId, currentUserId, postOwnerId, currentUs
         </button>
 
         {/* GIF */}
-        <button onClick={() => setShowGifs(p => !p)}
+        <button className="post-reply-gif" aria-expanded={showGifs} onClick={() => setShowGifs(p => !p)}
           disabled={loading || hasGif || imageCount > 0 || hasVideo}
           style={{
             background: 'none', border: 'none', cursor: 'pointer', padding: 4, flexShrink: 0,
@@ -398,7 +401,7 @@ export default function ReplyBar({ postId, currentUserId, postOwnerId, currentUs
 
         {/* Char counter */}
         {text.length > 400 && (
-          <span style={{
+          <span className="post-reply-count" style={{
             fontSize: 11, flexShrink: 0, fontWeight: 600,
             color: isOver ? '#f43f5e' : charsLeft < 50 ? '#f59e0b' : 'var(--text-tertiary)',
           }}>
@@ -408,6 +411,7 @@ export default function ReplyBar({ postId, currentUserId, postOwnerId, currentUs
 
         {/* Send */}
         <button
+          className="post-reply-send"
           onClick={submit}
           disabled={!canSend}
           aria-label="Send reply"

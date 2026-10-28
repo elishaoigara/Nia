@@ -19,7 +19,7 @@ const FULL_SELECT = `
   reactions (user_id, emoji),
   polls (id, question, options, ends_at),
   comments (
-    id, content, created_at, user_id,
+    id, post_id, parent_id, content, created_at, user_id,
     media_url, media_type, extra_media,
     profiles:user_id (id, username, avatar_url),
     likes:comment_likes (user_id)
@@ -34,7 +34,7 @@ const SAFE_SELECT = `
   likes (user_id),
   reposts (user_id),
   comments (
-    id, content, created_at, user_id,
+    id, post_id, parent_id, content, created_at, user_id,
     media_url, media_type, extra_media,
     profiles:user_id (id, username, avatar_url)
   )
@@ -88,7 +88,7 @@ export default async function PostDetailPage({ params }: Props) {
   if (!post) notFound()
 
   // Fetch current user's profile for the inline reply avatar (used by both
-  // CommentThread's inline reply boxes and the sticky ReplyBar) — fetched
+  // CommentThread's inline reply boxes and the ReplyBar) — fetched
   // once here so neither client component needs its own round trip.
   const { data: currentProfile } = await supabase
     .from('profiles')
@@ -114,8 +114,9 @@ export default async function PostDetailPage({ params }: Props) {
     (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
   )
 
+  const hasMedia = Boolean(post.media_url || post.extra_media?.length)
   return (
-    <div style={{ maxWidth: 620, margin: '0 auto', minHeight: '100vh' }}>
+    <main className={`post-detail-page${hasMedia ? ' post-detail-page--media' : ''}`}>
 
       {/* Back nav */}
       <div style={{
@@ -129,7 +130,7 @@ export default async function PostDetailPage({ params }: Props) {
         background: 'var(--surface-0)',
         zIndex: 10,
       }}>
-        <Link href="/" style={{
+        <Link href="/" aria-label="Back to home" style={{
           width: 34, height: 34,
           borderRadius: '50%',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -139,37 +140,27 @@ export default async function PostDetailPage({ params }: Props) {
         }}>
           <ArrowLeft size={18} strokeWidth={2.5} />
         </Link>
-        <span style={{ fontWeight: 800, fontSize: 16 }}>Post</span>
+        <h1 style={{ fontWeight: 800, fontSize: 16 }}>Post</h1>
+        <a className="post-jump-comments" href="#discussion-title">Jump to comments</a>
       </div>
 
-      {/* Original post */}
+      <div className="post-detail-layout">
+      <div className="post-detail-original">
       <PostCard
         post={{ ...post, viewer_is_following: viewerIsFollowing }}
         currentUserId={user.id}
-        showLine={comments.length > 0}
+        showLine={false}
       />
+      </div>
 
-      {/* Comments */}
-      {comments.length > 0 && (
-        <CommentThread
-          comments={comments}
-          currentUserId={user.id}
-          postId={post.id}
-          postOwnerId={post.user_id}
-          currentUserProfile={currentProfile ?? undefined}
-        />
-      )}
-
-      {/* Spacer so content isn't hidden behind reply bar */}
-      <div style={{ height: 80 }} />
-
-      {/* Sticky reply input */}
-      <ReplyBar
-        postId={post.id}
-        currentUserId={user.id}
-        postOwnerId={post.user_id}
-        currentUserProfile={currentProfile ?? undefined}
-      />
-    </div>
+      <section className="post-discussion" aria-labelledby="discussion-title">
+        <div className="post-discussion-heading"><h2 id="discussion-title">Comments</h2><span>{comments.length} {comments.length === 1 ? 'comment' : 'comments'}</span></div>
+        <ReplyBar postId={post.id} currentUserId={user.id} postOwnerId={post.user_id} currentUserProfile={currentProfile ?? undefined} />
+        {comments.length > 0 ? (
+          <CommentThread comments={comments} currentUserId={user.id} postId={post.id} postOwnerId={post.user_id} currentUserProfile={currentProfile ?? undefined} />
+        ) : <p className="post-discussion-empty">No comments yet. Start the conversation.</p>}
+      </section>
+      </div>
+    </main>
   )
 }

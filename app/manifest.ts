@@ -4,6 +4,8 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: 'Nia — Africa Connects Here',
     short_name: 'Nia',
+    id: '/',
+    scope: '/',
     description: 'A mobile-first, pan-African social platform.',
     start_url: '/',
     display: 'standalone',

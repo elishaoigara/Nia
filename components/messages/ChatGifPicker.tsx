@@ -1,5 +1,6 @@
 'use client'
 
+import { mediaUrl } from '@/lib/media-url'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Search, Loader2 } from 'lucide-react'
 import type { GifApiResult } from '@/types/domain'
@@ -98,7 +99,7 @@ export default function ChatGifPicker({
                 className="tap-sm"
                 style={{ border: 'none', borderRadius: 8, overflow: 'hidden', cursor: 'pointer', padding: 0, aspectRatio: '1', background: 'var(--surface-2)' }}
               >
-                <img src={gif.preview} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                <img src={mediaUrl(gif.preview)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               </button>
             ))}
           </div>

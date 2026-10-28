@@ -1,24 +1,24 @@
 import { type NextRequest } from 'next/server';
 import { updateSession } from '@/lib/supabase/middleware';
-
-const publicPaths = [
-  '/login',
-  '/signup',
-  '/forgot-password',
-  '/reset-password',
-  '/auth/callback',
-  '/api/mpesa/callback',
-];
+import { publicSupabaseEnv } from '@/lib/env';
+import { NextResponse } from 'next/server';
+import { isPublicRoute } from '@/lib/public-routes';
 
 export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
-  const isPublic = publicPaths.some(
-    (path) => pathname === path || pathname.startsWith(path + '/')
-  );
+  if (pathname === '/setup') return;
 
-  if (isPublic) {
-    return;
+  if (isPublicRoute(pathname)) {
+    if (pathname === '/' && publicSupabaseEnv.isConfigured) return updateSession(request, true);
+    return NextResponse.next();
+  }
+
+  if (!publicSupabaseEnv.isConfigured) {
+    const setupUrl = request.nextUrl.clone();
+    setupUrl.pathname = '/setup';
+    setupUrl.search = '';
+    return NextResponse.redirect(setupUrl);
   }
 
   return await updateSession(request);

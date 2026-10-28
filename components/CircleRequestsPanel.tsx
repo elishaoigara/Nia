@@ -1,5 +1,6 @@
 'use client'
 
+import { mediaUrl } from '@/lib/media-url'
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -12,9 +13,6 @@ interface RequestRow {
   profiles: { id: string; username: string; avatar_url: string | null; university?: string | null } | null
 }
 
-// Any current member can moderate — circles has no creator_id/admin role
-// today, so "whoever's already in the circle can vet who joins" is the
-// deliberately simple v1 rather than building out a roles system.
 export default function CircleRequestsPanel({ requests }: { requests: RequestRow[] }) {
   const supabase = createClient()
   const router = useRouter()
@@ -75,7 +73,7 @@ export default function CircleRequestsPanel({ requests }: { requests: RequestRow
                     fontSize: 13, flexShrink: 0,
                   }}>
                     {p?.avatar_url
-                      ? <img src={p.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ? <img src={mediaUrl(p.avatar_url)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                       : p?.username?.[0]?.toUpperCase()}
                   </div>
                   <div style={{ minWidth: 0 }}>
@@ -91,6 +89,7 @@ export default function CircleRequestsPanel({ requests }: { requests: RequestRow
                 </Link>
                 <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                   <button
+                    aria-label="Decline join request"
                     onClick={() => respond(req, false)}
                     disabled={busy}
                     className="tap-sm"
@@ -99,6 +98,7 @@ export default function CircleRequestsPanel({ requests }: { requests: RequestRow
                     {busy ? <Loader2 size={14} className="animate-spin" /> : <X size={15} />}
                   </button>
                   <button
+                    aria-label="Accept join request"
                     onClick={() => respond(req, true)}
                     disabled={busy}
                     className="tap-sm"
