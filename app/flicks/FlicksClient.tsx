@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Heart, MessageCircle, Share2, Volume2, VolumeX, Play,
   X, Send, Loader2, ImagePlus, Check, AlertCircle, RotateCcw,
-  Search, ArrowLeft, ArrowUp, ArrowDown, Pause, Hash, Bookmark, SlidersHorizontal, Plus, Languages,
+  Search, ArrowLeft, ArrowUp, ArrowDown, Hash, Bookmark, SlidersHorizontal, Plus, Languages,
 } from 'lucide-react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
@@ -14,7 +14,7 @@ import FollowButton from '@/components/FollowButton'
 import VideoPlayer from '@/components/VideoPlayer'
 import { getFlag } from '@/lib/african-data'
 import { trackEngagement } from '@/lib/analytics'
-import { VIDEO_CATEGORIES, getCategoryMeta } from '@/lib/video-categories'
+import { VIDEO_CATEGORIES } from '@/lib/video-categories'
 import type { HashtagRow, ProfileSummary } from '@/types/domain'
 
 interface NetworkInformation {
@@ -488,6 +488,7 @@ export default function NiaFlicksClient({ shorts, longs, currentUserId, circleId
   const [openDetail, setOpenDetail] = useState<FlickPost | null>(null)
   const [searchOpen, setSearchOpen] = useState(false)
   const [filterOpen, setFilterOpen] = useState(false)
+  const [hasNavigated, setHasNavigated] = useState(false)
   const [watchProgress, setWatchProgress] = useState<Record<string, number>>(() => {
     if (typeof window === 'undefined') return {}
     try {
@@ -577,6 +578,7 @@ export default function NiaFlicksClient({ shorts, longs, currentUserId, circleId
       raf = requestAnimationFrame(() => {
         const idx = Math.round(el!.scrollTop / Math.max(1, el!.clientHeight))
         currentIndex = idx
+        if (idx > 0) setHasNavigated(true)
         setActiveIdx(idx)
       })
     }
@@ -594,6 +596,7 @@ export default function NiaFlicksClient({ shorts, longs, currentUserId, circleId
     const el = containerRef.current
     if (!el) return
     const index = Math.max(0, Math.min(visibleShorts.length - 1, activeIdx + direction))
+    if (index !== activeIdx) setHasNavigated(true)
     el.scrollTo({ top: index * el.clientHeight, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' })
   }
 
@@ -673,29 +676,6 @@ export default function NiaFlicksClient({ shorts, longs, currentUserId, circleId
     </div>
   ) : null
 
-  // ── Empty state ──────────────────────────────────────────────────
-  if (shorts.length === 0 && longs.length === 0) {
-    return (
-      <div style={{ position: 'fixed', inset: 0, background: '#0D0C0B', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ textAlign: 'center', padding: '0 32px' }}>
-          <div style={{ fontSize: 52, marginBottom: 12 }}>🎬</div>
-          <p style={{ color: 'white', fontWeight: 800, fontSize: 20, marginBottom: 6 }}>No flicks yet</p>
-          <p style={{ color: 'rgba(255,255,255,0.45)', fontSize: 14, marginBottom: 24 }}>Be the first to share a flick!</p>
-          <Link
-            href="/"
-            style={{
-              display: 'inline-block', padding: '10px 28px', borderRadius: 20,
-              background: 'var(--grad-brand)', color: 'white', fontWeight: 700, fontSize: 14,
-              textDecoration: 'none',
-            }}
-          >
-            Go to feed
-          </Link>
-        </div>
-      </div>
-    )
-  }
-
   // ── Long Flicks tab ───────────────────────────────────────────────
   if (tab === 'long') {
     return (
@@ -703,6 +683,7 @@ export default function NiaFlicksClient({ shorts, longs, currentUserId, circleId
         <header className="flick-header"><div className="flick-topbar">{HomeButton}{TabToggle}{HeaderActions}</div>{DiscoveryViewBar}</header>
         <div className="flick-library-scroll"><LongFlicksGrid
           videos={visibleLongs}
+          circleIds={circleIds}
           onOpen={setOpenDetail}
           savedIds={savedIds}
           onToggleSave={toggleSaved}
@@ -744,6 +725,7 @@ export default function NiaFlicksClient({ shorts, longs, currentUserId, circleId
   // ── Flicks (shorts) tab ───────────────────────────────────────────
   return (
     <div className="flick-shell">
+      {visibleShorts[activeIdx]?.thumbnail_url && <div className="flick-backdrop" aria-hidden="true" style={{ backgroundImage: `url("${mediaUrl(visibleShorts[activeIdx].thumbnail_url ?? '')}")` }} />}
       <style>{HEART_BURST_KEYFRAMES}</style>
 
       <header className="flick-header"><div className="flick-topbar">{HomeButton}{TabToggle}{HeaderActions}</div>{DiscoveryViewBar}</header>
@@ -773,7 +755,7 @@ export default function NiaFlicksClient({ shorts, longs, currentUserId, circleId
 
       {visibleShorts.length === 0 ? (
         <div className="flick-empty">
-          <p style={{ color: 'rgba(255,255,255,0.45)', fontSize: 14 }}>No Flicks here yet — check Full videos!</p>
+          <h2>No Flicks here yet</h2><p>Explore your Circles or share a video with your community.</p><div><Link href="/circles">Explore Circles</Link><Link href="/#compose">Create a post</Link></div>
         </div>
       ) : (
         <div
@@ -812,7 +794,7 @@ export default function NiaFlicksClient({ shorts, longs, currentUserId, circleId
       )}
 
       <footer className="flick-footer">
-        <span><strong>Find your next favourite.</strong><small>Swipe up to explore</small></span>
+        <span className="flick-swipe-hint">{!hasNavigated && visibleShorts.length > 1 ? 'Swipe up for next' : 'Flicks'}</span>
         <div className="flick-step-controls">
           <span aria-live="polite">{visibleShorts.length ? activeIdx + 1 : 0} / {visibleShorts.length}</span>
           <button type="button" aria-label="Previous flick" disabled={activeIdx === 0} onClick={() => moveFlick(-1)}><ArrowUp size={18} /></button>
@@ -836,7 +818,8 @@ export default function NiaFlicksClient({ shorts, longs, currentUserId, circleId
 }
 
 // ── Long Flicks: topic grid + category chips ──────────────────────────────────
-function LongFlicksGrid({ videos, onOpen, savedIds, onToggleSave, watchProgress }: {
+function LongFlicksGrid({ videos, circleIds, onOpen, savedIds, onToggleSave, watchProgress }: {
+  circleIds: string[]
   videos: FlickPost[]
   onOpen: (v: FlickPost) => void
   savedIds: Set<string>
@@ -851,12 +834,13 @@ function LongFlicksGrid({ videos, onOpen, savedIds, onToggleSave, watchProgress 
     return acc
   }, {})
 
-  const chips = [{ id: 'all', label: 'All', emoji: '🎬' }, ...VIDEO_CATEGORIES]
-    .filter(c => c.id === 'all' || (counts[c.id] ?? 0) > 0)
+  const categories = VIDEO_CATEGORIES.filter(c => (counts[c.id] ?? 0) > 0)
+  const chips = [{ id: 'all', label: 'All', emoji: '🎬' }, ...categories]
+  const selectedCategory = chips.some(c => c.id === activeCategory) ? activeCategory : 'all'
 
-  const filtered = activeCategory === 'all'
+  const filtered = selectedCategory === 'all'
     ? videos
-    : videos.filter(v => (v.category ?? 'other') === activeCategory)
+    : videos.filter(v => (v.category ?? 'other') === selectedCategory)
   const continueWatching = videos.filter(video => {
     const progress = watchProgress[video.id] ?? 0
     return progress >= 0.03 && progress < 0.95
@@ -866,7 +850,7 @@ function LongFlicksGrid({ videos, onOpen, savedIds, onToggleSave, watchProgress 
     return (
       <div style={{ paddingTop: 120, textAlign: 'center' }}>
         <div style={{ fontSize: 40, marginBottom: 10 }}>🎞️</div>
-        <p style={{ color: 'rgba(255,255,255,0.45)', fontSize: 14 }}>No full videos yet. Share something longer!</p>
+        <h1 className="watch-empty-title">Nothing to watch here yet</h1><p className="watch-empty-copy">Explore Circles or share a longer video with your community.</p><div className="watch-empty-actions"><Link href="/circles">Explore Circles</Link><Link href="/#compose">Create a post</Link></div>
       </div>
     )
   }
@@ -892,20 +876,23 @@ function LongFlicksGrid({ videos, onOpen, savedIds, onToggleSave, watchProgress 
         </section>
       )}
 
-      {/* Category chip bar — pinned under the tab header, horizontally scrollable */}
+      {selectedCategory === 'all' && videos.some(v => v.circle_id && circleIds.includes(v.circle_id)) && (
+        <section className="full-videos-section"><div className="full-videos-section-head"><h2>From your Circles</h2></div><div className="full-videos-continue hidden-scrollbar">{videos.filter(v => v.circle_id && circleIds.includes(v.circle_id)).slice(0, 6).map(v => <div className="full-videos-continue-card" key={v.id}><LongFlickGridCard video={v} onOpen={onOpen} saved={savedIds.has(v.id)} onToggleSave={() => onToggleSave(v.id)} progress={watchProgress[v.id]} /></div>)}</div></section>
+      )}
+      {/* Category filters reflect the videos available in this view. */}
       <div
-        className="hidden-scrollbar"
+        className="hidden-scrollbar watch-categories" role="group" aria-label="Video categories"
         style={{
           display: 'flex', gap: 6, overflowX: 'auto',
           padding: '10px 14px', WebkitOverflowScrolling: 'touch',
         }}
       >
-        {chips.map(c => {
-          const active = activeCategory === c.id
+        {categories.length > 1 && chips.map(c => {
+          const active = selectedCategory === c.id
           return (
             <button
               key={c.id}
-              onClick={() => setActiveCategory(c.id)}
+              onClick={() => setActiveCategory(c.id)} aria-pressed={active}
               style={{
                 flexShrink: 0, cursor: 'pointer',
                 padding: '7px 14px', borderRadius: 16,
@@ -934,13 +921,11 @@ function LongFlicksGrid({ videos, onOpen, savedIds, onToggleSave, watchProgress 
           <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>Nothing in this topic yet.</p>
         </div>
       ) : (
-        <div style={{
-          display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: 14,
-          padding: '4px 14px 32px',
-        }}>
+        <div className="watch-grid-wrap"><h2>Recently added</h2><div className="watch-grid">
           {filtered.map(v => <LongFlickGridCard key={v.id} video={v} onOpen={onOpen} saved={savedIds.has(v.id)} onToggleSave={() => onToggleSave(v.id)} progress={watchProgress[v.id]} />)}
-        </div>
+        </div></div>
       )}
+      {videos.length < 3 && <p className="watch-more-invite">Looking for more? <Link href="/circles">Explore Circles</Link> or <Link href="/#compose">share a video</Link>.</p>}
     </div>
 
   )
@@ -970,145 +955,30 @@ function useInView<T extends HTMLElement>(rootMargin = '600px 0px') {
 function LongFlickGridCard({ video: v, onOpen, saved = false, onToggleSave, progress = 0 }: { video: FlickPost; onOpen: (v: FlickPost) => void; saved?: boolean; onToggleSave?: () => void; progress?: number }) {
   const profile = v.profiles
   const [thumbRef, inView] = useInView<HTMLDivElement>()
+  const [previewReady, setPreviewReady] = useState(false)
+  const [previewFailed, setPreviewFailed] = useState(false)
+  const { preferences } = usePreferences()
+  const title = v.content?.trim() || `Video by @${profile?.username ?? 'member'}`
 
-  return (
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={() => onOpen(v)}
-      onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onOpen(v) } }}
-      style={{
-        textAlign: 'left', border: '1px solid rgba(255,255,255,0.08)',
-        background: 'rgba(255,255,255,0.04)', borderRadius: 14,
-        cursor: 'pointer', padding: 0, overflow: 'hidden',
-        touchAction: 'manipulation', display: 'flex', flexDirection: 'column',
-        // Isolates this card's paint/layout from its siblings — without this, one
-        // card's async image/video swapping in can force the browser to repaint
-        // the whole scroll container on the next frame, which is what produces
-        // the torn/duplicated-looking rows during fast scroll on weaker GPUs.
-        contain: 'layout paint style',
-      } as React.CSSProperties}
-    >
-      {/* Thumbnail */}
-      <div ref={thumbRef} style={{ position: 'relative', width: '100%', aspectRatio: '16/9', background: '#000' }}>
-        {v.thumbnail_url ? (
-          // Static poster image — cheap to render even 30+ at once, no decoding needed.
-          // No native `loading="lazy"` here — the IntersectionObserver above already
-          // gates when this card's contents mount at all, so a second independent
-          // lazy-load timer only adds another source of layout-shift-on-scroll.
-          <img
-            src={mediaUrl(v.thumbnail_url)}
-            alt=""
-            decoding="async"
-            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-          />
-        ) : inView ? (
-          // No poster available — only mount a real <video> once this card is
-          // actually near the viewport, so we're never decoding 20+ videos at once.
-          <video
-            src={mediaUrl(v.media_url)}
-            preload="none"
-            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-            muted
-          />
-        ) : (
-          // Off-screen placeholder — no decode cost at all.
-          <div style={{ width: '100%', height: '100%', background: 'linear-gradient(160deg, #1a1816, #0d0c0b)' }} />
-        )}
-        <div style={{
-          position: 'absolute', inset: 0,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: 'rgba(0,0,0,0.15)',
-        }}>
-          {/* Solid background instead of backdrop-filter: blur() — blur is compositor-
-              expensive, and this same overlay repeats on every card in the grid.
-              At 20-30 cards on screen it was enough to make Chrome drop/tear frames
-              mid-scroll, which is what showed up as ghosted/duplicated content. */}
-          <div style={{
-            width: 32, height: 32, borderRadius: '50%',
-            background: 'rgba(15,13,12,0.65)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            border: '1px solid rgba(255,255,255,0.2)',
-          }}>
-            <Play size={14} fill="white" color="white" style={{ marginLeft: 1 }} />
-          </div>
-        </div>
-        {!!v.video_duration && (
-          <span style={{
-            position: 'absolute', bottom: 6, right: 6,
-            background: 'rgba(0,0,0,0.75)', color: 'white',
-            fontSize: 10, fontWeight: 700, padding: '1px 5px', borderRadius: 4,
-          }}>
-            {formatDuration(v.video_duration)}
-          </span>
-        )}
-        {progress > 0 && progress < 0.95 && (
-          <div className="flick-card-progress" aria-label={`${Math.round(progress * 100)}% watched`}>
-            <span style={{ width: `${Math.round(progress * 100)}%` }} />
-          </div>
-        )}
-        {/* Category badge — solid background, same reasoning as the play button above */}
-        <span style={{
-          position: 'absolute', top: 6, left: 6,
-          background: 'rgba(15,13,12,0.75)',
-          color: 'white', fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 8,
-        }}>
-          {getCategoryMeta(v.category).emoji}
-        </span>
+  return <article className="watch-card">
+    <button type="button" className="watch-card-open" onClick={() => onOpen(v)} aria-label={`Watch ${title}`}>
+      <div ref={thumbRef} className="watch-card-media">
+        <div className="watch-card-fallback" aria-hidden="true"><span>Video preview</span></div>
+        {v.thumbnail_url && !previewFailed ? <img src={mediaUrl(v.thumbnail_url)} alt="" decoding="async" onError={() => setPreviewFailed(true)} />
+          : inView && !preferences.data_saver && !previewFailed ? <video src={mediaUrl(v.media_url)} preload="metadata" muted playsInline aria-hidden="true" onLoadedData={() => setPreviewReady(true)} onError={() => setPreviewFailed(true)} style={{ opacity: previewReady ? 1 : 0 }} /> : null}
+        <span className="watch-card-play" aria-hidden="true"><Play size={15} fill="currentColor" /></span>
+        {!!v.video_duration && <span className="watch-card-duration">{formatDuration(v.video_duration)}</span>}
+        {progress > 0 && progress < 0.95 && <span className="flick-card-progress" aria-label={`${Math.round(progress * 100)}% watched`}><span style={{ width: `${Math.round(progress * 100)}%` }} /></span>}
       </div>
-
-      {/* Info */}
-      <div style={{ padding: '8px 9px', display: 'flex', gap: 7 }}>
-        {onToggleSave && <button type="button" className="flick-card-save" aria-label={saved ? 'Remove from saved Flicks' : 'Save Flick for later'} onClick={(event) => { event.stopPropagation(); onToggleSave() }}>
-          {saved ? 'Saved' : 'Save'}
-        </button>}
-        <div style={{
-          width: 24, height: 24, borderRadius: '50%', overflow: 'hidden', flexShrink: 0,
-          background: 'var(--grad-brand)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          color: 'white', fontWeight: 700, fontSize: 10,
-        }}>
-          {profile?.avatar_url
-            ? <img src={mediaUrl(profile.avatar_url)} alt="" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-            : profile?.username?.[0]?.toUpperCase() ?? '?'
-          }
-        </div>
-        <div style={{ minWidth: 0, flex: 1 }}>
-          {/* Fixed-height wrapper reserved whether or not there's a caption, so every
-              card in a row is the same height from the very first paint — a card
-              that's shorter because it has no caption is exactly the kind of layout
-              shift that produces seams/ghosting when the OS stitches a scroll-capture
-              screenshot together. */}
-          <div style={{ minHeight: 34 }}>
-            {v.content && (
-              <p style={{
-                color: 'rgba(255,255,255,0.92)', fontSize: 12.5, fontWeight: 600, margin: 0,
-                display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
-                lineHeight: 1.35,
-              } as React.CSSProperties}>
-                {v.content}
-              </p>
-            )}
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 3 }}>
-            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              @{profile?.username ?? 'unknown'}
-            </span>
-            {profile?.country && <span style={{ fontSize: 11, flexShrink: 0 }}>{getFlag(profile.country)}</span>}
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 3 }}>
-            <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.4)', display: 'flex', alignItems: 'center', gap: 2 }}>
-              <Heart size={10} /> {v.likes?.length ?? 0}
-            </span>
-            <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.4)' }}>· {timeAgo(v.created_at)}</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
+      <div className="watch-card-info"><div className="watch-card-title">{title}</div><div className="watch-card-creator">
+        <span className="watch-card-avatar">{profile?.avatar_url ? <img src={mediaUrl(profile.avatar_url)} alt="" decoding="async" /> : profile?.username?.[0]?.toUpperCase() ?? '?'}</span>
+        <span>@{profile?.username ?? 'unknown'} {profile?.country && getFlag(profile.country)}</span>
+      </div><div className="watch-card-meta">{v.post_views?.length ?? 0} views · {timeAgo(v.created_at)}</div></div>
+    </button>
+    {onToggleSave && <button type="button" className="watch-card-save" aria-pressed={saved} aria-label={saved ? 'Remove from saved videos' : 'Save video for later'} title={saved ? 'Remove from saved' : 'Save video'} onClick={onToggleSave}><Bookmark size={18} fill={saved ? 'currentColor' : 'none'} /></button>}
+  </article>
 }
 
-// ── Video search: dedicated overlay covering both Flicks and Long Flicks ──────
 function SearchOverlay({ onClose, onSelect }: { onClose: () => void; onSelect: (v: FlickPost) => void }) {
   const supabase = createClient()
   const [query, setQuery] = useState('')
@@ -1498,9 +1368,11 @@ function FlickItem({
   const [viewCount, setViewCount] = useState<number>(video.post_views?.length ?? 0)
   const [copied, setCopied] = useState(false)
   const [buffering, setBuffering] = useState(false)
+  const [frameReady, setFrameReady] = useState(false)
   const [errored, setErrored] = useState(false)
   const [showBigHeart, setShowBigHeart] = useState(false)
   const [loadTimedOut, setLoadTimedOut] = useState(false)
+  const [retryAttempt, setRetryAttempt] = useState(0)
   const [translation, setTranslation] = useState<string | null>(null)
   const [translating, setTranslating] = useState(false)
   const [translationError, setTranslationError] = useState(false)
@@ -1544,7 +1416,7 @@ function FlickItem({
   // unavailable, or incompatible with the browser. The retry action reuses the
   // same video element and preserves the low-data behavior.
   useEffect(() => {
-    if (!shouldMount || !isActive || errored) return
+    if (!shouldMount || !isActive || errored || !preferences.autoplay || preferences.data_saver) return
     const timeout = window.setTimeout(() => {
       const v = videoRef.current
       if (v && v.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
@@ -1560,7 +1432,7 @@ function FlickItem({
       }
     }, 10000)
     return () => window.clearTimeout(timeout)
-  }, [currentUserId, shouldMount, isActive, video.id, errored])
+  }, [currentUserId, shouldMount, isActive, video.id, errored, retryAttempt, preferences.autoplay, preferences.data_saver])
 
   // Sync mute
   useEffect(() => {
@@ -1622,6 +1494,7 @@ function FlickItem({
 
   function retryVideo() {
     retryCountRef.current += 1
+    setRetryAttempt(n => n + 1)
     void trackEngagement('flicks_video_retry', currentUserId, null, {
       post_id: video.id,
       retry_count: retryCountRef.current,
@@ -1693,6 +1566,7 @@ function FlickItem({
           aria-label={`Flick by @${profile?.username ?? 'unknown'}`}
           style={{
             position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain',
+            opacity: video.thumbnail_url || frameReady ? 1 : 0,
             touchAction: 'pan-y', WebkitUserSelect: 'none', userSelect: 'none',
           } as React.CSSProperties}
           loop playsInline preload={preload}
@@ -1709,18 +1583,16 @@ function FlickItem({
           onPlay={() => setPlaying(true)}
           onPause={() => setPlaying(false)}
           onPlaying={() => { setBuffering(false); setErrored(false); setLoadTimedOut(false) }}
-          onLoadedData={() => { setBuffering(false); setLoadTimedOut(false) }}
+          onLoadedData={() => { setFrameReady(true); setBuffering(false); setLoadTimedOut(false) }}
           onCanPlay={() => { setBuffering(false); setLoadTimedOut(false) }}
           onStalled={() => setBuffering(isActive)}
           onError={() => { setBuffering(false); setErrored(true) }}
-          onClick={handleTap}
         />
       ) : (
         // Lightweight placeholder for off-screen videos — no decoder, no network request
         // beyond the (already cached) poster image. This is what keeps memory sane once
         // someone's scrolled through 20+ flicks on a low-end device.
         <div
-          onClick={handleTap}
           style={{
             position: 'absolute', inset: 0,
             background: video.thumbnail_url
@@ -1740,7 +1612,7 @@ function FlickItem({
 
       {/* Buffering spinner — distinguishes "loading" from "broken" on slow connections */}
       {buffering && isActive && !errored && (
-        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+        <div role="status" aria-label="Loading video" style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
           <Loader2 size={34} className="animate-spin" style={{ color: 'rgba(255,255,255,0.85)' }} />
         </div>
       )}
@@ -1767,24 +1639,9 @@ function FlickItem({
         </div>
       )}
 
-      {/* Pause overlay */}
-      {!playing && !buffering && !errored && !loadTimedOut && (
-        <div style={{
-          position: 'absolute', inset: 0,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          pointerEvents: 'none',
-        }}>
-          <div style={{
-            width: 64, height: 64, borderRadius: '50%',
-            background: 'rgba(0,0,0,0.45)',
-            backdropFilter: 'blur(8px)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            border: '1.5px solid rgba(255,255,255,0.15)',
-          }}>
-            <Play size={26} fill="white" color="white" style={{ marginLeft: 4 }} />
-          </div>
-        </div>
-      )}
+      <button type="button" className="flick-tap-control" aria-label={playing ? 'Pause flick' : 'Play flick'} onClick={handleTap}>
+        {!playing && !buffering && !errored && !loadTimedOut && <span className="flick-center-play"><Play size={26} fill="currentColor" /></span>}
+      </button>
 
       {/* Double-tap like burst */}
       {showBigHeart && (
@@ -1815,40 +1672,23 @@ function FlickItem({
             border: '1px solid rgba(255,255,255,0.15)',
           }}>
             <VolumeX size={13} color="white" />
-            <span style={{ color: 'white', fontSize: 12, fontWeight: 600 }}>Tap for sound</span>
+            <span style={{ color: 'white', fontSize: 12, fontWeight: 600 }}>Sound off · tap the speaker</span>
           </div>
         </div>
       )}
 
-      <button type="button" className="flick-play-button" aria-label={playing ? 'Pause flick' : 'Play flick'} onClick={togglePlay}>{playing ? <Pause size={18} /> : <Play size={18} />}</button>
       <button onClick={onToggleMute} aria-label={muted ? 'Turn sound on' : 'Mute flick'} className="flick-sound-button">
         {muted ? <VolumeX size={18} /> : <Volume2 size={18} />}
       </button>
 
       {/* ── Right action rail ───────────────────────────── */}
       <div className="flick-action-rail">
-        {/* Avatar */}
-        <Link href={`/profile/${profile?.id}`} style={{ display: 'block' }}>
-          <div style={{
-            width: 42, height: 42, borderRadius: '50%', overflow: 'hidden',
-            border: '2px solid white',
-            background: 'var(--grad-brand)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: 'white', fontWeight: 700, fontSize: 14,
-          }}>
-            {profile?.avatar_url
-              ? <img src={mediaUrl(profile.avatar_url)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-              : profile?.username?.[0]?.toUpperCase() ?? '?'
-            }
-          </div>
-        </Link>
-
         {/* Like */}
         <ActionBtn
           onClick={toggleLike}
           ariaLabel={` ${liked ? 'Unlike' : 'Like'} flick by @${profile?.username ?? 'member'}`}
           icon={<Heart size={22} fill={liked ? '#ff4d6d' : 'none'} color={liked ? '#ff4d6d' : 'white'} strokeWidth={1.8} />}
-          label={likeCount > 0 ? String(likeCount) : ''}
+          label={String(likeCount)}
           active={liked}
         />
 
@@ -1857,7 +1697,7 @@ function FlickItem({
           onClick={() => onOpenComments(video.id, commentCount)}
           ariaLabel={`Open comments for @${profile?.username ?? 'member'}`}
           icon={<MessageCircle size={22} color="white" strokeWidth={1.8} />}
-          label={commentCount > 0 ? String(commentCount) : ''}
+          label={String(commentCount)}
         />
 
         {/* Save */}
@@ -1883,6 +1723,7 @@ function FlickItem({
       <div className="flick-info">
         <div className="flick-creator-row">
           <Link href={`/profile/${profile?.id}`} className="flick-creator-link">
+            <span className="flick-creator-avatar">{profile?.avatar_url ? <img src={mediaUrl(profile.avatar_url)} alt="" /> : profile?.username?.[0]?.toUpperCase() ?? '?'}</span>
             <span>@{profile?.username ?? 'unknown'}</span>
             {profile?.country && <span>{getFlag(profile.country)}</span>}
           </Link>
@@ -1902,7 +1743,7 @@ function FlickItem({
             overflow: 'hidden', textShadow: '0 1px 4px rgba(0,0,0,0.6)',
             margin: 0, maxHeight: captionExpanded ? '20vh' : undefined, overflowY: captionExpanded ? 'auto' : undefined,
           } as React.CSSProperties}>
-            {translation ?? video.content}{!captionExpanded && !translation ? '  more' : ''}
+            {translation ?? video.content}{!captionExpanded && !translation && video.content.length > 90 ? '  more' : ''}
           </button>
         )}
         <div className="flick-meta-row">
@@ -1947,6 +1788,7 @@ function ActionBtn({
     <button
       onClick={onClick}
       aria-label={ariaLabel ?? label}
+      aria-pressed={active === undefined ? undefined : active}
       style={{
         display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
         border: 'none', background: 'none', cursor: 'pointer',
