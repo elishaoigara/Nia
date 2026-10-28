@@ -61,7 +61,7 @@ test('long captions and main app screens fit the viewport', async ({ page }, tes
 test('Watch player fits, seeks, and opens comments above the video', async ({ page }, testInfo) => {
   await page.goto('/?screen=flicks')
   await page.getByRole('button', { name: 'Watch', exact: true }).click()
-  await page.locator('.flick-library-scroll [role=button]').first().click()
+  await page.locator('.flick-library-scroll .watch-card-open').first().click()
   const dialog = page.getByRole('dialog', { name: 'Watch video', exact: true })
   await expect(dialog).toBeVisible()
   await dialog.locator('.nia-video-controls').getByRole('button', { name: 'Play video', exact: true }).click()
@@ -96,4 +96,15 @@ test('touch swiping advances to the next Flick', async ({ page, isMobile }) => {
   }
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
   await expect(page.locator('.flick-slide').nth(1)).toHaveAttribute('data-active', 'true')
+})
+
+
+test('Watch cards expose clear titles and separate save controls', async ({ page }) => {
+  await page.goto('/?screen=flicks')
+  await page.getByRole('button', { name: 'Watch', exact: true }).click()
+  const card = page.locator('.watch-card').first()
+  await expect(card.locator('.watch-card-title')).not.toBeEmpty()
+  await expect(card.getByRole('button', { name: 'Save video for later' })).toBeVisible()
+  await expect(card.locator('.watch-card-open')).toBeVisible()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
 })
