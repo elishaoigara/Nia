@@ -1,43 +1,55 @@
 'use client'
-import { useCallback,useEffect,useRef,useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
+import { Plus, Search, Settings } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { usePreferences } from '@/components/PreferencesProvider'
-type Conversation={other_id:string;content:string|null;created_at:string;is_read:boolean;sender_id:string;username:string;request:boolean}
-export default function Messages(){
- const {t}=usePreferences(),[rows,setRows]=useState<Conversation[]>([]),[more,setMore]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(''),[tab,setTab]=useState('all')
- const cursor=useRef<{time:string;id:string}|null>(null),pending=useRef(false)
- const load=useCallback(async(reset=false)=>{
-  if(pending.current)return;pending.current=true;setBusy(true);setError('')
-  try{
-   const s=createClient(),{data:{user}}=await s.auth.getUser();if(!user)throw Error('Sign in again.')
-   const before=reset?null:cursor.current
-   const {data,error}=await s.rpc('conversation_page',{before_time:before?.time??null,before_user:before?.id??null,page_size:20});if(error)throw error
-   const {data:requests,error:requestError}=await s.from('message_requests').select('other_id,status').eq('user_id',user.id);if(requestError)throw requestError
-   const status=new Map((requests??[]).map(r=>[r.other_id,r.status]))
-   const incoming=await Promise.all((data??[]).map(async(row:Omit<Conversation,'username'|'request'>)=>{
-    const {data:card}=await s.rpc('profile_card',{target_user:row.other_id})
-    return {...row,username:card?.[0]?.username??'Unavailable account',request:status.get(row.other_id)==='pending'}
+import { mediaUrl } from '@/lib/media-url'
+type Conversation = { other_id: string; content: string | null; created_at: string; sender_id: string; media_type: string | null; username: string; fullName: string | null; avatar: string | null; request: boolean; unread: boolean }
+export default function Messages({ embedded = false, selectedId }: { embedded?: boolean; selectedId?: string } = {}) {
+ const { t } = usePreferences()
+ const [rows, setRows] = useState<Conversation[]>([]), [more, setMore] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState(''), [tab, setTab] = useState<'all' | 'requests'>('all'), [search, setSearch] = useState(''), [requestCount, setRequestCount] = useState(0)
+ const cursor = useRef<{time:string;id:string}|null>(null), pending = useRef(false)
+ const load = useCallback(async (reset = false) => {
+  if (pending.current) return; pending.current = true; setBusy(true); setError('')
+  try {
+   const s = createClient(), {data:{user}} = await s.auth.getUser(); if (!user) throw Error('Sign in again.')
+   const before = reset ? null : cursor.current
+   const {data, error} = await s.rpc('conversation_page',{before_time:before?.time??null,before_user:before?.id??null,page_size:20}); if (error) throw error
+   const {data:requests, error:requestError} = await s.from('message_requests').select('other_id,status').eq('user_id',user.id); if (requestError) throw requestError
+   const status = new Map((requests??[]).map(r=>[r.other_id,r.status])); setRequestCount((requests??[]).filter(r=>r.status==='pending').length)
+   const incoming = await Promise.all((data??[]).map(async row => {
+    const [{data:card}, {data:profile}] = await Promise.all([s.rpc('profile_card',{target_user:row.other_id}), s.from('profiles').select('full_name').eq('id',row.other_id).maybeSingle()])
+    return {...row,username:card?.[0]?.username??'Unavailable account',avatar:card?.[0]?.avatar_url??null,fullName:profile?.full_name??null,request:status.get(row.other_id)==='pending',unread:false}
    }))
-   const visible=incoming.filter(r=>status.get(r.other_id)!=='declined')
+   const ids = incoming.map(r => r.other_id)
+   if (ids.length) {
+    const {data:received,error:receivedError} = await s.from('messages').select('id,sender_id').eq('recipient_id',user.id).in('sender_id',ids).is('deleted_at',null)
+    if (!receivedError && received?.length) {
+     const {data:seen,error:seenError} = await s.from('message_read_states').select('message_id').eq('user_id',user.id).in('message_id',received.map(m=>m.id))
+     if (!seenError) { const read = new Set((seen??[]).map(x=>x.message_id)); const unread = new Set(received.filter(m=>!read.has(m.id)).map(m=>m.sender_id)); incoming.forEach(r=>{r.unread=unread.has(r.other_id)}) }
+    }
+   }
+   const visible = incoming.filter(r=>status.get(r.other_id)!=='declined')
    setRows(old=>reset?visible:[...old,...visible.filter(r=>!old.some(o=>o.other_id===r.other_id))]);setMore(incoming.length===20)
-   const last=incoming.at(-1);if(last)cursor.current={time:last.created_at,id:last.other_id}
-  }catch{setError('Messages could not be loaded. Please retry.')}finally{setBusy(false);pending.current=false}
+   const last=incoming.at(-1);cursor.current=last?{time:last.created_at,id:last.other_id}:null
+  } catch { setError('Messages could not be loaded. Please retry.') } finally { setBusy(false);pending.current=false }
  },[])
- useEffect(()=>{const timer=setTimeout(()=>void load(true),0);const s=createClient();let channel:ReturnType<typeof s.channel>|undefined;void s.auth.getUser().then(({data:{user}})=>{if(user)channel=s.channel(`inbox-${user.id}`).on('postgres_changes',{event:'INSERT',schema:'public',table:'messages',filter:`recipient_id=eq.${user.id}`},()=>void load(true)).subscribe()});return()=>{clearTimeout(timer);if(channel)void s.removeChannel(channel)}},[load])
- async function respond(other:string,accept:boolean){
-  const s=createClient(),{data:{user}}=await s.auth.getUser();if(!user)return
-  const {error}=await s.from('message_requests').update({status:accept?'accepted':'declined'}).match({user_id:user.id,other_id:other});if(error)setError('Request could not be updated. Please retry.');else void load(true)
- }
- const visibleRows=rows.filter(r=>tab==='all'||r.request)
- return <main className="inbox-page">
- <header className="inbox-heading"><div><span className="inbox-eyebrow">Your people, closer</span><h1>{t('Messages')}</h1><p>Pick up where you left off.</p></div></header>
- <nav className="inbox-filters" aria-label="Message filters"><button aria-pressed={tab==='all'} onClick={()=>setTab('all')}>All conversations</button><button aria-pressed={tab==='requests'} onClick={()=>setTab('requests')}>Requests</button><Link href="/settings">Privacy</Link></nav>
- {visibleRows.map(r=><article key={r.other_id} className="inbox-conversation"><Link href={`/messages/${r.other_id}`}>
- <span className="inbox-avatar" aria-hidden="true">{r.username.slice(0,1).toUpperCase()}</span>
- <div className="inbox-copy"><strong>@{r.username}</strong><p>{r.content??'Attachment'}</p></div>
- <time dateTime={r.created_at} title={new Date(r.created_at).toLocaleString()}>{new Date(r.created_at).toLocaleDateString(undefined,{month:'short',day:'numeric'})}</time>
- </Link>{r.request&&<div className="inbox-request-actions"><button className="btn-primary" onClick={()=>respond(r.other_id,true)}>Accept request</button><button className="btn-ghost" onClick={()=>respond(r.other_id,false)}>Decline</button></div>}</article>)}
- {!busy&&!visibleRows.length&&!error&&<p>{tab==='requests'?'No message requests. You’re all caught up.':'No conversations yet. Open a member’s profile to say hello.'}</p>}{error&&<p role="alert">{error}</p>}{(more||error)&&<button className="btn-ghost" disabled={busy} onClick={()=>load(!!error)}>{error?'Retry':t('Load more')}</button>}{busy&&<p role="status">Loading conversations…</p>}
- </main>
+ useEffect(()=>{const timer=setTimeout(()=>void load(true),0);const onRead=()=>void load(true);window.addEventListener('nia:messages-read',onRead);const s=createClient();let channel:ReturnType<typeof s.channel>|undefined;void s.auth.getUser().then(({data:{user}})=>{if(user)channel=s.channel(`inbox-${user.id}`).on('postgres_changes',{event:'INSERT',schema:'public',table:'messages',filter:`recipient_id=eq.${user.id}`},()=>void load(true)).subscribe()});return()=>{clearTimeout(timer);window.removeEventListener('nia:messages-read',onRead);if(channel)void s.removeChannel(channel)}},[load,selectedId])
+ async function respond(other:string,accept:boolean){const s=createClient(),{data:{user}}=await s.auth.getUser();if(!user)return;const {error}=await s.from('message_requests').update({status:accept?'accepted':'declined'}).match({user_id:user.id,other_id:other});if(error)setError('Request could not be updated. Please retry.');else void load(true)}
+ const term=search.trim().toLocaleLowerCase()
+ const visibleRows=rows.filter(r=>(tab==='all'||r.request)&&(!term||`${r.username} ${r.fullName??''} ${r.content??''}`.toLocaleLowerCase().includes(term)))
+ return <div className={embedded ? 'inbox-embedded-wrap' : 'inbox-landing-layout'}><main className={`inbox-page${embedded?' inbox-page--embedded':''}`} aria-label="Conversations">
+  <header className="inbox-heading"><div><h1>{t('Messages')}</h1><p>Pick up where you left off.</p></div><div className="inbox-header-actions"><Link href="/settings" aria-label="Message privacy settings" title="Privacy settings"><Settings size={19}/></Link><Link href="/explore?type=people" aria-label="Start a new message" title="Find someone to message"><Plus size={20}/></Link></div></header>
+  <div className="inbox-search"><Search size={18} aria-hidden="true"/><input type="search" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search conversations" aria-label="Search loaded conversations"/></div>
+  <nav className="inbox-filters" aria-label="Message filters"><button aria-pressed={tab==='all'} onClick={()=>setTab('all')}>All</button><button aria-pressed={tab==='requests'} onClick={()=>setTab('requests')}>Requests{requestCount>0&&<span className="inbox-request-count">{requestCount}</span>}</button></nav>
+  {visibleRows.map(r=><article key={r.other_id} className={`inbox-conversation${r.unread?' is-unread':''}${r.other_id===selectedId?' is-selected':''}`}><Link href={`/messages/${r.other_id}`} aria-current={r.other_id===selectedId?'page':undefined}>
+   <span className="inbox-avatar" aria-hidden="true">{r.avatar?<img src={mediaUrl(r.avatar)} alt=""/>:r.username.slice(0,1).toUpperCase()}</span>
+   <div className="inbox-copy"><strong>{r.fullName||`@${r.username}`}</strong>{r.fullName&&<span className="inbox-handle">@{r.username}</span>}<p>{r.content || (r.media_type==='audio'?'Voice message':r.media_type==='image'?'Photo':r.media_type==='video'?'Video':r.media_type?'Attachment':'Message')}</p></div>
+   <div className="inbox-meta"><time dateTime={r.created_at} title={new Date(r.created_at).toLocaleString()}>{new Date(r.created_at).toLocaleDateString(undefined,{month:'short',day:'numeric'})}</time>{r.unread&&<span className="inbox-unread" aria-label="Unread messages"/>}</div>
+  </Link>{r.request&&<div className="inbox-request-actions"><button className="btn-primary" onClick={()=>respond(r.other_id,true)}>Accept request</button><button className="btn-ghost" onClick={()=>respond(r.other_id,false)}>Decline</button></div>}</article>)}
+  {!busy&&!visibleRows.length&&!error&&<div className="inbox-empty"><p>{term?'No loaded conversations match your search.':tab==='requests'?'No message requests. You’re all caught up.':'No conversations yet. Find someone to start a conversation.'}</p>{!term&&tab==='all'&&<Link href="/explore?type=people">Discover people →</Link>}</div>}
+  {term&&more&&<p className="inbox-search-note">Search covers loaded conversations. Load more to search further.</p>}
+  {error&&<p role="alert">{error}</p>}{(more||error)&&<button className="btn-ghost" disabled={busy} onClick={()=>load(!!error)}>{error?'Retry':t('Load more')}</button>}{busy&&<p role="status">Loading conversations…</p>}
+ </main>{!embedded&&<aside className="inbox-desktop-empty"><div><h2>Your conversations</h2><p>Choose a conversation to read and reply, or find someone new to message.</p><Link href="/explore?type=people">Discover people</Link></div></aside>}</div>
 }
