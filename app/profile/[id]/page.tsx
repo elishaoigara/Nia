@@ -13,7 +13,7 @@ import ReportSheet from '@/components/ReportSheet'
 import {
   ArrowLeft, MapPin, Calendar, Pencil, Settings,
   Grid3x3, MessageCircle, Bookmark,
-  Loader2, Link as LinkIcon, Globe, Languages,
+  Loader2, Link as LinkIcon, Languages,
   MoreHorizontal, Flag, VolumeX, UserX,
 } from 'lucide-react'
 import { getFlag } from '@/lib/african-data'
@@ -462,7 +462,7 @@ export default function ProfilePage() {
 
 
   return (
-    <div style={{ maxWidth: 640, margin: '0 auto', minHeight: '100vh' }}>
+    <main className="profile-page" style={{ maxWidth: 640, margin: '0 auto', minHeight: '100vh' }}>
 
       {/* ── Sticky top bar ── */}
       <div style={{
@@ -472,7 +472,7 @@ export default function ProfilePage() {
         background: 'var(--surface-0)',
         zIndex: 20, borderBottom: '1px solid var(--divider)',
       }}>
-        <button onClick={() => router.back()} style={{
+        <button aria-label="Go back" onClick={() => router.back()} style={{
           width: 34, height: 34, borderRadius: '50%', border: 'none',
           background: 'var(--surface-2)', cursor: 'pointer',
           color: 'var(--text-primary)',
@@ -515,8 +515,7 @@ export default function ProfilePage() {
 
       {/* ── Banner ── */}
       <div style={{ position: 'relative' }}>
-        <div style={{
-          height: 190,
+        <div className="profile-banner" style={{
           background: bannerStyle,
           position: 'relative',
         }}>
@@ -541,13 +540,13 @@ export default function ProfilePage() {
 
         {/* ── Avatar ── */}
         <div style={{
-          position: 'absolute', bottom: -44, left: '50%',
+          position: 'absolute', bottom: -36, left: '50%',
           transform: 'translateX(-50%)',
           display: 'flex', flexDirection: 'column', alignItems: 'center',
           zIndex: 2,
         }}>
           <div style={{
-            width: 108, height: 108, borderRadius: '50%',
+            width: 88, height: 88, borderRadius: '50%',
             padding: hasActiveStory ? 3 : 0,
             background: hasActiveStory
               ? (storyUnseen ? 'var(--grad-brand)' : 'var(--surface-3)')
@@ -590,7 +589,7 @@ export default function ProfilePage() {
       {/* ── Profile info card ── */}
       <div style={{
         display: 'flex', flexDirection: 'column', alignItems: 'center',
-        paddingTop: 56, paddingBottom: 4, paddingLeft: 16, paddingRight: 16,
+        paddingTop: 44, paddingBottom: 4, paddingLeft: 16, paddingRight: 16,
       }}>
         {/* Name — heavy weight */}
         <h1 style={{ fontWeight: 900, fontSize: 22, margin: '0 0 2px', textAlign: 'center', letterSpacing: '-0.3px' }}>
@@ -604,7 +603,7 @@ export default function ProfilePage() {
 
         {/* Role / headline — medium weight */}
         {profile.headline && (
-          <p style={{ fontWeight: 500, fontSize: 13, color: 'var(--text-secondary)', margin: '0 0 12px', textAlign: 'center' }}>
+          <p style={{ fontWeight: 500, fontSize: 13, color: 'var(--text-secondary)', margin: '0 0 6px', textAlign: 'center' }}>
             {profile.headline}
           </p>
         )}
@@ -653,7 +652,7 @@ export default function ProfilePage() {
         {profile.bio && (
           <p style={{
             fontSize: 14, lineHeight: 1.65, color: 'var(--text-primary)',
-            textAlign: 'center', maxWidth: 400, margin: '0 0 16px', fontWeight: 400,
+            textAlign: 'center', maxWidth: 480, margin: '0 0 10px', fontWeight: 400,
           }}>
             {profile.bio}
           </p>
@@ -661,7 +660,7 @@ export default function ProfilePage() {
 
         {/* Purpose goals */}
         {goals.length > 0 && (
-          <div style={{ width: '100%', maxWidth: 400, marginBottom: 16, padding: '14px 16px', borderRadius: 16, background: 'var(--surface-1)', border: '1px solid var(--border)' }}>
+          <div style={{ width: '100%', maxWidth: 400, marginBottom: 10, padding: '10px 12px', borderRadius: 16, background: 'var(--surface-1)', border: '1px solid var(--border)' }}>
             <p style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.7px', margin: '0 0 8px' }}>Here to</p>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
               {goals.map(goal => (
@@ -675,7 +674,7 @@ export default function ProfilePage() {
 
         {/* Interest tags */}
         {tags.length > 0 && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'center', marginBottom: 16 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'center', marginBottom: 10 }}>
             {tags.map(tag => (
               <span key={tag} style={{
                 fontSize: 12, fontWeight: 600, padding: '4px 10px',
@@ -691,7 +690,7 @@ export default function ProfilePage() {
         )}
 
         {/* Meta pills */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 6, marginBottom: 20 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 6, marginBottom: 12 }}>
           {(profile.city || profile.country) && (
             <span style={{
               display: 'inline-flex', alignItems: 'center', gap: 5,
@@ -723,7 +722,7 @@ export default function ProfilePage() {
               color: 'var(--nia-violet)',
               background: 'rgba(91,33,182,0.07)',
               border: '1px solid rgba(91,33,182,0.12)',
-              borderRadius: 20, padding: '4px 10px',
+              borderRadius: 20, padding: '4px 10px', maxWidth: '100%', overflowWrap: 'anywhere',
               textDecoration: 'none',
             }}>
               <LinkIcon size={11} />
@@ -731,7 +730,7 @@ export default function ProfilePage() {
             </a>
           )}
           {/* Languages */}
-          {profile.languages && (
+          {profile.languages && (Array.isArray(profile.languages) ? profile.languages.length > 0 : Boolean(profile.languages)) && (
             <span style={{
               display: 'inline-flex', alignItems: 'center', gap: 5,
               fontSize: 12, fontWeight: 500,
@@ -754,7 +753,7 @@ export default function ProfilePage() {
           backdropFilter: 'blur(12px)',
           WebkitBackdropFilter: 'blur(12px)',
           overflow: 'hidden',
-          marginBottom: 20,
+          marginBottom: 12,
           boxShadow: '0 2px 20px rgba(0,0,0,0.06)',
         }}>
           {[
@@ -763,7 +762,7 @@ export default function ProfilePage() {
             { label: 'Followers', value: followerCount },
           ].map((stat, i) => (
             <div key={stat.label} style={{
-              flex: 1, textAlign: 'center', padding: '14px 8px',
+              flex: 1, textAlign: 'center', padding: '10px 8px',
               borderRight: i < 2 ? '1px solid var(--divider)' : 'none',
             }}>
               <div style={{ fontWeight: 800, fontSize: 22, lineHeight: 1, letterSpacing: '-0.5px' }}>
@@ -779,72 +778,10 @@ export default function ProfilePage() {
           ))}
         </div>
 
-        {/* ── African identity card ── */}
-        {(profile.country || profile.languages) && (
-          <div style={{
-            width: '100%', maxWidth: 380,
-            borderRadius: 16,
-            background: 'var(--surface-1)',
-            border: '1px solid var(--divider)',
-            padding: '14px 16px',
-            marginBottom: 20,
-          }}>
-            <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.7px', margin: '0 0 10px' }}>
-              Identity
-            </p>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-              {profile.country && (
-                <div style={{
-                  display: 'flex', alignItems: 'center', gap: 6,
-                  background: 'var(--surface-2)', borderRadius: 10, padding: '6px 10px',
-                }}>
-                  <span style={{ fontSize: 18 }}>{countryFlag ?? '🌍'}</span>
-                  <span style={{ fontSize: 13, fontWeight: 600 }}>{profile.country}</span>
-                </div>
-              )}
-              {profile.city && (
-                <div style={{
-                  display: 'flex', alignItems: 'center', gap: 6,
-                  background: 'var(--surface-2)', borderRadius: 10, padding: '6px 10px',
-                }}>
-                  <MapPin size={13} color="var(--text-tertiary)" />
-                  <span style={{ fontSize: 13, fontWeight: 600 }}>{profile.city}</span>
-                </div>
-              )}
-              {profile.languages && (
-                (Array.isArray(profile.languages) ? profile.languages : [profile.languages]).map((lang: string) => (
-                  <div key={lang} style={{
-                    display: 'flex', alignItems: 'center', gap: 6,
-                    background: 'var(--surface-2)', borderRadius: 10, padding: '6px 10px',
-                  }}>
-                    <Globe size={13} color="var(--text-tertiary)" />
-                    <span style={{ fontSize: 13, fontWeight: 600 }}>{lang}</span>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        )}
-
         {/* ── Profile strength (owner only) ── */}
         {isOwner && strength.score < 100 && (
-          <div style={{
-            width: '100%', maxWidth: 380,
-            borderRadius: 16,
-            background: 'var(--surface-1)',
-            border: '1px solid var(--divider)',
-            padding: '14px 16px',
-            marginBottom: 20,
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <p style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>Profile strength</p>
-              <span style={{
-                fontSize: 12, fontWeight: 800,
-                color: strength.score >= 80 ? '#22c55e' : strength.score >= 50 ? '#f59e0b' : 'var(--nia-violet)',
-              }}>
-                {strength.score}%
-              </span>
-            </div>
+          <details className="profile-strength">
+            <summary><span>Profile completeness</span><strong>{strength.score}%</strong></summary>
             {/* Progress bar */}
             <div style={{ height: 6, borderRadius: 6, background: 'var(--surface-3)', overflow: 'hidden', marginBottom: 10 }}>
               <div style={{
@@ -868,18 +805,16 @@ export default function ProfilePage() {
                 ))}
               </div>
             )}
-          </div>
+          </details>
         )}
       </div>
 
-      <CreatorProfile key={id} userId={id} isOwner={isOwner} />
-
       {/* ── Tabs ── */}
-      <div style={{
+      <nav aria-label="Profile content" style={{
         display: 'flex',
         borderBottom: '1px solid var(--divider)',
         position: 'sticky',
-        top: 'calc(var(--nav-top) + 51px)',
+        top: 'calc(var(--nav-top) + 60px)',
         background: 'var(--surface-0)',
         zIndex: 9,
       }}>
@@ -888,7 +823,7 @@ export default function ProfilePage() {
           { key: 'replies', icon: <MessageCircle size={14} />, label: 'Replies' },
           ...(isOwner ? [{ key: 'saved', icon: <Bookmark size={14} />, label: 'Saved' }] : []),
         ]) as { key: Tab; icon: React.ReactNode; label: string }[]).map(t => (
-          <button key={t.key} onClick={() => handleTabChange(t.key)} style={{
+          <button key={t.key} aria-pressed={tab === t.key} onClick={() => handleTabChange(t.key)} style={{
             flex: 1, padding: '13px 8px',
             border: 'none', background: 'none', cursor: 'pointer',
             fontWeight: tab === t.key ? 700 : 500, fontSize: 13,
@@ -900,7 +835,9 @@ export default function ProfilePage() {
             {t.icon}{t.label}
           </button>
         ))}
-      </div>
+      </nav>
+
+      {tab === 'posts' && <CreatorProfile key={id} userId={id} isOwner={isOwner} />}
 
       {/* ── Tab content ── */}
       {tabLoading ? (
@@ -966,7 +903,7 @@ export default function ProfilePage() {
           onSubmit={reportProfile}
         />
       )}
-    </div>
+    </main>
   )
 }
 
