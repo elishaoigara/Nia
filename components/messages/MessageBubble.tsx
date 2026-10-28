@@ -4,7 +4,7 @@ import { mediaUrl } from '@/lib/media-url'
 import { useRef, useState } from 'react'
 import Link from 'next/link'
 import {
-  File as FileIcon, Play, Pause, Eye, Reply, Check, CheckCheck, Loader2,
+  File as FileIcon, Play, Pause, Eye, Reply, Check, CheckCheck, Loader2, MoreHorizontal,
 } from 'lucide-react'
 
 export type ChatMessage = {
@@ -28,11 +28,7 @@ export type ChatMessage = {
 type Profile = { id: string; username: string; avatar_url: string | null; full_name: string | null }
 
 function timeAgo(date: string) {
-  const s = Math.floor((Date.now() - new Date(date).getTime()) / 1000)
-  if (s < 60) return `${s}s`
-  if (s < 3600) return `${Math.floor(s / 60)}m`
-  if (s < 86400) return `${Math.floor(s / 3600)}h`
-  return new Date(date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+  return new Date(date).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
 }
 
 // Deterministic pseudo-random bar heights per message, so the same voice
@@ -61,7 +57,7 @@ export default function MessageBubble({
   isViewOnceRevealed, onRevealViewOnce,
   isGroupedWithNext = false,
   playingAudio, audioProgress, audioDuration, onToggleAudio, onSeekAudio,
-  onSwipeReply, onLongPress, onDoubleTapReact,
+  onSwipeReply, onLongPress, onDoubleTapReact, onJumpReply,
 }: {
   msg: ChatMessage
   isOwn: boolean
@@ -82,6 +78,7 @@ export default function MessageBubble({
   onSwipeReply: (msg: ChatMessage) => void
   onLongPress: (msg: ChatMessage) => void
   onDoubleTapReact: (msg: ChatMessage) => void
+  onJumpReply: (id: string) => void
 }) {
   const isTemp = msg.id.startsWith('temp-')
   const isUploading = isTemp && !!msg.media_url?.startsWith('blob:')
@@ -168,7 +165,7 @@ export default function MessageBubble({
   return (
     <div
       style={{ display: 'flex', justifyContent: isOwn ? 'flex-end' : 'flex-start', marginBottom: hasReactions ? 14 : (isGroupedWithNext ? 2 : 6), alignItems: 'flex-end', gap: 6, position: 'relative' }}
-      className="group"
+      className="group message-row"
     >
       {/* Swipe-reveal reply icon */}
       {dragging && (
@@ -209,6 +206,7 @@ export default function MessageBubble({
       )}
 
       <div
+        className="message-bubble-group"
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
@@ -220,30 +218,21 @@ export default function MessageBubble({
           touchAction: 'pan-y',
         }}
       >
-        <button type="button" className="btn-ghost" aria-label="Message actions: reply, react or report" onClick={()=>onLongPress(msg)}>Message actions</button>
         {msg.reply_to && replyMsg && (
-          <div style={{ fontSize: 12, padding: '6px 10px', borderRadius: 10, background: 'var(--surface-3)', borderLeft: '3px solid var(--nia-violet)', maxWidth: '100%', opacity: 0.75 }}>
+          <button type="button" onClick={() => onJumpReply(replyMsg.id)} aria-label="Go to original message" style={{ textAlign: 'left', cursor: 'pointer', fontSize: 12, padding: '6px 10px', borderRadius: 10, background: 'var(--surface-3)', border: 0, borderLeft: '3px solid var(--nia-violet)', maxWidth: '100%' }}>
             <p style={{ fontWeight: 700, color: 'var(--nia-violet)', margin: '0 0 2px' }}>
               {replyMsg.sender_id === currentUserId ? 'You' : `@${recipient?.username}`}
             </p>
             <p style={{ color: 'var(--text-secondary)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {replyMsg.deleted_at ? 'Message unsent' : (replyMsg.content ?? replyMsg.file_name ?? 'Media')}
             </p>
-          </div>
+          </button>
         )}
 
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6 }}>
-          {!isOwn && (
-            <button
-              onClick={() => onSwipeReply(msg)}
-              className="opacity-0 group-hover:opacity-100 tap-sm"
-              style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: 'var(--surface-2)', color: 'var(--text-tertiary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'opacity 0.15s', flexShrink: 0 }}
-            >
-              <Reply size={13} />
-            </button>
-          )}
+          {isOwn && !isTemp && <button type="button" className="message-actions-toggle" aria-label="Message actions" onClick={() => onLongPress(msg)}><MoreHorizontal size={18}/></button>}
 
-          <div style={{ position: 'relative' }}>
+          <div className="message-bubble-body" style={{ position: 'relative' }}>
             <div
               style={{
                 borderRadius: 18, overflow: 'hidden', position: 'relative',
@@ -312,7 +301,7 @@ export default function MessageBubble({
                 </a>
               )}
 
-              {msg.content && (
+              {msg.content && !(msg.media_type === 'audio' && msg.content === 'Voice message') && (
                 <p style={{ padding: '8px 12px', fontSize: 14.5, lineHeight: 1.45, margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{msg.content}</p>
               )}
 
@@ -323,10 +312,10 @@ export default function MessageBubble({
                   {!isGroupedWithNext && <span style={{ fontSize: 10, opacity: 0.55 }}>{timeAgo(msg.created_at)}</span>}
                   {isOwn && !isGroupedWithNext && (
                     isTemp
-                      ? <Check size={11} style={{ opacity: 0.4 }} />
+                      ? <span aria-label="Sending" title="Sending"><Loader2 size={11} className="animate-spin" /></span>
                       : msg.is_read
-                        ? <CheckCheck size={11} color={isOwn ? 'rgba(255,255,255,0.8)' : 'var(--nia-violet)'} />
-                        : <Check size={11} style={{ opacity: 0.55 }} />
+                        ? <span aria-label="Read" title="Read"><CheckCheck size={11} color="rgba(255,255,255,0.9)" /></span>
+                        : <span aria-label="Sent" title="Sent"><Check size={11} style={{ opacity: 0.75 }} /></span>
                   )}
                 </div>
               )}
@@ -350,15 +339,8 @@ export default function MessageBubble({
             )}
           </div>
 
-          {isOwn && (
-            <button
-              onClick={() => onSwipeReply(msg)}
-              className="opacity-0 group-hover:opacity-100 tap-sm"
-              style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: 'var(--surface-2)', color: 'var(--text-tertiary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'opacity 0.15s', flexShrink: 0 }}
-            >
-              <Reply size={13} />
-            </button>
-          )}
+          {!isOwn && !isTemp && <button type="button" className="message-actions-toggle" aria-label="Message actions" onClick={() => onLongPress(msg)}><MoreHorizontal size={18}/></button>}
+
         </div>
       </div>
     </div>
@@ -392,6 +374,7 @@ function VoiceBubble({
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', minWidth: 190 }}>
       <button
         onClick={onToggle}
+        aria-label={playing ? 'Pause voice message' : 'Play voice message'}
         style={{ width: 34, height: 34, borderRadius: '50%', border: 'none', cursor: 'pointer', flexShrink: 0, background: isOwn ? 'rgba(255,255,255,0.25)' : 'var(--grad-brand)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
       >
         {playing ? <Pause size={14} color="white" /> : <Play size={14} color="white" style={{ marginLeft: 2 }} />}
@@ -400,8 +383,9 @@ function VoiceBubble({
         <div
           ref={trackRef}
           onClick={handleTrackClick}
-          style={{ display: 'flex', alignItems: 'center', gap: 2, height: 22, cursor: 'pointer' }}
+          style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 2, height: 22, cursor: 'pointer' }}
         >
+          <input type="range" min={0} max={duration || 0} step="0.1" value={Math.min(progress, duration || 0)} disabled={!duration} aria-label="Voice message position" onClick={e => e.stopPropagation()} onChange={e => onSeek(Number(e.target.value) / duration)} className="voice-seek" />
           {bars.map((h, i) => (
             <div key={i} style={{
               flex: 1, borderRadius: 2, height: `${h * 100}%`,
