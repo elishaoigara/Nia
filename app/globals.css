@@ -2329,3 +2329,68 @@ main { overflow-wrap: anywhere; }
 
 .desktop-sidebar { --sidebar-active: #5b21b6; }
 .dark .desktop-sidebar { --sidebar-active: #c4b5fd; }
+
+/* Flicks and Watch share a compact shell while leaving room for video. */
+.flick-backdrop { position: absolute; inset: -50px; z-index: 0; background-size: cover; background-position: center; filter: blur(55px) brightness(.26); pointer-events: none; }
+.flick-shell .flick-header, .flick-scroller, .flick-footer { position: relative; z-index: 1; }
+.flick-shell .flick-topbar { padding-top: 6px; padding-bottom: 2px; }
+.flick-shell .flick-discovery-view-bar { padding-top: 3px; padding-bottom: 7px; }
+.flick-slide { background: linear-gradient(145deg, #302345, #15121f 48%, #09090e); }
+.flick-tap-control { position: absolute; inset: 0; z-index: 2; width: 100%; height: 100%; display: grid; place-items: center; border: 0; background: transparent; color: #fff; cursor: pointer; touch-action: pan-y; }
+.flick-center-play { display: grid; place-items: center; width: 64px; height: 64px; border: 1px solid #ffffff55; border-radius: 50%; background: #0009; }
+.flick-center-play svg { margin-left: 3px; }
+.flick-info { z-index: 4; }
+.flick-action-rail { gap: 9px; }
+.flick-footer { min-height: 48px; padding-top: 2px; padding-bottom: calc(2px + env(safe-area-inset-bottom, 0px)); }
+.flick-swipe-hint { color: #c9c4d5; font-size: 12px; }
+.flick-empty h2 { font-size: 20px; font-weight: 800; }
+.flick-empty p { margin: 8px 0 18px; color: #c4c0cd; font-size: 14px; }
+.flick-empty a, .watch-empty-actions a { display: inline-flex; margin: 4px; padding: 10px 14px; border: 1px solid #ffffff30; border-radius: 12px; color: #fff; font-size: 13px; text-decoration: none; }
+.flick-empty a:last-child, .watch-empty-actions a:last-child { background: #7c3aed; border-color: #7c3aed; }
+.flick-library .full-videos-page { max-width: 1120px; padding: 12px 10px 40px; }
+.full-videos-intro { padding-top: 12px; padding-bottom: 8px; }
+.full-videos-intro > p:last-child { color: #c1bdc9; }
+.watch-grid-wrap { padding: 6px 14px 32px; }
+.watch-grid-wrap h2 { margin: 0 0 12px; font-size: 15px; font-weight: 750; }
+.watch-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
+.watch-card { position: relative; min-width: 0; border: 1px solid #ffffff18; border-radius: 16px; overflow: hidden; background: #1b1a23; contain: layout paint style; }
+.watch-card-open { display: block; width: 100%; padding: 0; border: 0; background: none; color: #fff; text-align: left; cursor: pointer; }
+.watch-card-media { position: relative; width: 100%; aspect-ratio: 16 / 9; overflow: hidden; background: #211a30; }
+.watch-card-media > img, .watch-card-media > video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.watch-card-fallback { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; color: #d7c9f5; font-size: 11px; background: linear-gradient(145deg, #39274f, #21182e 55%, #13121a); }
+.watch-card-play { position: absolute; top: 50%; left: 50%; display: grid; place-items: center; width: 40px; height: 40px; transform: translate(-50%, -50%); border: 1px solid #ffffff60; border-radius: 50%; background: #0009; color: white; }
+.watch-card-fallback + .watch-card-play { top: 43%; }
+.watch-card-duration { position: absolute; right: 8px; bottom: 8px; padding: 2px 6px; border-radius: 5px; background: #000c; color: white; font-size: 11px; font-weight: 700; }
+.watch-card-info { min-height: 108px; padding: 12px; }
+.watch-card-title { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; min-height: 36px; font-size: 14px; font-weight: 750; line-height: 1.3; overflow-wrap: anywhere; }
+.watch-card-creator { display: flex; align-items: center; gap: 7px; margin-top: 9px; color: #e4deed; font-size: 12px; }
+.watch-card-creator > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.watch-card-avatar { display: grid; place-items: center; flex: 0 0 24px; width: 24px; height: 24px; border-radius: 50%; overflow: hidden; background: var(--grad-brand); color: #fff; font-weight: 800; }
+.watch-card-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.watch-card-meta { margin: 4px 0 0 31px; color: #bbb6c5; font-size: 11px; }
+.watch-card-save { position: absolute; top: 6px; right: 6px; display: grid; place-items: center; width: 44px; height: 44px; border: 1px solid #ffffff55; border-radius: 50%; background: #14111bd9; color: white; cursor: pointer; }
+.watch-card-save[aria-pressed="true"] { color: #d4c0ff; border-color: #b59aff; }
+.watch-empty-title { font-size: 20px; font-weight: 800; }
+.watch-empty-copy { margin: 8px 12px 16px; color: #c1bdc9; font-size: 14px; }
+@media (max-width: 600px) {
+  .flick-shell .flick-topbar { padding: 4px 10px 2px; gap: 4px; }
+  .flick-shell .flick-discovery-view-bar { padding: 2px 10px 6px; gap: 6px; }
+  .flick-shell .flick-discovery-view { min-height: 36px; padding: 7px 11px; }
+  .flick-footer { padding-inline: 10px; }
+  .flick-action-rail { right: 10px; gap: 7px; }
+  .flick-library .full-videos-page { padding-top: 8px; }
+  .full-videos-intro h1 { font-size: 25px; }
+  .full-videos-intro > p:last-child { font-size: 12px; }
+  .watch-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .watch-grid-wrap { padding-inline: 10px; }
+  .watch-card-info { padding: 9px; }
+  .watch-card-title { font-size: 13px; }
+}
+@media (max-width: 340px) { .watch-grid { grid-template-columns: 1fr; } }
+@media (max-height: 480px) { .flick-info { right: 16px; bottom: 78px; max-height: 40%; } }
+
+.flick-creator-avatar { display: grid; place-items: center; width: 32px; height: 32px; flex: 0 0 32px; overflow: hidden; border: 1px solid #ffffff99; border-radius: 50%; background: var(--grad-brand); color: #fff; font-size: 12px; }
+.flick-creator-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.watch-card-fallback span { position: absolute; top: calc(50% + 28px); }
+.watch-more-invite { padding: 0 14px; color: #c1bdc9; font-size: 13px; }
+.watch-more-invite a { color: #d4c0ff; text-decoration: underline; }
