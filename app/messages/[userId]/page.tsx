@@ -16,6 +16,7 @@ import {
   Check, Plus, File as FileIcon, ChevronDown, SlidersHorizontal,
 } from 'lucide-react'
 import Link from 'next/link'
+import Inbox from '@/app/messages/page'
 import MessageBubble, { ChatMessage } from '@/components/messages/MessageBubble'
 import MessageActionSheet from '@/components/messages/MessageActionSheet'
 import ChatGifPicker from '@/components/messages/ChatGifPicker'
@@ -125,11 +126,13 @@ export default function DirectMessagePage() {
   const [sharedCircle, setSharedCircle] = useState<SharedCircle | null>(null)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
   const [hasMore, setHasMore] = useState(true)
   const [loadingOlder, setLoadingOlder] = useState(false)
 
   const [newMessage, setNewMessage] = useDraft(`${currentUserId ?? 'signed-out'}:message:${recipientId}`)
   const [sending, setSending] = useState(false)
+  const [sendError, setSendError] = useState(false)
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [pendingMedia, setPendingMedia] = useState<PendingMedia | null>(null)
@@ -199,7 +202,7 @@ export default function DirectMessagePage() {
       if (cancelled) return
       setCurrentUserId(user.id)
 
-      const [{ data: profile }, { data: msgs }, { data: blockRow }, { data: reqRow }] = await Promise.all([
+      const [{ data: profile }, { data: msgs, error: messagesError }, { data: blockRow }, { data: reqRow }] = await Promise.all([
         supabase.from('profiles').select('id, username, avatar_url, full_name, last_seen_at').eq('id', recipientId).single(),
         supabase.from('messages').select('*')
           .or(`and(sender_id.eq.${user.id},recipient_id.eq.${recipientId}),and(sender_id.eq.${recipientId},recipient_id.eq.${user.id})`)
@@ -209,9 +212,15 @@ export default function DirectMessagePage() {
         supabase.from('message_requests').select('*').eq('user_id', user.id).eq('other_id', recipientId).maybeSingle(),
       ])
       if (cancelled) return
+      if (messagesError) { setLoadError('This conversation could not be loaded.'); setLoading(false); return }
+      setLoadError('')
 
       const ordered = (msgs ?? []).map(normalizeMsg).reverse()
-      const firstUnread = ordered.find(m => !m.is_read && m.sender_id === recipientId)
+      const receivedIds = ordered.filter(m => m.sender_id === recipientId && !m.deleted_at).map(m => m.id)
+      const readResult = receivedIds.length ? await supabase.from('message_read_states').select('message_id').eq('user_id', user.id).in('message_id', receivedIds) : { data: [], error: null }
+      if (cancelled) return
+      const readIds = new Set((readResult.data ?? []).map(row => row.message_id))
+      const firstUnread = readResult.error ? null : ordered.find(m => m.sender_id === recipientId && !m.deleted_at && !readIds.has(m.id))
       setUnreadDividerId(firstUnread?.id ?? null)
       const { data: sharedRows } = await supabase
         .from('circle_members')
@@ -234,10 +243,11 @@ export default function DirectMessagePage() {
       setPendingRequest(!!reqRow && reqRow.status === 'pending')
       setLoading(false)
 
-      await supabase.rpc('mark_conversation_read', { other_user: recipientId })
+      const { error: readError } = await supabase.rpc('mark_conversation_read', { other_user: recipientId })
+      if (!readError && !cancelled) window.dispatchEvent(new Event('nia:messages-read'))
       await supabase.from('profiles').update({ last_seen_at: new Date().toISOString() }).eq('id', user.id)
     }
-    init()
+    void init().catch(() => { if (!cancelled) { setLoadError('This conversation could not be loaded.'); setLoading(false) } })
 
     return () => { cancelled = true }
   }, [recipientId, router, supabase])
@@ -392,7 +402,7 @@ export default function DirectMessagePage() {
         entity_id: currentUserId,
         message: 'sent you a message',
         is_read: false,
-      })
+      }).then(() => {}, () => {})
       return data.id as string
     } else {
       setMessages(prev => prev.filter(m => m.id !== tempId))
@@ -529,6 +539,7 @@ export default function DirectMessagePage() {
     const text = newMessage.trim()
     if (!text) return
     setSending(true)
+    setSendError(false)
     broadcastTyping(false)
     const tempId = `temp-${crypto.randomUUID()}`
     const optimistic: ChatMessage = {
@@ -538,13 +549,18 @@ export default function DirectMessagePage() {
       created_at: new Date().toISOString(), reactions: {}, edited_at: null, deleted_at: null,
     }
     setMessages(prev => [...prev, optimistic])
-    const saved = await insertMessage({
-      sender_id: currentUserId, recipient_id: recipientId, content: text,
-      media_url: null, media_type: null, file_name: null,
-      view_once: false, reply_to: optimistic.reply_to, is_read: false,
-    }, tempId)
-    if (saved) { setNewMessage(''); setReplyTo(null) }
-    setSending(false)
+    try {
+      const saved = await insertMessage({
+        sender_id: currentUserId, recipient_id: recipientId, content: text,
+        media_url: null, media_type: null, file_name: null,
+        view_once: false, reply_to: optimistic.reply_to, is_read: false,
+      }, tempId)
+      if (saved) { setNewMessage(''); setReplyTo(null) }
+      else setSendError(true)
+    } catch {
+      setMessages(prev => prev.filter(m => m.id !== tempId))
+      setSendError(true)
+    } finally { setSending(false) }
   }
 
   async function sendGif(url: string) {
@@ -683,10 +699,12 @@ export default function DirectMessagePage() {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100dvh - var(--nav-top))', maxWidth: '42rem', width: '100%', margin: '0 auto', position: 'relative' }}>
+    <div className="message-workspace">
+      <aside className="message-workspace-inbox"><Inbox embedded selectedId={recipientId}/></aside>
+      <div className="message-thread">
       {/* HEADER */}
       <header style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: 'var(--surface-0)', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
-        <button onClick={() => router.back()} className="tap-sm" style={{ width: 36, height: 36, borderRadius: 10, border: 'none', background: 'var(--surface-2)', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <button aria-label="Back to messages" onClick={() => router.push('/messages')} className="tap-sm" style={{ width: 36, height: 36, borderRadius: 10, border: 'none', background: 'var(--surface-2)', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
           <ArrowLeft size={17} />
         </button>
 
@@ -715,7 +733,7 @@ export default function DirectMessagePage() {
         )}
 
         <div style={{ position: 'relative', flexShrink: 0 }}>
-          <button onClick={() => setShowMenu(v => !v)} className="tap-sm" style={{ width: 36, height: 36, borderRadius: 10, border: 'none', background: 'var(--surface-2)', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <button aria-label="Conversation options" aria-expanded={showMenu} onClick={() => setShowMenu(v => !v)} className="tap-sm" style={{ width: 36, height: 36, borderRadius: 10, border: 'none', background: 'var(--surface-2)', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <MoreVertical size={17} />
           </button>
           {showMenu && (
@@ -749,7 +767,7 @@ export default function DirectMessagePage() {
       )}
 
       {/* MESSAGES */}
-      <div ref={scrollRef} onScroll={handleScroll} style={{ flex: 1, overflowY: 'auto', padding: '16px 14px' }}>
+      <div ref={scrollRef} onScroll={handleScroll} className="message-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '12px 14px' }}>
         {loadingOlder && (
           <div style={{ display: 'flex', justifyContent: 'center', padding: 10 }}>
             <Loader2 size={16} className="animate-spin" style={{ color: 'var(--text-tertiary)' }} />
@@ -765,13 +783,14 @@ export default function DirectMessagePage() {
             <Loader2 size={22} className="animate-spin" style={{ color: 'var(--text-tertiary)' }} />
           </div>
         )}
-        {!loading && messages.length === 0 && (
+        {!loading && loadError && <div className="message-load-error" role="alert">{loadError} <button type="button" onClick={() => window.location.reload()}>Retry</button></div>}
+        {!loading && !loadError && messages.length === 0 && (
           <div style={{ textAlign: 'center', paddingTop: 64 }}>
             <p style={{ fontWeight: 700, fontSize: 17 }}>A quiet little corner for two</p>
             <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 4 }}>Accept request, continue a Circle thought, or send a little encouragement.</p>
           </div>
         )}
-        {!pendingRequest && !editingId && messages.length < 2 && (
+        {!loading && !loadError && !pendingRequest && !editingId && messages.length < 2 && (
           <div className="quick-reply-rail" aria-label="Quick replies">
             <p>Make the first move</p>
             <div>
@@ -796,9 +815,9 @@ export default function DirectMessagePage() {
           const showUnreadDivider = unreadDividerId === msg.id
 
           return (
-          <div key={msg.id}>
+          <div key={msg.id} id={`message-${msg.id}`}>
             {showDateDivider && (
-              <div style={{ display: 'flex', justifyContent: 'center', margin: '14px 0' }}>
+              <div style={{ display: 'flex', justifyContent: 'center', margin: '10px 0' }}>
                 <span style={{
                   fontSize: 11.5, fontWeight: 700, color: 'var(--text-tertiary)',
                   background: 'var(--surface-1)', padding: '4px 12px', borderRadius: 12,
@@ -831,6 +850,7 @@ export default function DirectMessagePage() {
               onSwipeReply={setReplyTo}
               onLongPress={setActionSheetMsg}
               onDoubleTapReact={() => reactToMessage(msg, '❤️')}
+              onJumpReply={id => { const el = document.getElementById(`message-${id}`); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); else showToast('Original message is not loaded yet.') }}
             />
           </div>
           )
@@ -890,12 +910,13 @@ export default function DirectMessagePage() {
               </p>
             )}
           </div>
-          <button onClick={() => { setReplyTo(null); setEditingId(null); setNewMessage('') }} style={{ width: 24, height: 24, borderRadius: 6, border: 'none', background: 'var(--surface-3)', color: 'var(--text-tertiary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <button aria-label="Cancel reply or edit" onClick={() => { setReplyTo(null); setEditingId(null); setNewMessage('') }} style={{ width: 24, height: 24, borderRadius: 6, border: 'none', background: 'var(--surface-3)', color: 'var(--text-tertiary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             <X size={13} />
           </button>
         </div>
       )}
 
+      {sendError && <div role="alert" className="message-send-error">Message could not be sent. Your text is still here. <button type="button" disabled={sending} onClick={() => void handleSendText()}>Retry</button></div>}
       {/* INPUT BAR */}
       {amIBlocking && (
         <div style={{ padding: '12px 14px', borderTop: '1px solid var(--border)', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 13 }}>
@@ -946,6 +967,7 @@ export default function DirectMessagePage() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <button
                 onClick={() => setShowAttachTray(v => !v)}
+                aria-label="Attachments" aria-expanded={showAttachTray}
                 className="tap-sm"
                 style={{
                   width: 38, height: 38, borderRadius: '50%', border: 'none', flexShrink: 0,
@@ -963,8 +985,10 @@ export default function DirectMessagePage() {
                   value={newMessage}
                   onChange={e => handleTypingInput(e.target.value)}
                   onFocus={() => setShowAttachTray(false)}
-                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendText() } }}
-                  placeholder={editingId ? 'Edit message…' : messages.length === 0 ? 'Say something kind…' : 'Continue the thought…'}
+                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); handleSendText() } }}
+                  disabled={sending}
+                  aria-label="Write a message"
+                  placeholder={editingId ? 'Edit message…' : 'Write a message…'}
                   style={{ flex: 1, minWidth: 0, background: 'none', border: 'none', outline: 'none', fontSize: 14.5, color: 'var(--text-primary)', fontFamily: 'inherit' }}
                 />
               </div>
@@ -972,6 +996,7 @@ export default function DirectMessagePage() {
               {newMessage.trim() ? (
                 <button
                   onClick={() => void handleSendText()}
+                  aria-label={editingId ? 'Save message' : 'Send message'}
                   disabled={sending}
                   className="tap-sm"
                   style={{ width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'var(--grad-brand)', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, opacity: sending ? 0.6 : 1 }}
@@ -981,6 +1006,7 @@ export default function DirectMessagePage() {
               ) : (
                 <button
                   onClick={startRecording}
+                  aria-label="Record voice message"
                   className="tap-sm"
                   style={{ width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'var(--grad-brand)', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
                 >
@@ -1093,6 +1119,7 @@ export default function DirectMessagePage() {
           }}
         />
       )}
+      </div>
     </div>
   )
 }
