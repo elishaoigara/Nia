@@ -2394,3 +2394,22 @@ main { overflow-wrap: anywhere; }
 .watch-card-fallback span { position: absolute; top: calc(50% + 28px); }
 .watch-more-invite { padding: 0 14px; color: #c1bdc9; font-size: 13px; }
 .watch-more-invite a { color: #d4c0ff; text-decoration: underline; }
+
+/* Post discussion stays in the document flow, so it never covers the post. */
+.post-detail-page { width: 100%; max-width: 620px; margin: 0 auto; padding-bottom: 24px; }
+.post-discussion-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 18px 16px 8px; }
+.post-discussion-heading h2 { margin: 0; font-size: 17px; font-weight: 800; }
+.post-discussion-heading span { color: var(--text-secondary); font-size: 12px; }
+.post-discussion-empty { margin: 0; padding: 20px 16px 28px; color: var(--text-secondary); font-size: 14px; }
+.post-reply-composer { position: relative; border-top: 0; padding: 8px 16px 14px; background: transparent; }
+.post-reply-grid { display: grid; grid-template-columns: 34px 44px 44px 44px minmax(0, 1fr) 44px; grid-template-areas: 'avatar input input input input send' '. image video gif count send'; align-items: center; gap: 4px 6px; }
+.post-reply-avatar { grid-area: avatar; }
+.post-reply-grid .reply-input { grid-area: input; min-width: 0; width: 100%; min-height: 44px; overflow-y: auto; }
+.post-reply-image { grid-area: image; }
+.post-reply-video { grid-area: video; }
+.post-reply-gif { grid-area: gif; }
+.post-reply-count { grid-area: count; text-align: right; }
+.post-reply-send { grid-area: send; justify-content: center; align-self: start; min-width: 44px; min-height: 44px; }
+.post-reply-grid button { display: flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; border-radius: 12px; }
+.post-reply-grid button:focus-visible { outline-offset: 1px; }
+@media (max-width: 360px) { .post-reply-composer { padding-inline: 10px; } .post-reply-grid { gap: 3px; } }
