@@ -5,6 +5,7 @@ import Messages from '../../app/messages/page'
 import Settings from '../../app/settings/page'
 import Notifications from '../../app/notifications/page'
 import PostCard from '../../components/PostCard'
+import ReplyBar from '../../components/ReplyBar'
 import Navbar from '../../components/Navbar'
 import { PreferencesProvider } from '../../components/PreferencesProvider'
 import { ThemeProvider } from '../../components/ThemeProvider'
@@ -15,5 +16,5 @@ const poster = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://ww
 const videos = Array.from({ length: 4 }, (_, i) => ({ id: String(i + 1), user_id: 'creator', content: i === 0 ? 'A little Nairobi energy. '.repeat(50) : 'Good people. Great stories. #Nia', media_url: fixtureVideo, thumbnail_url: poster, media_type: 'video', video_duration: i === 3 ? 165 : 30, created_at: '2026-10-17T18:00:00Z', language: 'Swahili', profiles: creator, likes: [], comments: [], post_views: [] }))
 const screen = new URLSearchParams(location.search).get('screen') ?? 'flicks'
 createRoot(document.getElementById('root')).render(<ThemeProvider><PreferencesProvider><DialogAccessibility /><Navbar /><div className="page-wrap">
-{screen === 'flicks' ? <Flicks shorts={videos.slice(0, 3)} longs={videos.slice(3)} currentUserId="viewer" circleIds={[]} followingIds={[]} /> : screen === 'inbox' ? <Messages /> : screen === 'settings' ? <Settings /> : screen === 'notifications' ? <Notifications /> : <main className="feed-col"><PostCard post={{ ...videos[0], media_url: poster, media_type: 'image', extra_media: [{ url: poster, type: 'image' }], polls: [], reposts: [] }} currentUserId="viewer" /><PostCard post={videos[1]} currentUserId="viewer" /></main>}
+{screen === 'post-detail' ? <main className="post-detail-page"><PostCard post={{ ...videos[0], media_url: poster, media_type: 'image', extra_media: [], polls: [], reposts: [] }} currentUserId="viewer" /><section className="post-discussion"><div className="post-discussion-heading"><h2>Comments</h2></div><ReplyBar postId="1" currentUserId="viewer" /><p className="post-discussion-empty">No comments yet. Start the conversation.</p></section></main> : screen === 'flicks' ? <Flicks shorts={videos.slice(0, 3)} longs={videos.slice(3)} currentUserId="viewer" circleIds={[]} followingIds={[]} /> : screen === 'inbox' ? <Messages /> : screen === 'settings' ? <Settings /> : screen === 'notifications' ? <Notifications /> : <main className="feed-col"><PostCard post={{ ...videos[0], media_url: poster, media_type: 'image', extra_media: [{ url: poster, type: 'image' }], polls: [], reposts: [] }} currentUserId="viewer" /><PostCard post={videos[1]} currentUserId="viewer" /></main>}
 </div></PreferencesProvider></ThemeProvider>)
