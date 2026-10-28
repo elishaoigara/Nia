@@ -2257,3 +2257,16 @@ main { overflow-wrap: anywhere; }
   .public-shell { padding-inline: 20px; }
   .public-links { gap: 14px; }
 }
+
+/* The desktop rail and content use the same width when the navigation is collapsed. */
+@media (min-width: 640px) {
+  body:has(.desktop-sidebar[data-collapsed="true"]) { --sidebar-w: 4.75rem; }
+  .page-wrap { transition: padding-left 0.2s ease; }
+  .desktop-sidebar { transition: width 0.2s ease; }
+  .desktop-sidebar[data-collapsed="true"] .settings-nav-link { justify-content: center; }
+}
+.sidebar-heading { display: flex; align-items: center; justify-content: space-between; gap: 4px; margin-bottom: 16px; }
+.sidebar-brand { display: flex; align-items: center; gap: 10px; padding: 6px 0; text-decoration: none; color: var(--text-primary); font-size: 18px; font-weight: 800; }
+.sidebar-toggle { display: grid; place-items: center; flex-shrink: 0; width: 44px; height: 44px; border: 0; border-radius: 12px; background: transparent; color: var(--text-secondary); cursor: pointer; }
+.sidebar-toggle:hover { background: var(--surface-2); }
+.desktop-sidebar[data-collapsed="true"] .sidebar-heading { justify-content: center; }
