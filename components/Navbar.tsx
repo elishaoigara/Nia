@@ -2,12 +2,12 @@
 
 import { PUBLIC_INFO_PATHS, isAuthPage as isAuthRoute } from '@/lib/public-routes'
 import { usePreferences } from '@/components/PreferencesProvider'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
   Home, Compass, Users,
-  MessageSquare, User, Plus, Settings as SettingsIcon,
+  MessageSquare, User, Plus, Settings as SettingsIcon, PanelLeftClose, PanelLeftOpen,
 } from 'lucide-react'
 import NotificationBell from '@/components/NotificationBell'
 import ThemeToggle      from '@/components/ThemeToggle'
@@ -28,11 +28,42 @@ const LINKS = [
   { href: '/profile',  icon: User,          label: 'Me'       },
 ]
 
+const SIDEBAR_STORAGE_KEY = 'nia-sidebar-collapsed'
+const SIDEBAR_CHANGE_EVENT = 'nia-sidebar-change'
+
+function subscribeSidebar(callback: () => void) {
+  window.addEventListener('storage', callback)
+  window.addEventListener(SIDEBAR_CHANGE_EVENT, callback)
+  return () => {
+    window.removeEventListener('storage', callback)
+    window.removeEventListener(SIDEBAR_CHANGE_EVENT, callback)
+  }
+}
+function readSidebarCollapsed() {
+  try { return localStorage.getItem(SIDEBAR_STORAGE_KEY) === 'true' } catch { return false }
+}
+
 export default function Navbar() {
   const { t } = usePreferences()
   const pathname = usePathname() ?? ''
   const router   = useRouter()
   const supabase = createClient()
+
+  const [fallbackCollapsed, setFallbackCollapsed] = useState(false)
+  const storedCollapsed = useSyncExternalStore(subscribeSidebar, readSidebarCollapsed, () => false)
+  const [storageAvailable, setStorageAvailable] = useState(true)
+  const collapsed = storageAvailable ? storedCollapsed : fallbackCollapsed
+
+  function toggleSidebar() {
+    const next = !collapsed
+    try {
+      localStorage.setItem(SIDEBAR_STORAGE_KEY, String(next))
+      window.dispatchEvent(new Event(SIDEBAR_CHANGE_EVENT))
+    } catch {
+      setStorageAvailable(false)
+      setFallbackCollapsed(next)
+    }
+  }
 
   const [userId, setUserId] = useState<string | null>(null)
   const { unreadMessages, unreadNotifications } = useUnreadCounts(userId)
@@ -218,8 +249,9 @@ export default function Navbar() {
       {/* ── DESKTOP SIDEBAR ──────────────────────────────── */}
       <aside
         className="desktop-sidebar"
+        data-collapsed={collapsed}
         style={{
-          position: 'fixed', top: 0, left: 0, bottom: 0,
+          position: 'fixed', top: 'var(--nav-top)', left: 0, bottom: 0,
           width: 'var(--sidebar-w)', zIndex: 40,
           flexDirection: 'column',
           padding: '16px 12px 24px',
@@ -228,12 +260,20 @@ export default function Navbar() {
           overflowY: 'auto',
         }}
       >
-        <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', marginBottom: 20, textDecoration: 'none' }}>
-          <img src="/logo/nia-icon.svg" alt="" width={34} height={34} style={{ borderRadius: 10 }} />
-          <span style={{ fontWeight: 800, fontSize: 18, color: 'var(--text-primary)' }}>Nia</span>
-        </Link>
+        <div className="sidebar-heading">
+          {!collapsed && <Link href="/" className="sidebar-brand" aria-label="Nia home">
+            <img src="/logo/nia-icon.svg" alt="" width={34} height={34} style={{ borderRadius: 10 }} />
+            <span>Nia</span>
+          </Link>}
+          <button type="button" className="sidebar-toggle" onClick={toggleSidebar}
+            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            aria-expanded={!collapsed} aria-controls="desktop-navigation"
+            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
+            {collapsed ? <PanelLeftOpen size={20} /> : <PanelLeftClose size={20} />}
+          </button>
+        </div>
 
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <nav id="desktop-navigation" aria-label="Main navigation" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
           {LINKS.map(({ href, icon: Icon, label }) => {
             const active    = isActive(href)
             const showBadge = href === '/messages' && unreadMessages > 0
@@ -243,7 +283,11 @@ export default function Navbar() {
                 key={href}
                 href={href}
                 className="tap-sm"
+                aria-label={t(label)}
+                aria-current={active ? 'page' : undefined}
+                title={collapsed ? t(label) : undefined}
                 style={{
+                  justifyContent: collapsed ? 'center' : undefined,
                   display: 'flex', alignItems: 'center', gap: 12,
                   padding: '10px 12px', borderRadius: 14,
                   textDecoration: 'none',
@@ -275,8 +319,8 @@ export default function Navbar() {
                     </span>
                   )}
                 </div>
-                <span>{t(label)}</span>
-                {active && (
+                {!collapsed && <span>{t(label)}</span>}
+                {active && !collapsed && (
                   <div style={{
                     marginLeft: 'auto',
                     width: 6, height: 6, borderRadius: '50%',
@@ -286,23 +330,24 @@ export default function Navbar() {
               </Link>
             )
           })}
-        </div>
+        </nav>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 16 }}>
-          <Link href="/settings" className="settings-nav-link tap-sm" aria-label="Open settings">
+          <Link href="/settings" className="settings-nav-link tap-sm" aria-label="Open settings" title={collapsed ? 'Settings' : undefined}>
             <SettingsIcon size={17} />
-            <span>Settings</span>
+            {!collapsed && <span>Settings</span>}
           </Link>
           <button
             type="button"
             onClick={scrollToCompose}
             className="btn-primary sidebar-post-button tap-sm"
             aria-label="Create a new post"
+            title={collapsed ? 'New post' : undefined}
           >
             <Plus size={17} strokeWidth={2.5} />
-            New Post
+            {!collapsed && 'New Post'}
           </button>
-          {userId && <LogoutButton />}
+          {userId && <LogoutButton variant={collapsed ? 'icon' : 'full'} />}
         </div>
       </aside>
     </>
