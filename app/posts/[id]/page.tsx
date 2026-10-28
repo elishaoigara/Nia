@@ -114,8 +114,9 @@ export default async function PostDetailPage({ params }: Props) {
     (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
   )
 
+  const hasMedia = Boolean(post.media_url || post.extra_media?.length)
   return (
-    <main className="post-detail-page">
+    <main className={`post-detail-page${hasMedia ? ' post-detail-page--media' : ''}`}>
 
       {/* Back nav */}
       <div style={{
@@ -140,14 +141,17 @@ export default async function PostDetailPage({ params }: Props) {
           <ArrowLeft size={18} strokeWidth={2.5} />
         </Link>
         <h1 style={{ fontWeight: 800, fontSize: 16 }}>Post</h1>
+        <a className="post-jump-comments" href="#discussion-title">Jump to comments</a>
       </div>
 
-      {/* Original post */}
+      <div className="post-detail-layout">
+      <div className="post-detail-original">
       <PostCard
         post={{ ...post, viewer_is_following: viewerIsFollowing }}
         currentUserId={user.id}
-        showLine={comments.length > 0}
+        showLine={false}
       />
+      </div>
 
       <section className="post-discussion" aria-labelledby="discussion-title">
         <div className="post-discussion-heading"><h2 id="discussion-title">Comments</h2><span>{comments.length} {comments.length === 1 ? 'comment' : 'comments'}</span></div>
@@ -156,6 +160,7 @@ export default async function PostDetailPage({ params }: Props) {
           <CommentThread comments={comments} currentUserId={user.id} postId={post.id} postOwnerId={post.user_id} currentUserProfile={currentProfile ?? undefined} />
         ) : <p className="post-discussion-empty">No comments yet. Start the conversation.</p>}
       </section>
+      </div>
     </main>
   )
 }
