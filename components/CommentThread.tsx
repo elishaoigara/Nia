@@ -8,6 +8,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import type { Comment, CommentNode, GifApiResult, UserReference } from '@/types/domain'
 import ReportSheet from '@/components/ReportSheet'
+import { sortCommentRoots } from '@/lib/comment-sort'
 
 interface CommentMedia {
   url:  string
@@ -261,7 +262,7 @@ function InlineReplyBox({
           entity_id: postId,
           message: `${currentUserProfile?.username ?? 'Someone'} commented on your post`,
           is_read: false,
-        })
+        }).then(() => {}, () => {})
       }
 
       media.forEach(m => { if (m.file) URL.revokeObjectURL(m.preview) })
@@ -432,6 +433,7 @@ function CommentRow({
   const [showMenu,    setShowMenu]    = useState(false)
   const [softDeleted, setSoftDeleted] = useState(false)
   const [replying,    setReplying]    = useState(false)
+  const [replyPosted, setReplyPosted] = useState(false)
   const [showReplies, setShowReplies] = useState(true)
   const [showReport,  setShowReport]  = useState(false)
 
@@ -571,7 +573,7 @@ function CommentRow({
                 {/* Reply */}
                 <button
                   className="comment-action-btn"
-                  onClick={() => setReplying(p => !p)}
+                  onClick={() => { setReplyPosted(false); setReplying(p => !p) }}
                   aria-label="Reply"
                 >
                   <MessageCircle size={14} strokeWidth={1.75} />
@@ -603,6 +605,7 @@ function CommentRow({
         </div>
       </div>
 
+      <p role="status" className="comment-reply-status">{replyPosted ? 'Reply posted.' : ''}</p>
       {/* Inline reply composer */}
       {replying && !isDeleted && (
         <InlineReplyBox
@@ -613,7 +616,7 @@ function CommentRow({
           currentUserProfile={currentUserProfile}
           postOwnerId={postOwnerId}
           onCancel={() => setReplying(false)}
-          onSuccess={() => { setReplying(false); router.refresh() }}
+          onSuccess={() => { setReplying(false); setReplyPosted(true); router.refresh() }}
         />
       )}
 
@@ -674,10 +677,12 @@ export function buildCommentTree(comments: Comment[]): CommentNode[] {
 
 /* ── Export ────────────────────────────────────────── */
 export default function CommentThread({ comments, currentUserId, postId, postOwnerId, currentUserProfile }: CommentThreadProps) {
-  const tree = buildCommentTree(comments)
+  const [order, setOrder] = useState<'oldest' | 'newest'>('oldest')
+  const tree = sortCommentRoots(buildCommentTree(comments), order)
 
   return (
     <div className="comment-section">
+      {tree.length > 1 && <div className="comment-sort"><label htmlFor="comment-sort">Sort comments</label><select id="comment-sort" value={order} onChange={event => setOrder(event.target.value as 'oldest' | 'newest')}><option value="oldest">Oldest first</option><option value="newest">Newest first</option></select></div>}
       {tree.map(comment => (
         <CommentRow
           key={comment.id}
