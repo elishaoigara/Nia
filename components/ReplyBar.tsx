@@ -47,6 +47,7 @@ export default function ReplyBar({ postId, currentUserId, postOwnerId, currentUs
   const [loading,   setLoading]   = useState(false)
   const [media,     setMedia]     = useState<MediaItem[]>([])
   const [error,     setError]     = useState('')
+  const [posted,    setPosted]    = useState(false)
   const [showGifs,  setShowGifs]  = useState(false)
   const [gifQuery,  setGifQuery]  = useState('')
   const [gifResults,setGifResults]= useState<GifResult[]>([])
@@ -146,7 +147,7 @@ export default function ReplyBar({ postId, currentUserId, postOwnerId, currentUs
 
   async function submit() {
     if (!canSend) return
-    setLoading(true); setError('')
+    setLoading(true); setError(''); setPosted(false)
     try {
       let media_url:   string | null = null
       let media_type:  string | null = null
@@ -186,7 +187,7 @@ export default function ReplyBar({ postId, currentUserId, postOwnerId, currentUs
       })
       if (insertErr) { setError(insertErr.message); setLoading(false); return }
 
-      // Notify post owner — skip self-comment
+      // A notification failure must not make a saved comment look unsent.
       if (postOwnerId && postOwnerId !== currentUserId) {
         await supabase.from('notifications').insert({
           user_id:  postOwnerId,
@@ -195,12 +196,13 @@ export default function ReplyBar({ postId, currentUserId, postOwnerId, currentUs
           entity_id: postId,
           message:  `${currentUserProfile?.username ?? 'Someone'} commented on your post`,
           is_read:  false,
-        })
+        }).then(() => {}, () => {})
       }
 
       media.forEach(m => { if (m.file && m.preview) URL.revokeObjectURL(m.preview) })
       setText('')
       setMedia([])
+      setPosted(true)
       if (textRef.current) textRef.current.style.height = 'auto'
       router.refresh()
     } catch (e) {
@@ -278,6 +280,8 @@ export default function ReplyBar({ postId, currentUserId, postOwnerId, currentUs
         </div>
       )}
 
+      <p role="status" className="post-reply-status">{posted ? 'Comment posted.' : ''}</p>
+
       {/* Error */}
       {error && (
         <div role="alert" style={{ fontSize: 12, color: '#f43f5e', paddingLeft: 44, paddingBottom: 4 }}>{error}</div>
@@ -344,7 +348,7 @@ export default function ReplyBar({ postId, currentUserId, postOwnerId, currentUs
           placeholder="Write a comment…"
           value={text}
           rows={1}
-          onChange={e => { setText(e.target.value); autoGrow() }}
+          onChange={e => { setText(e.target.value); setPosted(false); autoGrow() }}
           onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit() } }}
           disabled={loading}
         />
