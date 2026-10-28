@@ -970,41 +970,19 @@ const StoriesBar: React.FC<StoriesBarProps> = ({ currentUserId }) => {
 
   const myGroup = groups.find(g => g.userId === currentUserId);
 
-  /* own placeholder group when user has no stories yet */
-  const placeholderGroup: StoryGroup = { userId: currentUserId, username: 'You', avatar_url: null, stories: [], hasUnread: false };
 
   return (
     <>
-      <section aria-label="Stories" className="border-b border-(--divider) px-4 py-2">
-        <div className="flex items-center justify-between gap-3">
-          <div><h2 className="text-sm font-semibold">Stories</h2>{groups.length > 0 && <p className="text-xs text-(--text-tertiary)">Little moments from your community</p>}</div>
-          <button className="btn-ghost text-sm" onClick={() => setShowUpload(true)}><Plus size={16} /> Add story</button>
-        </div>
-        {loading && <p role="status" className="py-2 text-xs">Loading stories…</p>}
-        {loadError && <p role="alert" className="py-2 text-sm">{loadError} <button onClick={() => void loadStories()}>Retry</button></p>}
-        {groups.length > 0 && <div style={{ width: '100%', overflowX: 'auto', paddingBottom: 4, scrollbarWidth: 'none' }}>
-        <div style={{ display: 'flex', gap: 14, padding: '14px 16px 10px', minWidth: 'max-content' }}>
-          <StoryBubble
-            group={myGroup ?? placeholderGroup}
-            index={myGroup ? groups.indexOf(myGroup) : -1}
-            isMine
-            hasOwnStories={Boolean(myGroup)}
-            onOpen={openViewer}
-            onUpload={() => setShowUpload(true)}
-          />
-          {groups.filter(g => g.userId !== currentUserId).map(g => (
-            <StoryBubble
-              key={g.userId}
-              group={g}
-              index={groups.indexOf(g)}
-              hasOwnStories={Boolean(myGroup)}
-              onOpen={openViewer}
-              onUpload={() => setShowUpload(true)}
-            />
-          ))}
-        </div>
-      </div>}
-
+      <section aria-label="Stories" className="home-stories">
+        <div className="home-section-heading"><h2>Stories</h2><span>Little moments from your community</span></div>
+        {loading && <p role="status" className="home-stories-status">Loading stories…</p>}
+        {loadError && <p role="alert" className="home-stories-status">{loadError} <button onClick={() => void loadStories()}>Retry</button></p>}
+        <div className="home-stories-scroll"><div className="home-stories-list">
+          <button type="button" className="home-add-story" onClick={() => setShowUpload(true)}><span><Plus size={22}/></span><strong>Add story</strong></button>
+          {myGroup && <StoryBubble group={myGroup} index={groups.indexOf(myGroup)} isMine hasOwnStories onOpen={openViewer} onUpload={() => setShowUpload(true)} />}
+          {groups.filter(g => g.userId !== currentUserId).map(g => <StoryBubble key={g.userId} group={g} index={groups.indexOf(g)} hasOwnStories={Boolean(myGroup)} onOpen={openViewer} onUpload={() => setShowUpload(true)} />)}
+          {!loading && !loadError && groups.length === 0 && <p className="home-stories-empty">Share a little moment with your followers.</p>}
+        </div></div>
       </section>
       {showUpload && (
         <StoryUploadModal

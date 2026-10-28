@@ -492,31 +492,17 @@ export default function CreatePost({
 
       {/* ── Ghost trigger pill (collapsed state) ─────── */}
       {!isOpen && (
-        <div
-          className="compose-trigger"
-          onClick={openCompose}
-          role="button"
-          aria-label="Create a post"
-        >
+        <div className="compose-trigger">
           <div className="compose-trigger-avatar">
-            {profile?.avatar_url
-              ? <img src={mediaUrl(profile.avatar_url)} alt="" />
-              : <span>{initials}</span>
-            }
+            {profile?.avatar_url ? <img src={mediaUrl(profile.avatar_url)} alt="" /> : <span>{initials}</span>}
           </div>
-          <div className="compose-trigger-pill">
-                          <span className="compose-trigger-placeholder">
-                {purposePlaceholder}
-              </span>
-
-          </div>
-          <button
-            className="compose-trigger-media"
-            onClick={e => { e.stopPropagation(); openCompose(); imageRef.current?.click(); }}
-            aria-label="Add photo"
-          >
-            <ImagePlus size={20} />
+          <button type="button" className="compose-trigger-pill" onClick={openCompose} aria-label="Create a post">
+            <span className="compose-trigger-placeholder">What’s on your mind?</span>
           </button>
+          <button type="button" className="compose-trigger-media" onClick={() => { openCompose(); imageRef.current?.click(); }} aria-label="Add photo" title="Add photo">
+            <ImagePlus size={20} /><span>Photo</span>
+          </button>
+          <button type="button" className="home-compose-post" onClick={openCompose}>Post</button>
         </div>
       )}
 
