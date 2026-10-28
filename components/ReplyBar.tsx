@@ -218,12 +218,7 @@ export default function ReplyBar({ postId, currentUserId, postOwnerId, currentUs
 
   return (
     <div
-      className="reply-bar reply-bar-fixed"
-      style={{
-        position: 'fixed',
-        bottom: 'var(--nav-bottom)',
-        zIndex: 40,
-      }}
+      className="reply-bar post-reply-composer"
     >
       {/* GIF picker panel */}
       {showGifs && (
@@ -244,6 +239,7 @@ export default function ReplyBar({ postId, currentUserId, postOwnerId, currentUs
         >
           <input
             type="text"
+            aria-label="Search GIFs"
             placeholder="Search GIFs…"
             value={gifQuery}
             onChange={e => setGifQuery(e.target.value)}
@@ -284,7 +280,7 @@ export default function ReplyBar({ postId, currentUserId, postOwnerId, currentUs
 
       {/* Error */}
       {error && (
-        <div style={{ fontSize: 12, color: '#f43f5e', paddingLeft: 44, paddingBottom: 4 }}>{error}</div>
+        <div role="alert" style={{ fontSize: 12, color: '#f43f5e', paddingLeft: 44, paddingBottom: 4 }}>{error}</div>
       )}
 
       {/* Media previews */}
@@ -307,6 +303,7 @@ export default function ReplyBar({ postId, currentUserId, postOwnerId, currentUs
                 }} />
               )}
               <button
+                aria-label={`Remove attachment ${i + 1}`}
                 onClick={() => removeMedia(i)}
                 style={{
                   position: 'absolute', top: -4, right: -4,
@@ -324,10 +321,10 @@ export default function ReplyBar({ postId, currentUserId, postOwnerId, currentUs
       )}
 
       {/* Input row */}
-      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
+      <div className="post-reply-grid">
 
         {/* Avatar */}
-        <div style={{
+        <div className="post-reply-avatar" style={{
           width: 34, height: 34, borderRadius: '50%',
           background: 'var(--grad-brand)', flexShrink: 0,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -343,11 +340,12 @@ export default function ReplyBar({ postId, currentUserId, postOwnerId, currentUs
         <textarea
           ref={textRef}
           className="reply-input"
-          placeholder="Reply…"
+          aria-label="Write a comment"
+          placeholder="Write a comment…"
           value={text}
           rows={1}
           onChange={e => { setText(e.target.value); autoGrow() }}
-          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit() } }}
+          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit() } }}
           disabled={loading}
         />
 
@@ -358,7 +356,7 @@ export default function ReplyBar({ postId, currentUserId, postOwnerId, currentUs
           onChange={e => addVideo(e.target.files)} />
 
         {/* Image */}
-        <button onClick={() => imageRef.current?.click()}
+        <button className="post-reply-image" onClick={() => imageRef.current?.click()}
           disabled={loading || imageCount >= MAX_IMAGES || hasVideo || hasGif}
           style={{
             background: 'none', border: 'none', cursor: 'pointer', padding: 4, flexShrink: 0,
@@ -371,7 +369,7 @@ export default function ReplyBar({ postId, currentUserId, postOwnerId, currentUs
         </button>
 
         {/* Video */}
-        <button onClick={() => videoRef.current?.click()}
+        <button className="post-reply-video" onClick={() => videoRef.current?.click()}
           disabled={loading || hasVideo || imageCount > 0 || hasGif}
           style={{
             background: 'none', border: 'none', cursor: 'pointer', padding: 4, flexShrink: 0,
@@ -384,7 +382,7 @@ export default function ReplyBar({ postId, currentUserId, postOwnerId, currentUs
         </button>
 
         {/* GIF */}
-        <button onClick={() => setShowGifs(p => !p)}
+        <button className="post-reply-gif" aria-expanded={showGifs} onClick={() => setShowGifs(p => !p)}
           disabled={loading || hasGif || imageCount > 0 || hasVideo}
           style={{
             background: 'none', border: 'none', cursor: 'pointer', padding: 4, flexShrink: 0,
@@ -399,7 +397,7 @@ export default function ReplyBar({ postId, currentUserId, postOwnerId, currentUs
 
         {/* Char counter */}
         {text.length > 400 && (
-          <span style={{
+          <span className="post-reply-count" style={{
             fontSize: 11, flexShrink: 0, fontWeight: 600,
             color: isOver ? '#f43f5e' : charsLeft < 50 ? '#f59e0b' : 'var(--text-tertiary)',
           }}>
@@ -409,6 +407,7 @@ export default function ReplyBar({ postId, currentUserId, postOwnerId, currentUs
 
         {/* Send */}
         <button
+          className="post-reply-send"
           onClick={submit}
           disabled={!canSend}
           aria-label="Send reply"
